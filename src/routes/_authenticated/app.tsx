@@ -782,7 +782,10 @@ function AppPage() {
                 if (e.key === "Escape") cancelCompose();
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
-                  if (composeText.trim()) setSendOpen(true);
+                  if (composeText.trim()) {
+                    (e.currentTarget as HTMLTextAreaElement).blur();
+                    setSendOpen(true);
+                  }
                 }
               }}
               placeholder="Type your new idea…"
