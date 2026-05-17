@@ -95,7 +95,8 @@ function AppPage() {
       const { data, error } = await supabase
         .from("sentences").select("*")
         .eq("document_id", activeDocId!)
-        .order("order_index", { ascending: true });
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
