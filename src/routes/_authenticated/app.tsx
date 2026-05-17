@@ -167,27 +167,24 @@ function AppPage() {
       .replace(/\s{2,}/g, " ")
       .trim();
 
-  // TTS — token-gated, race-safe against rapid handler chains
+  // TTS — token-gated, race-safe against rapid handler chains.
+  // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
+  // speechSynthesis.speak() when it's called synchronously after a user
+  // gesture (or after the one-time unlock in __root.tsx). Any delay or
+  // async hop here causes iOS to silently drop the utterance.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
+    if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
-    window.speechSynthesis.cancel();
-    // Give Chrome/Safari time to flush the canceled utterance before queuing
-    // the next one; without this delay (especially when an utterance was
-    // mid-flight) the new utterance is often swallowed.
-    const delay = wasSpeaking ? 60 : 0;
-    setTimeout(() => {
-      if (token != null && token !== speechTokenRef.current) return;
-      try {
-        const u = new SpeechSynthesisUtterance(clean);
-        u.rate = 1; u.pitch = 1;
-        window.speechSynthesis.speak(u);
-      } catch {}
-    }, delay);
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      u.rate = 1; u.pitch = 1;
+      window.speechSynthesis.speak(u);
+    } catch {}
   }, []);
 
   // Cancel any in-flight speech and claim a fresh speech token. Call at the
