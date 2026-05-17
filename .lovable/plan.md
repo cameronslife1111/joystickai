@@ -1,67 +1,82 @@
 ## Goal
+Make cycling between documents fully deterministic so these three things always stay in sync:
+- the loaded document
+- the currently displayed sentence
+- the sentence spoken by web speech
 
-Add a single **mute / unmute** toggle to the side menu that fully disables the web speech function while muted (no `speechSynthesis.speak()` calls at all — important so iOS doesn't audio-duck). The state persists in `user_preferences` so it survives reloads.
+## What I found
+The current cycle flow is vulnerable to drift because it mixes two different concepts of “current sentence”:
+- `current_sentence_index` on the document, which the UI uses as an array position
+- `order_index` on sentence rows, which the cycle path uses to fetch speech text
 
-## DB
+After edits, deletes, inserts, or undo flows, those can stop matching exactly. When that happens, the app can display one sentence while speech reads a different one.
 
-Add one column to `public.user_preferences`:
+There is also a race risk during document switching:
+- the next doc is selected
+- speech text is fetched separately
+- the active doc and sentences query update afterward
 
-```sql
-ALTER TABLE public.user_preferences
-  ADD COLUMN IF NOT EXISTS muted boolean NOT NULL DEFAULT false;
-```
+That makes it possible for speech to run from stale lookup data instead of the exact sentence the UI settles on.
 
-No new policies needed (existing own-row RLS covers it). No new table.
+## Plan
+### 1. Unify sentence resolution around one source of truth
+Refactor the app so the current sentence is always resolved by:
+- loading the target document’s ordered sentence list
+- clamping the saved `current_sentence_index` against that list length
+- deriving the spoken text from that exact resolved sentence object
 
-## App changes (`src/routes/_authenticated/app.tsx`)
+This removes the `order_index === current_sentence_index` assumption from the cycle path.
 
-### 1. Extend the prefs query
+### 2. Make cycle load document and sentence together
+Rewrite the swipe-right cycle flow so it:
+- picks the next target document
+- fetches that document’s latest saved `current_sentence_index`
+- fetches the target document’s full ordered sentence list
+- resolves the exact sentence object at that clamped index
+- updates cache/state for the target document before speaking
+- only then triggers speech for that exact resolved sentence
 
-Update the `user_preferences` query to also select `muted`:
+If the document has no sentences, it will switch documents without speaking.
 
-```ts
-.select("favorites, muted")
-```
+### 3. Clamp and persist index consistently after mutations
+Harden all sentence-changing paths so `current_sentence_index` never points past the real list:
+- delete current sentence
+- full edit save
+- AI insertions
+- send-to/current-position insertions
+- jump/advance/back actions
 
-Return `{ favorites, muted: !!data?.muted }` from `queryFn`. Expose `const muted = prefs?.muted ?? false;`.
+Where needed, I’ll make the cache and persisted document index update from the same resolved list length so future cycles always reopen on a valid sentence.
 
-### 2. Persist the toggle
+### 4. Add a small sync helper instead of repeating fragile logic
+Extract a focused helper for “resolve current sentence for a document” that handles:
+- ordered sentence fetching
+- index clamping
+- cache update for corrected index
+- returning the exact sentence to display/speak
 
-Add `saveMuted(next: boolean)`:
-- Optimistically update the `["user_preferences"]` cache with `{ ...prev, muted: next }`.
-- `supabase.from("user_preferences").upsert({ user_id, muted: next, favorites: favorites as any }, { onConflict: "user_id" })`.
-- On mute → call `window.speechSynthesis.cancel()` once so any in-flight utterance stops immediately.
+That keeps the cycle code, jump code, and mutation follow-ups using the same rules.
 
-### 3. Gate `speak()` at the source
+### 5. Validate all speech entry points
+Review every `speak()` caller and ensure each one passes the sentence object that is actually being shown, including:
+- swipe right cycle
+- swipe up/down navigation
+- jump to
+- delete
+- edit save/jump
+- AI continuation insert
 
-Read `muted` via a `mutedRef` (updated in a small `useEffect` from `prefs?.muted`) so the existing `useCallback` for `speak()` doesn't need to be re-created on every change. At the very top of `speak()`:
+The existing mute behavior and emoji stripping will stay intact.
 
-```ts
-if (mutedRef.current) return;
-```
+## Technical details
+- File to update: `src/routes/_authenticated/app.tsx`
+- No new UI required
+- No schema change needed unless I discover the stored index itself is being persisted incorrectly
+- I’ll keep the current token-based speech cancellation, but make the resolved sentence object the only speech source
 
-Reason for the early return (not just turning volume down): on iOS Safari/Chrome, even a muted `SpeechSynthesisUtterance` activates the audio session and ducks background audio. Never invoking `.speak()` is the only reliable way to avoid that.
-
-`claimSpeech()` stays as-is — calling `cancel()` while muted is harmless and keeps the token state consistent for when the user unmutes mid-session.
-
-### 4. Menu button
-
-The menu items array currently includes Theme, Favorites, etc. (line ~568). Add one more entry — single button whose emoji and label reflect the current state:
-
-- Muted: `🔇` label "Sound off"
-- Unmuted: `🔊` label "Sound on"
-
-Clicking it calls `saveMuted(!muted)` and closes the menu (matches the existing menu-item behavior). Place it near the Theme entry since both are global app preferences.
-
-The menu items array is memoized on `[theme, docs, activeDoc, favorites, saveFavorites, qc, navigate]` — add `muted` and `saveMuted` to that dependency list.
-
-## What does NOT change
-
-- Long-press voice capture (`SpeechRecognition`) is input, not output — it stays unaffected by the mute toggle.
-- Toast notifications, gestures, and all sentence/doc behavior are untouched.
-- No new dependencies.
-
-## Files touched
-
-- New migration adding `muted` to `user_preferences`.
-- `src/routes/_authenticated/app.tsx` — query update, `mutedRef`, `speak()` early return, `saveMuted`, and one new menu item.
+## Expected outcome
+After the fix, when a user cycles to another document:
+- the document opens on the last saved sentence position
+- that same sentence is what appears on screen
+- that same sentence is what speech reads
+- no title and no stale sentence will ever be spoken during the switch

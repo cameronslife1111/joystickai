@@ -317,32 +317,51 @@ function AppPage() {
     }
     if (!targetId) return;
 
-    // Re-fetch the target doc's current_sentence_index from DB so the spoken
-    // text can NEVER disagree with the displayed sentence. Cache may be stale.
-    const { data: freshDoc } = await supabase
-      .from("documents")
-      .select("current_sentence_index, title")
-      .eq("id", targetId)
-      .maybeSingle();
+    // Fetch the target doc's saved index AND its full ordered sentence list
+    // in parallel. The spoken text is then resolved from the SAME list the
+    // UI will render, by array position — never by order_index lookup. This
+    // is the single source of truth that guarantees display === speech.
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true }),
+    ]);
     if (token !== speechTokenRef.current) return; // superseded by newer action
-    const targetIdx = freshDoc?.current_sentence_index ?? 0;
 
-    const { data: row } = await supabase
-      .from("sentences")
-      .select("content")
-      .eq("document_id", targetId)
-      .eq("order_index", targetIdx)
-      .maybeSingle();
-    if (token !== speechTokenRef.current) return;
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
 
-    // Keep the docs cache in sync with the value we're about to speak so the
-    // header counter and the spoken sentence agree.
+    // Prime the sentences cache for the target doc so when activeDocId
+    // flips, the UI renders THIS exact list immediately (no flash of stale
+    // data, no race with the sentences query refetching).
+    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
+
+    // Sync the docs cache with the clamped index so the header counter and
+    // the spoken sentence agree, and persist the correction if savedIdx
+    // pointed past the end of the list (e.g. after deletes).
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
-      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: targetIdx } : d) ?? prev,
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+
     setActiveDocId(targetId);
 
-    if (row?.content) speak(row.content, token);
+    if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
