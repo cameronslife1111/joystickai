@@ -759,16 +759,43 @@ function AppPage() {
       setSearchQuery("");
       setSearchOpen(true);
     }},
+    { e: "📋", t: "Copy sentence", fn: () => {
+      setMenuOpen(false);
+      const text = currentSentence?.content;
+      if (!text) { toast.error("No sentence to copy"); return; }
+      copyToClipboard(text).then((ok) => {
+        if (ok) toast.success("Copied sentence");
+        else toast.error("Failed to copy");
+      });
+    }},
+    { e: "📄", t: "Copy document", fn: async () => {
+      setMenuOpen(false);
+      if (!activeDocId) { toast.error("No document open"); return; }
+      let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
+      if (!list) {
+        const { data } = await supabase
+          .from("sentences")
+          .select("content")
+          .eq("document_id", activeDocId)
+          .order("order_index", { ascending: true });
+        list = data ?? [];
+      }
+      const full = list.map((s) => s.content).join(" ").trim();
+      if (!full) { toast.error("Document is empty"); return; }
+      const ok = await copyToClipboard(full);
+      if (ok) toast.success("Copied document");
+      else toast.error("Failed to copy");
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate]);
 
-  // Empty slots padding to 15
+  // Empty slots padding to 24 (4x6)
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void } | null> = [...grid];
-    while (filled.length < 15) filled.push(null);
+    while (filled.length < 24) filled.push(null);
     return filled;
   }, [grid]);
 

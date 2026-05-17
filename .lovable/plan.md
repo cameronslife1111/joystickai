@@ -1,33 +1,37 @@
 ## Goal
-Add a search action to slot 9 of the menu grid so the user can find a document by title and jump straight into it with the current sentence spoken aloud.
+Resize the menu pop-up grid from 3×5 to 4×6 (24 slots) and add two new actions: Copy sentence and Copy full document. The whole grid must fit in the pop-up on mobile (390×701) with no scrolling.
 
-## Changes
+## Changes (all in `src/routes/_authenticated/app.tsx`)
 
-### 1. New menu action (slot 9)
-In `src/routes/_authenticated/app.tsx`, append a 9th item to the `grid` array:
-- emoji: 🔍
-- label: "Search docs"
-- action: close the menu and open a new search overlay (`setSearchOpen(true)`)
+### 1. Grid layout — 4 columns × 6 rows
+- Change the menu grid container from `grid-cols-3` to `grid-cols-4`.
+- Change the slots padding from `< 15` to `< 24` so empty squares fill the full 4×6.
+- Drop `aspect-square` on each tile (a 4×6 of square tiles overflows on a 390-wide phone) and give tiles a fixed compact height (e.g. `h-20`) so 6 rows + header + padding fit inside the pop-up without scrolling.
+- Shrink inner typography slightly (emoji `text-xl`, label `text-[10px]`) so the smaller tile still reads cleanly.
+- Keep the slot-number badge in the top-left corner.
 
-### 2. Search overlay
-Add `searchOpen` state and `searchQuery` state. Render a modal (same visual pattern as the existing Jump-to overlay around line 1095) containing:
-- A single text input, auto-focused, placeholder "Search documents…"
-- A live-filtered list of `docs` whose `title` contains the query (case-insensitive). Empty query shows all docs.
-- Each result is a tappable row showing the title.
+### 2. New action — Copy sentence (📋)
+Append to the `grid` array. On tap:
+- Close the menu.
+- Take `currentSentence?.content`. If empty, show `toast.error("No sentence to copy")` and return.
+- Synchronously call `navigator.clipboard.writeText(text)` inside the tap handler (required for iOS clipboard permission).
+- On success: `toast.success("Copied sentence")`. On failure, fall back to a hidden textarea + `document.execCommand("copy")` and toast accordingly.
 
-### 3. Selecting a result
-On tap:
-- Close the overlay and clear the query.
-- `setActiveDocId(doc.id)` so the app switches to that document.
-- Synchronously (inside the tap handler, iOS-safe) call `window.speechSynthesis.cancel()` then `speak(...)` for that document's current sentence if unmuted. Reuse the exact emoji-stripping + utterance pattern already used in the Sound toggle (lines 663–678) so iPhone Web Speech reliably fires.
-- The doc's `current_sentence_index` is already loaded with the doc row, so we can read it directly to fetch the matching sentence content via a small query or by waiting for the sentences query to hydrate. To keep the speak call inside the tap gesture (required by iOS), we will look up the cached sentences for that doc from React Query if present; if not cached, we fall back to a fire-and-forget fetch and skip the immediate speak (the existing auto-read behavior on sentence load will cover it).
+### 3. New action — Copy full document (📄)
+Append to the `grid` array. On tap:
+- Close the menu.
+- Read the cached `sentences` for `activeDocId` from React Query (`qc.getQueryData(["sentences", activeDocId])`). If missing, fetch via Supabase, then continue.
+- Join sentence `content` values with a single space (matching how the doc reads aloud) into one string.
+- Copy via the same clipboard logic as above.
+- Toast `Copied document` on success, `Failed to copy` on error.
 
-### 4. Keyboard / UX
-- Pressing Escape closes the overlay.
-- Pressing Enter selects the first match.
-- Tapping the backdrop closes the overlay.
+Note: the existing toaster is already pinned to `top-center` from the earlier fix, so both toasts will appear at the top automatically.
+
+### 4. Order in the grid
+Insert the two new actions next to the existing doc-content actions for discoverability:
+1 Theme · 2 Sound · 3 New doc · 4 Rename · 5 Delete · 6 Favorites · 7 Jump to · 8 Move sentence · 9 Search docs · 10 Copy sentence · 11 Copy document · 12 Sign out. Remaining 12 slots stay empty (faded) inside the 4×6.
 
 ## Out of scope
-- No DB schema changes.
-- No changes to send-to, edit, or favorites flows.
-- No changes to existing slots 1–8.
+- No DB changes.
+- No changes to existing actions' behavior.
+- No changes to send-to, edit, favorites flows.
