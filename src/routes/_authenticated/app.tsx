@@ -641,7 +641,7 @@ function AppPage() {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
+  ], [theme, muted, saveMuted, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {
