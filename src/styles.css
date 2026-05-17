@@ -93,11 +93,17 @@
   html, body, #root {
     height: 100%;
   }
+  html, body {
+    /* Kill iOS 300ms double-tap zoom; disables pinch-zoom inside the app. */
+    touch-action: manipulation;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
     overscroll-behavior: none;
+    overflow: hidden;
   }
 }
 
