@@ -750,7 +750,11 @@ function AppPage() {
       const text = await file.text();
       const parsed = parseChecklists(text);
       if (parsed.length === 0) { toast.error("No checklists found"); return; }
-      if (!confirm(`Import ${parsed.length} checklist${parsed.length === 1 ? "" : "s"} as new document${parsed.length === 1 ? "" : "s"}?`)) return;
+      const existingByTitle = new Map<string, { id: string }>();
+      (docs ?? []).forEach((d: any) => existingByTitle.set(d.title.trim().toLowerCase(), { id: d.id }));
+      const updates = parsed.filter(p => existingByTitle.has(p.title.trim().toLowerCase())).length;
+      const creates = parsed.length - updates;
+      if (!confirm(`Import ${parsed.length} checklist${parsed.length === 1 ? "" : "s"}? (${creates} new, ${updates} will replace existing)`)) return;
 
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) { toast.error("Not signed in"); return; }
@@ -758,16 +762,27 @@ function AppPage() {
       const tId = toast.loading(`Importing 0 / ${parsed.length}…`);
       let firstId: string | null = null;
       let done = 0;
+      let newIdx = 0;
       for (let i = 0; i < parsed.length; i++) {
         const item = parsed[i];
-        const { data: doc, error: dErr } = await supabase
-          .from("documents")
-          .insert({ user_id: u.user.id, title: item.title, position: basePos + i })
-          .select().single();
-        if (dErr || !doc) { toast.error(`Failed to create "${item.title}"`); continue; }
-        if (!firstId) firstId = doc.id;
+        const existing = existingByTitle.get(item.title.trim().toLowerCase());
+        let docId: string;
+        if (existing) {
+          docId = existing.id;
+          const { error: delErr } = await supabase.from("sentences").delete().eq("document_id", docId);
+          if (delErr) { toast.error(`Failed to clear "${item.title}"`); continue; }
+        } else {
+          const { data: doc, error: dErr } = await supabase
+            .from("documents")
+            .insert({ user_id: u.user.id, title: item.title, position: basePos + newIdx })
+            .select().single();
+          if (dErr || !doc) { toast.error(`Failed to create "${item.title}"`); continue; }
+          docId = doc.id;
+          newIdx++;
+        }
+        if (!firstId) firstId = docId;
         const { error: sErr } = await supabase.rpc("insert_sentences_at", {
-          p_document_id: doc.id,
+          p_document_id: docId,
           p_contents: item.sentences,
           p_insert_at: 0,
         });
@@ -775,7 +790,7 @@ function AppPage() {
         done++;
         toast.loading(`Importing ${done} / ${parsed.length}…`, { id: tId });
       }
-      toast.success(`Imported ${done} checklist${done === 1 ? "" : "s"}`, { id: tId });
+      toast.success(`Imported ${done} checklist${done === 1 ? "" : "s"} (${creates} new, ${updates} replaced)`, { id: tId });
       qc.invalidateQueries({ queryKey: ["documents"] });
       if (firstId) setActiveDocId(firstId);
     } catch (e: any) {
