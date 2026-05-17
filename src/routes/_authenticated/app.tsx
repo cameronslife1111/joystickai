@@ -28,6 +28,10 @@ function AppPage() {
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [composeText, setComposeText] = useState("");
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
@@ -167,7 +171,7 @@ function AppPage() {
     setJumpOpen(false);
   }, [sentences, setIndex, speak, claimSpeech]);
 
-  const onTap = useCallback(async () => {
+  const advanceSentence = useCallback(async () => {
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
     const next = currentIdx + 1;
@@ -179,6 +183,14 @@ function AppPage() {
     await setIndex(next);
     speak(sentences[next].content, token);
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
+
+  const openNewIdea = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setComposeText("");
+    setComposing(true);
+  }, []);
 
   const onSwipeUp = useCallback(async () => {
     const token = claimSpeech();
@@ -192,7 +204,7 @@ function AppPage() {
     if (sentences?.[prev]) speak(sentences[prev].content, token);
   }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 
-  const onSwipeDown = useCallback(async () => {
+  const deleteCurrent = useCallback(async () => {
     if (!currentSentence || !sentences) return;
     const token = claimSpeech();
     const deleted = currentSentence;
@@ -363,10 +375,14 @@ function AppPage() {
   }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
 
   useOrbGestures(orbRef, {
-    onTap, onDoubleTap, onLongPressStart, onLongPressEnd,
+    onTap: openNewIdea,
+    onDoubleTap,
+    onTripleTap: deleteCurrent,
+    onLongPressStart,
+    onLongPressEnd,
     onSwipe: (d) => {
       if (d === "up") onSwipeUp();
-      else if (d === "down") onSwipeDown();
+      else if (d === "down") advanceSentence();
       else if (d === "right") onSwipeRight();
       else onSwipeLeft();
     },
@@ -413,7 +429,60 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
     const token = claimSpeech();
     speak(parts[0], token);
-  }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex]);
+  }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex, speak, claimSpeech]);
+
+  const cancelCompose = useCallback(() => {
+    setComposing(false);
+    setComposeText("");
+    setSendOpen(false);
+    setSendDocId(null);
+  }, []);
+
+  const sendIdea = useCallback(async (
+    targetDocId: string,
+    position: "top" | "bottom" | "current",
+  ) => {
+    const parts = splitIntoSentences(composeText);
+    if (parts.length === 0) { cancelCompose(); return; }
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+
+    const targetDoc = docs?.find((d) => d.id === targetDocId);
+    const { data: existing } = await supabase
+      .from("sentences")
+      .select("id, order_index")
+      .eq("document_id", targetDocId)
+      .order("order_index", { ascending: true });
+    const list = existing ?? [];
+
+    let insertAt: number;
+    if (position === "top") insertAt = 0;
+    else if (position === "bottom") insertAt = list.length;
+    else {
+      const curIdx = targetDocId === activeDocId
+        ? currentIdx
+        : (targetDoc?.current_sentence_index ?? 0);
+      insertAt = list.length === 0 ? 0 : Math.min(curIdx + 1, list.length);
+    }
+
+    const tail = list.slice(insertAt);
+    for (let i = tail.length - 1; i >= 0; i--) {
+      await supabase.from("sentences")
+        .update({ order_index: tail[i].order_index + parts.length })
+        .eq("id", tail[i].id);
+    }
+    await supabase.from("sentences").insert(
+      parts.map((content, i) => ({
+        user_id: u.user!.id,
+        document_id: targetDocId,
+        content,
+        order_index: insertAt + i,
+      })),
+    );
+    qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
+    toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
+    cancelCompose();
+  }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
 
   // Menu actions
   const grid = useMemo(() => [
@@ -485,11 +554,17 @@ function AppPage() {
       {/* Top: doc title */}
       <header className="px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
-          {activeDoc?.title ?? "—"}
-          {sentences && (
-            <span className="ml-2 opacity-60">
-              {Math.min(currentIdx + 1, sentences.length || 1)} / {Math.max(sentences.length, 1)}
-            </span>
+          {composing ? (
+            <span className="text-primary">New idea · {activeDoc?.title ?? "—"}</span>
+          ) : (
+            <>
+              {activeDoc?.title ?? "—"}
+              {sentences && (
+                <span className="ml-2 opacity-60">
+                  {Math.min(currentIdx + 1, sentences.length || 1)} / {Math.max(sentences.length, 1)}
+                </span>
+              )}
+            </>
           )}
         </div>
       </header>
@@ -497,7 +572,23 @@ function AppPage() {
       {/* Sentence */}
       <section className="flex flex-1 items-center justify-center px-6 pb-8">
         <div className="w-full max-w-2xl text-center">
-          {editing ? (
+          {composing ? (
+            <textarea
+              ref={(el) => { if (el) el.focus(); }}
+              value={composeText}
+              onChange={(e) => setComposeText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelCompose();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  if (composeText.trim()) setSendOpen(true);
+                }
+              }}
+              placeholder="Type your new idea…"
+              className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none placeholder:text-muted-foreground/40 md:text-4xl"
+              rows={4}
+            />
+          ) : editing ? (
             <textarea
               ref={(el) => {
                 if (el) {
@@ -530,6 +621,29 @@ function AppPage() {
           )}
         </div>
       </section>
+
+      {/* Compose action buttons (above orb) */}
+      {composing && (
+        <div className="pointer-events-none flex justify-center pb-4">
+          <div className="pointer-events-auto flex gap-3">
+            <button
+              onClick={cancelCompose}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setSendOpen(true)}
+              disabled={!composeText.trim()}
+              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+            >
+              Send to…
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Orb */}
       <section className="flex items-center justify-center pb-[max(env(safe-area-inset-bottom,1.5rem),2rem)]">
@@ -725,6 +839,76 @@ function AppPage() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+      {/* Send-to overlay */}
+      {sendOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => { setSendOpen(false); setSendDocId(null); }}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">
+                {sendDocId ? "Where in the list?" : "Send to which list?"}
+              </div>
+              <button
+                onClick={() => { setSendOpen(false); setSendDocId(null); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {!sendDocId ? (
+              <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+                {(docs ?? []).map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSendDocId(d.id)}
+                    className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+                {(!docs || docs.length === 0) && (
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    No documents yet.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 p-1">
+                <button
+                  onClick={() => sendIdea(sendDocId, "top")}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                >
+                  ⤒  Top of list
+                </button>
+                <button
+                  onClick={() => sendIdea(sendDocId, "current")}
+                  className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
+                >
+                  ●  After current sentence
+                </button>
+                <button
+                  onClick={() => sendIdea(sendDocId, "bottom")}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                >
+                  ⤓  Bottom of list
+                </button>
+                <button
+                  onClick={() => setSendDocId(null)}
+                  className="mt-1 w-full rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ← Pick a different list
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

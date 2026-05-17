@@ -5,6 +5,7 @@ export type SwipeDirection = "up" | "down" | "left" | "right";
 interface OrbGestureCallbacks {
   onTap?: () => void;
   onDoubleTap?: () => void;
+  onTripleTap?: () => void;
   onLongPressStart?: () => void;
   onLongPressEnd?: () => void;
   onSwipe?: (direction: SwipeDirection) => void;
@@ -40,8 +41,8 @@ export function useOrbGestures(
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
     let isLongPressing = false;
     let pointerActive = false;
-    let lastTapTime = 0;
-    let pendingTapTimer: ReturnType<typeof setTimeout> | null = null;
+    let tapCount = 0;
+    let tapTimer: ReturnType<typeof setTimeout> | null = null;
     let activePointerId: number | null = null;
 
     const clearLongPress = () => {
@@ -104,22 +105,17 @@ export function useOrbGestures(
         return;
       }
 
-      // Tap vs double-tap
-      const now = Date.now();
-      if (now - lastTapTime < doubleTapMs) {
-        if (pendingTapTimer) {
-          clearTimeout(pendingTapTimer);
-          pendingTapTimer = null;
-        }
-        lastTapTime = 0;
-        cbRef.current.onDoubleTap?.();
-      } else {
-        lastTapTime = now;
-        pendingTapTimer = setTimeout(() => {
-          cbRef.current.onTap?.();
-          pendingTapTimer = null;
-        }, doubleTapMs);
-      }
+      // Tap counting: single / double / triple
+      tapCount += 1;
+      if (tapTimer) clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => {
+        const n = tapCount;
+        tapCount = 0;
+        tapTimer = null;
+        if (n === 1) cbRef.current.onTap?.();
+        else if (n === 2) cbRef.current.onDoubleTap?.();
+        else cbRef.current.onTripleTap?.();
+      }, doubleTapMs);
     };
 
     const onPointerCancel = () => {
@@ -143,7 +139,7 @@ export function useOrbGestures(
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("pointercancel", onPointerCancel);
       clearLongPress();
-      if (pendingTapTimer) clearTimeout(pendingTapTimer);
+      if (tapTimer) clearTimeout(tapTimer);
     };
   }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx]);
 }
