@@ -750,6 +750,10 @@ function AppPage() {
       setMenuOpen(false);
       setJumpOpen(true);
     }},
+    { e: "↕️", t: "Move sentence", fn: () => {
+      setMenuOpen(false);
+      setMoveOpen(true);
+    }},
     { e: "🔍", t: "Search docs", fn: () => {
       setMenuOpen(false);
       setSearchQuery("");
