@@ -616,6 +616,131 @@ function AppPage() {
     cancelCompose();
   }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
 
+  // Export current sentence + animated orb to an MP4 (falls back to webm).
+  const exportMp4 = useCallback(async () => {
+    if (recording) return;
+    if (typeof window === "undefined" || typeof (window as any).MediaRecorder === "undefined") {
+      toast.error("Recording isn't supported in this browser");
+      return;
+    }
+    const sentenceText = currentSentence?.content ?? activeDoc?.title ?? "Joystick AI";
+    const W = 720;
+    const H = 1280;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { toast.error("Canvas unavailable"); return; }
+    const stream = (canvas as any).captureStream(30) as MediaStream;
+
+    // Pick the best supported container — Safari prefers mp4, others fall back to webm.
+    const candidates = [
+      "video/mp4;codecs=avc1.42E01E",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    const MR: any = (window as any).MediaRecorder;
+    const mimeType = candidates.find((m) => MR.isTypeSupported?.(m)) ?? "";
+    const recorder = mimeType
+      ? new MR(stream, { mimeType })
+      : new MR(stream);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    let raf = 0;
+    const start = performance.now();
+    const draw = () => {
+      const t = (performance.now() - start) / 1000;
+      // Background gradient
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#1a0f2e");
+      bg.addColorStop(1, "#0b0618");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Animated orb
+      const cx = W / 2;
+      const cy = H * 0.62;
+      const baseR = Math.min(W, H) * 0.22;
+      const pulse = 1 + Math.sin(t * 1.6) * 0.04;
+      const r = baseR * pulse;
+      const grd = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+      const hue = (t * 30) % 360;
+      grd.addColorStop(0, `hsl(${(hue + 200) % 360},100%,82%)`);
+      grd.addColorStop(0.5, `hsl(${(hue + 280) % 360},90%,58%)`);
+      grd.addColorStop(1, `hsl(${(hue + 320) % 360},90%,30%)`);
+      ctx.save();
+      ctx.shadowColor = `hsla(${(hue + 280) % 360},90%,60%,0.7)`;
+      ctx.shadowBlur = 80;
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Sentence text (wrapped)
+      const clean = sentenceText
+        .replace(/\p{Extended_Pictographic}/gu, "")
+        .replace(/\s{2,}/g, " ")
+        .trim() || sentenceText;
+      ctx.fillStyle = "#fafafa";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const fontSize = 44;
+      ctx.font = `${fontSize}px "Instrument Serif", Georgia, serif`;
+      const maxW = W * 0.85;
+      const words = clean.split(/\s+/);
+      const lines: string[] = [];
+      let line = "";
+      for (const w of words) {
+        const test = line ? line + " " + w : w;
+        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+        else line = test;
+      }
+      if (line) lines.push(line);
+      const visible = lines.slice(0, 6);
+      const lineH = fontSize * 1.2;
+      const startY = H * 0.25 - ((visible.length - 1) * lineH) / 2;
+      visible.forEach((ln, i) => ctx.fillText(ln, W / 2, startY + i * lineH));
+
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+
+    const DURATION_MS = 10000;
+    setRecording(true);
+    setMenuOpen(false);
+    toast("Recording 10s…", { id: "rec" });
+
+    const stop = () => {
+      try { recorder.stop(); } catch {}
+      cancelAnimationFrame(raf);
+      stream.getTracks().forEach((tr) => tr.stop());
+    };
+    recordingRef.current = { stop };
+
+    recorder.onstop = () => {
+      const outType = recorder.mimeType || mimeType || "video/webm";
+      const blob = new Blob(chunks, { type: outType });
+      const ext = outType.includes("mp4") ? "mp4" : "webm";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `joystick-${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setRecording(false);
+      recordingRef.current = null;
+      toast.success(`Saved ${ext.toUpperCase()}`, { id: "rec" });
+    };
+    recorder.start();
+    setTimeout(stop, DURATION_MS);
+  }, [recording, currentSentence, activeDoc]);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
