@@ -958,7 +958,19 @@ function AppPage() {
     filled[5] = grid[7];   // 6  Move sentence
     filled[6] = grid[9];   // 7  Copy sentence
     filled[7] = grid[10];  // 8  Copy document
+  // Arrange menu buttons into the requested 4x6 grid slots
+  const slots = useMemo(() => {
+    const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
+    filled[0] = grid[0];   // 1  Theme
+    filled[1] = grid[3];   // 2  Rename
+    filled[2] = grid[2];   // 3  New doc
+    filled[3] = grid[1];   // 4  Sound on/off
+    filled[4] = grid[4];   // 5  Delete doc
+    filled[5] = grid[7];   // 6  Move sentence
+    filled[6] = grid[9];   // 7  Copy sentence
+    filled[7] = grid[10];  // 8  Copy document
     filled[8] = grid[12];  // 9  Import checklists
+    filled[9] = grid[13];  // 10 Media Gallery
     filled[10] = grid[8];  // 11 Search docs
     filled[11] = grid[6];  // 12 Jump to
     filled[15] = grid[5];  // 16 Favorites
