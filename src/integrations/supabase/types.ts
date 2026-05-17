@@ -82,6 +82,7 @@ export type Database = {
       user_preferences: {
         Row: {
           created_at: string
+          favorites: Json
           grid_layout: Json
           id: string
           theme: string
@@ -90,6 +91,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          favorites?: Json
           grid_layout?: Json
           id?: string
           theme?: string
@@ -98,6 +100,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          favorites?: Json
           grid_layout?: Json
           id?: string
           theme?: string
