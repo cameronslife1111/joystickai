@@ -1579,6 +1579,16 @@ function AppPage() {
           </div>
         </div>
       )}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleImportFile(f);
+        }}
+      />
     </main>
   );
 }
