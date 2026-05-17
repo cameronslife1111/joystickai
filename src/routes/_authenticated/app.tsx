@@ -589,6 +589,11 @@ function AppPage() {
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
+    {
+      e: muted ? "🔇" : "🔊",
+      t: muted ? "Sound off" : "Sound on",
+      fn: () => { void saveMuted(!muted); setMenuOpen(false); },
+    },
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
