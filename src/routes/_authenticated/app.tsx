@@ -1222,6 +1222,14 @@ function AppPage() {
                       <div className="text-[10px] leading-tight">{slot.t}</div>
                     </div>
                   ) : null}
+                  {slot?.badge && slot.badge > 0 ? (
+                    <span
+                      className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
+                      style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                    >
+                      {slot.badge > 99 ? "99+" : slot.badge}
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
