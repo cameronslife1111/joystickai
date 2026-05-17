@@ -506,19 +506,38 @@ function AppPage() {
     },
   });
 
-  // Parse the full-doc editor text into sentence parts (paragraph-per-sentence).
+  // Parse the full-doc editor text into sentence parts.
+  // Supports punctuation-based splitting (. ! ?) while still respecting
+  // separate lines / paragraphs as explicit boundaries.
   const parseEditParts = useCallback((text: string) => {
-    return text.split(/\n\s*\n+/).map((s) => s.trim()).filter(Boolean);
+    const blocks = text
+      .replace(/\r\n?/g, "\n")
+      .split(/\n\s*\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const parts = blocks.flatMap((block) => {
+      const lineParts = block
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .flatMap((line) => {
+          const sentences = splitIntoSentences(line);
+          return sentences.length > 0 ? sentences : [line];
+        });
+
+      return lineParts.length > 0 ? lineParts : [block];
+    });
+
+    return parts.filter(Boolean);
   }, []);
 
   // Map a caret position in the editor text to a sentence index (0-based).
   const caretToSentenceIdx = useCallback((text: string, caret: number) => {
     const before = text.slice(0, Math.max(0, Math.min(caret, text.length)));
-    // Split before-text the same way we split for saving; the last part is the
-    // sentence the caret sits in. Empty trailing => still last index.
-    const partsBefore = before.split(/\n\s*\n+/);
+    const partsBefore = parseEditParts(before);
     return Math.max(0, partsBefore.length - 1);
-  }, []);
+  }, [parseEditParts]);
 
   // Bulk save the editor contents, then jump to `targetIdx` (clamped).
   const commitFullEdit = useCallback(async (rawTargetIdx: number | null) => {
@@ -594,9 +613,12 @@ function AppPage() {
   }, [activeDocId, editText, sentences, parseEditParts, qc, setIndex, speak, claimSpeech]);
 
   const handleEditDone = useCallback(() => {
-    void commitFullEdit(null);
+    const el = editTextareaRef.current;
+    const caret = el?.selectionStart ?? editText.length;
+    const idx = caretToSentenceIdx(editText, caret);
+    void commitFullEdit(idx);
     toast("Saved", { id: "edit-saved" });
-  }, [commitFullEdit]);
+  }, [editText, caretToSentenceIdx, commitFullEdit]);
 
   const handleEditJump = useCallback(() => {
     const el = editTextareaRef.current;
@@ -958,7 +980,7 @@ function AppPage() {
                   cancelEdit();
                 }
               }}
-              placeholder="Edit your document. Leave a blank line between sentences."
+              placeholder="Edit your document. Sentences split automatically on periods, question marks, and exclamation marks."
               inputMode="text"
               className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-2xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-3xl"
               style={{ minHeight: "60vh", maxHeight: "70vh" }}
