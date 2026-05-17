@@ -38,6 +38,7 @@ function AppPage() {
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
   const speechTokenRef = useRef<number>(0);
+  const mutedRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
   const callAi = useServerFn(aiContinue);
