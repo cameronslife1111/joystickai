@@ -842,6 +842,76 @@ function AppPage() {
           </div>
         </div>
       )}
+      {/* Send-to overlay */}
+      {sendOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => { setSendOpen(false); setSendDocId(null); }}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">
+                {sendDocId ? "Where in the list?" : "Send to which list?"}
+              </div>
+              <button
+                onClick={() => { setSendOpen(false); setSendDocId(null); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {!sendDocId ? (
+              <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+                {(docs ?? []).map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setSendDocId(d.id)}
+                    className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+                {(!docs || docs.length === 0) && (
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    No documents yet.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 p-1">
+                <button
+                  onClick={() => sendIdea(sendDocId, "top")}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                >
+                  ⤒  Top of list
+                </button>
+                <button
+                  onClick={() => sendIdea(sendDocId, "current")}
+                  className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
+                >
+                  ●  After current sentence
+                </button>
+                <button
+                  onClick={() => sendIdea(sendDocId, "bottom")}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                >
+                  ⤓  Bottom of list
+                </button>
+                <button
+                  onClick={() => setSendDocId(null)}
+                  className="mt-1 w-full rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ← Pick a different list
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
