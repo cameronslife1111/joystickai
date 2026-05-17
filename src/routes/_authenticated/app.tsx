@@ -204,7 +204,7 @@ function AppPage() {
     if (sentences?.[prev]) speak(sentences[prev].content, token);
   }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 
-  const onSwipeDown = useCallback(async () => {
+  const deleteCurrent = useCallback(async () => {
     if (!currentSentence || !sentences) return;
     const token = claimSpeech();
     const deleted = currentSentence;
