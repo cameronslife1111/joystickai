@@ -842,8 +842,8 @@ function AppPage() {
       </header>
 
       {/* Sentence */}
-      <section className="flex flex-1 items-center justify-center px-6 pb-8">
-        <div className="w-full max-w-2xl text-center">
+      <section className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-4">
+        <div className="w-full max-w-2xl max-h-full overflow-y-auto text-center">
           {composing ? (
             <textarea
               ref={(el) => { if (el) el.focus(); }}
