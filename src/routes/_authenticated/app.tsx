@@ -647,7 +647,7 @@ function AppPage() {
       ? new MR(stream, { mimeType })
       : new MR(stream);
     const chunks: Blob[] = [];
-    recorder.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.ondataavailable = (e: any) => { if (e.data?.size > 0) chunks.push(e.data); };
 
     let raf = 0;
     const start = performance.now();
