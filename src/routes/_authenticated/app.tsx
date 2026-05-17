@@ -450,9 +450,11 @@ function AppPage() {
     for (let i = 0; i < overlap; i++) {
       if (parts[i] !== existing[i].content) {
         updates.push(
-          supabase.from("sentences")
-            .update({ content: parts[i] })
-            .eq("id", existing[i].id),
+          (async () => {
+            await supabase.from("sentences")
+              .update({ content: parts[i] })
+              .eq("id", existing[i].id);
+          })(),
         );
       }
     }
