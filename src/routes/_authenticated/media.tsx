@@ -136,25 +136,6 @@ function MediaPage() {
     if (a) void markSeen(a);
   }, [filtered, markSeen]);
 
-  // Long-press handlers (500ms)
-  const handlePressStart = useCallback((asset: Asset) => {
-    longPressFiredRef.current = false;
-    if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressFiredRef.current = true;
-      setSheetAsset(asset);
-    }, 500);
-  }, []);
-  const handlePressEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-  const handleClick = useCallback((idx: number) => {
-    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
-    openViewer(idx);
-  }, [openViewer]);
 
   // Upload
   const handleFilesPicked = useCallback(async (files: FileList | null) => {
