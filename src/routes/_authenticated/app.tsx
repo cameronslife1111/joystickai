@@ -32,6 +32,9 @@ function AppPage() {
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
+  const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
+  const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
+  const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [recording, setRecording] = useState(false);
