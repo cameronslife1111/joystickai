@@ -352,7 +352,8 @@ function AppPage() {
       );
       await setIndex(insertAt);
       qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
-      speak(newSentences[0]);
+      const token = claimSpeech();
+      speak(newSentences[0], token);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI failed");
     } finally {
