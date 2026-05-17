@@ -587,21 +587,42 @@ function AppPage() {
     setSendAnchorIdx(list.length === 0 ? 0 : Math.max(0, Math.min(saved, list.length - 1)));
   }, [docs, activeDocId, currentIdx]);
 
+  // Send-to is a plain paste operation. DO NOT add logic that reorders the
+  // existing sentences of the target document. The only thing this function
+  // should do is compute an insertion index and call the RPC, which inserts
+  // the new block as-is and shifts only the tail. If you find yourself
+  // sorting, re-ranking, or rewriting order_index here — stop, the bug
+  // you're "fixing" lives somewhere else.
   const sendIdea = useCallback(async (
     targetDocId: string,
-    position: "top" | "bottom" | "afterAnchor",
+    position: "top" | "bottom" | "current" | "afterAnchor",
     anchorIdx?: number,
   ) => {
     const parts = splitIntoSentences(composeText);
     if (parts.length === 0) { cancelCompose(); return; }
 
     const targetDoc = docs?.find((d) => d.id === targetDocId);
-    // Resolve insertion index from the freshly-loaded target list so it cannot
-    // drift between when the user picked the anchor and when we write.
+
+    // Resolve insertion index. For "current", use the live current sentence
+    // index of the target doc (which equals currentIdx when sending to the
+    // active doc). For "afterAnchor", use the explicit picker selection.
+    const targetLen = sendTargetSentences.length;
+    const targetCurrentIdx = targetDocId === activeDocId
+      ? currentIdx
+      : (targetDoc?.current_sentence_index ?? 0);
+
     let insertAt: number;
-    if (position === "top") insertAt = 0;
-    else if (position === "bottom") insertAt = sendTargetSentences.length;
-    else insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, sendTargetSentences.length));
+    if (position === "top") {
+      insertAt = 0;
+    } else if (position === "bottom") {
+      insertAt = targetLen;
+    } else if (position === "current") {
+      insertAt = targetLen === 0
+        ? 0
+        : Math.max(0, Math.min(targetCurrentIdx + 1, targetLen));
+    } else {
+      insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, targetLen));
+    }
 
     const { error } = await supabase.rpc("insert_sentences_at", {
       p_document_id: targetDocId,
@@ -615,7 +636,7 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
     toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
     cancelCompose();
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx]);
 
 
   // Menu actions
