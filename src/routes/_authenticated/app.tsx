@@ -28,6 +28,10 @@ function AppPage() {
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [composeText, setComposeText] = useState("");
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
