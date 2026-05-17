@@ -143,6 +143,7 @@ function AppPage() {
     const next = currentIdx + 1;
     if (next >= sentences.length) {
       toast("End of document");
+      if (sentences[currentIdx]) speak(sentences[currentIdx].content);
       return;
     }
     await setIndex(next);
@@ -150,7 +151,11 @@ function AppPage() {
   }, [activeDoc, sentences, currentIdx, setIndex, speak]);
 
   const onSwipeUp = useCallback(async () => {
-    if (currentIdx === 0) { toast("Start of document"); return; }
+    if (currentIdx === 0) {
+      toast("Start of document");
+      if (sentences?.[0]) speak(sentences[0].content);
+      return;
+    }
     const prev = currentIdx - 1;
     await setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content);
