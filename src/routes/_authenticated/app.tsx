@@ -121,6 +121,15 @@ function AppPage() {
     );
   }, [qc]);
 
+  // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
+  // the next swipe-right always advances to the NEXT filled slot — never
+  // re-selects the slot the user is already on.
+  useEffect(() => {
+    if (!activeDocId) return;
+    const slot = favorites.findIndex((id) => id === activeDocId);
+    if (slot >= 0) favIdxRef.current = slot;
+  }, [favorites, activeDocId]);
+
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
