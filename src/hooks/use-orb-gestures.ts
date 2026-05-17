@@ -105,22 +105,17 @@ export function useOrbGestures(
         return;
       }
 
-      // Tap vs double-tap
-      const now = Date.now();
-      if (now - lastTapTime < doubleTapMs) {
-        if (pendingTapTimer) {
-          clearTimeout(pendingTapTimer);
-          pendingTapTimer = null;
-        }
-        lastTapTime = 0;
-        cbRef.current.onDoubleTap?.();
-      } else {
-        lastTapTime = now;
-        pendingTapTimer = setTimeout(() => {
-          cbRef.current.onTap?.();
-          pendingTapTimer = null;
-        }, doubleTapMs);
-      }
+      // Tap counting: single / double / triple
+      tapCount += 1;
+      if (tapTimer) clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => {
+        const n = tapCount;
+        tapCount = 0;
+        tapTimer = null;
+        if (n === 1) cbRef.current.onTap?.();
+        else if (n === 2) cbRef.current.onDoubleTap?.();
+        else cbRef.current.onTripleTap?.();
+      }, doubleTapMs);
     };
 
     const onPointerCancel = () => {
