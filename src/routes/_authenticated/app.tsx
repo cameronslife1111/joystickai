@@ -587,21 +587,42 @@ function AppPage() {
     setSendAnchorIdx(list.length === 0 ? 0 : Math.max(0, Math.min(saved, list.length - 1)));
   }, [docs, activeDocId, currentIdx]);
 
+  // Send-to is a plain paste operation. DO NOT add logic that reorders the
+  // existing sentences of the target document. The only thing this function
+  // should do is compute an insertion index and call the RPC, which inserts
+  // the new block as-is and shifts only the tail. If you find yourself
+  // sorting, re-ranking, or rewriting order_index here — stop, the bug
+  // you're "fixing" lives somewhere else.
   const sendIdea = useCallback(async (
     targetDocId: string,
-    position: "top" | "bottom" | "afterAnchor",
+    position: "top" | "bottom" | "current" | "afterAnchor",
     anchorIdx?: number,
   ) => {
     const parts = splitIntoSentences(composeText);
     if (parts.length === 0) { cancelCompose(); return; }
 
     const targetDoc = docs?.find((d) => d.id === targetDocId);
-    // Resolve insertion index from the freshly-loaded target list so it cannot
-    // drift between when the user picked the anchor and when we write.
+
+    // Resolve insertion index. For "current", use the live current sentence
+    // index of the target doc (which equals currentIdx when sending to the
+    // active doc). For "afterAnchor", use the explicit picker selection.
+    const targetLen = sendTargetSentences.length;
+    const targetCurrentIdx = targetDocId === activeDocId
+      ? currentIdx
+      : (targetDoc?.current_sentence_index ?? 0);
+
     let insertAt: number;
-    if (position === "top") insertAt = 0;
-    else if (position === "bottom") insertAt = sendTargetSentences.length;
-    else insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, sendTargetSentences.length));
+    if (position === "top") {
+      insertAt = 0;
+    } else if (position === "bottom") {
+      insertAt = targetLen;
+    } else if (position === "current") {
+      insertAt = targetLen === 0
+        ? 0
+        : Math.max(0, Math.min(targetCurrentIdx + 1, targetLen));
+    } else {
+      insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, targetLen));
+    }
 
     const { error } = await supabase.rpc("insert_sentences_at", {
       p_document_id: targetDocId,
@@ -615,7 +636,7 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
     toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
     cancelCompose();
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx]);
 
 
   // Menu actions
@@ -761,7 +782,10 @@ function AppPage() {
                 if (e.key === "Escape") cancelCompose();
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
-                  if (composeText.trim()) setSendOpen(true);
+                  if (composeText.trim()) {
+                    (e.currentTarget as HTMLTextAreaElement).blur();
+                    setSendOpen(true);
+                  }
                 }
               }}
               placeholder="Type your new idea…"
@@ -857,7 +881,14 @@ function AppPage() {
               Cancel
             </button>
             <button
-              onClick={() => setSendOpen(true)}
+              onClick={() => {
+                // Blur the compose textarea so iOS dismisses the keyboard
+                // before the destination picker (button-only UI) opens.
+                if (typeof document !== "undefined") {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                }
+                setSendOpen(true);
+              }}
               disabled={!composeText.trim()}
               className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
               style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
@@ -1153,6 +1184,13 @@ function AppPage() {
                   ⤒  Top of list
                 </button>
                 <button
+                  onClick={() => sendIdea(sendDocId, "current")}
+                  disabled={sendTargetSentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  ●  After current sentence
+                </button>
+                <button
                   onClick={() => {
                     if (sendTargetSentences.length === 0) {
                       sendIdea(sendDocId, "top");
@@ -1162,7 +1200,7 @@ function AppPage() {
                   }}
                   className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
                 >
-                  ●  After a specific sentence…
+                  ⋯  After a specific sentence…
                 </button>
                 <button
                   onClick={() => sendIdea(sendDocId, "bottom")}

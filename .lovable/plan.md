@@ -1,43 +1,59 @@
+# Rebuild plan for the Send to feature
+
 ## Goal
-Remove the MP4 export feature entirely, then make sound toggle actions the reliable iPhone entry point for speech so the menu closes and playback starts from a direct button press.
+Make Send to behave like a simple paste operation:
+- **Top** inserts the new idea above everything else
+- **Bottom** appends the new idea to the end only
+- **Current** inserts the new idea immediately after the sentence the user is on
+- Existing sentence order must never be flipped or scrambled
+- Opening the destination picker on mobile must not trigger the keyboard
 
-## Plan
-1. Remove the MP4 export feature from the app screen.
-   - Delete the `exportMp4` recording function and its supporting `recording` state/ref.
-   - Remove the `Export MP4` menu item and any related button labels/toasts.
-   - Remove any now-unused imports or dependencies created only for recording.
+## What I will change
 
-2. Rework the sound menu action so it is iPhone-safe.
-   - Replace the current menu sound handler (`saveMuted(!muted); setMenuOpen(false)`) with explicit mute/unmute handlers.
-   - On both handlers, close the popup immediately from the same button press.
-   - For **mute**: cancel any active speech immediately, persist muted state, and leave the popup closed.
-   - For **unmute**: close the popup, persist unmuted state, then synchronously create and speak the currently displayed sentence from that same button press path so iPhone treats it as user-initiated audio.
+### 1. Fix the insertion logic at the source
+Replace the current database insertion routine with a simpler, deterministic version that preserves existing order.
 
-3. Tighten the speech helper so it works with the new button-trigger flow.
-   - Keep the existing text cleanup logic.
-   - Add a small helper for “speak the currently visible sentence” so the UI display and spoken text always come from the same source (`currentSentence`).
-   - Make sure mute/unmute uses that helper instead of relying on swipe-triggered speech.
-   - Preserve cancellation/token behavior so stale utterances do not leak through.
+- Keep the current document rows in their original sequence
+- Shift only the rows at or after the insertion point
+- Insert the new sentences as one contiguous block
+- Add explicit code comments stating that existing sentence order must never be reversed, re-ranked globally, or rewritten beyond the minimum required shift
 
-4. Keep swipe navigation behavior, but stop depending on it as the only mobile trigger.
-   - Leave sentence/document navigation intact.
-   - Ensure swipe paths can still update the current sentence, while the sound toggle becomes the reliable recovery/restart trigger on iPhone.
-   - If needed, avoid any extra async hop between the unmute tap and the actual `speechSynthesis.speak()` call.
+### 2. Tighten the Send to UI flow
+Simplify the send flow in the app screen so it matches the product behavior exactly.
 
-5. Validate the changed flow against the exact user scenario.
-   - Menu opens.
-   - Tap sound off: popup closes, audio stops.
-   - Tap sound on: popup closes, the currently shown sentence is spoken.
-   - Swipe/cycle after unmuting still keeps visible sentence and spoken sentence aligned.
+- **Top**: insert at index `0`
+- **Bottom**: insert at `current length`
+- **Current**: insert at `current sentence index + 1`
+- Keep the optional sentence picker only as a precise anchor selection path if it is still needed, but ensure the default “current” action uses the user’s actual current sentence directly
+- Add guard comments in the send code so future changes do not reintroduce reorder logic
+
+### 3. Stop the mobile keyboard from opening during send destination selection
+The keyboard is appearing because the compose textarea remains focused while the send overlay is opened.
+
+I will:
+- blur the compose textarea before opening the send sheet
+- keep the send overlay as button-only selection UI with no auto-focused inputs
+- preserve typing when the user returns to composing, without auto-triggering the keyboard during destination selection
+
+### 4. Validate every write path that touches sentence order
+Review the other sentence mutation paths so they stay compatible with the new ordering rules.
+
+- AI insert path
+- delete/undo path
+- full document edit save path
+- any optimistic cache updates for sentence order
+
+This is to ensure there is one consistent ordering model everywhere.
 
 ## Technical details
-- Primary file: `src/routes/_authenticated/app.tsx`
-- Supporting check: `src/routes/__root.tsx` one-time speech unlock stays in place unless it conflicts with the new synchronous toggle flow.
-- No backend changes are planned.
-- No UI redesign is planned beyond removing the mistaken menu option.
+- **Primary frontend file:** `src/routes/_authenticated/app.tsx`
+- **Primary backend change:** replace the current `insert_sentences_at(...)` migration logic with a corrected migration that preserves stable order
+- **Why the bug happens now:** the existing function temporarily negates every `order_index` and then ranks rows by that temporary value, which reverses the effective sequence and can make “send to bottom” reorder the document
+- **Keyboard issue:** the compose textarea is auto-focused and remains active when the send overlay opens, so mobile Safari brings the keyboard up even though the overlay only needs button taps
 
-## Expected outcome
-- The mistaken MP4 feature is fully gone.
-- The sound toggle popup behaves cleanly.
-- Unmuting becomes the direct user gesture that reliably triggers speech on iPhone.
-- The sentence being shown and the sentence being read stay in sync.
+## Expected result
+- Send to Top, Bottom, and Current behave like simple paste operations
+- Existing sentences keep their original order
+- The selected/new idea text is inserted as one intact block
+- The destination picker does not open the keyboard on iPhone/mobile
+- The code contains clear guard comments so future edits do not reintroduce sentence reordering
