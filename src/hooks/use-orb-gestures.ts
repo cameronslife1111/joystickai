@@ -5,6 +5,7 @@ export type SwipeDirection = "up" | "down" | "left" | "right";
 interface OrbGestureCallbacks {
   onTap?: () => void;
   onDoubleTap?: () => void;
+  onTripleTap?: () => void;
   onLongPressStart?: () => void;
   onLongPressEnd?: () => void;
   onSwipe?: (direction: SwipeDirection) => void;
