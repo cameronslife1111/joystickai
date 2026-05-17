@@ -27,6 +27,7 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
