@@ -181,6 +181,31 @@ function AppPage() {
       .replace(/\s{2,}/g, " ")
       .trim();
 
+  // Copy text to the device clipboard. Must be called synchronously from a
+  // user gesture on iOS. Falls back to a hidden textarea + execCommand.
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
 
   // TTS — token-gated, race-safe against rapid handler chains.
   // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
@@ -759,16 +784,43 @@ function AppPage() {
       setSearchQuery("");
       setSearchOpen(true);
     }},
+    { e: "📋", t: "Copy sentence", fn: () => {
+      setMenuOpen(false);
+      const text = currentSentence?.content;
+      if (!text) { toast.error("No sentence to copy"); return; }
+      copyToClipboard(text).then((ok) => {
+        if (ok) toast.success("Copied sentence");
+        else toast.error("Failed to copy");
+      });
+    }},
+    { e: "📄", t: "Copy document", fn: async () => {
+      setMenuOpen(false);
+      if (!activeDocId) { toast.error("No document open"); return; }
+      let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
+      if (!list) {
+        const { data } = await supabase
+          .from("sentences")
+          .select("content")
+          .eq("document_id", activeDocId)
+          .order("order_index", { ascending: true });
+        list = data ?? [];
+      }
+      const full = list.map((s) => s.content).join(" ").trim();
+      if (!full) { toast.error("Document is empty"); return; }
+      const ok = await copyToClipboard(full);
+      if (ok) toast.success("Copied document");
+      else toast.error("Failed to copy");
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate]);
 
-  // Empty slots padding to 15
+  // Empty slots padding to 24 (4x6)
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void } | null> = [...grid];
-    while (filled.length < 15) filled.push(null);
+    while (filled.length < 24) filled.push(null);
     return filled;
   }, [grid]);
 
@@ -993,21 +1045,21 @@ function AppPage() {
                 Close
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-1.5">
               {slots.map((slot, i) => (
                 <button
                   key={i}
                   onClick={slot ? slot.fn : undefined}
                   disabled={!slot}
-                  className="relative aspect-square rounded-2xl border border-foreground/10 bg-foreground/5 p-2 text-center transition active:scale-95 disabled:opacity-30"
+                  className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
                 >
-                  <span className="absolute left-1.5 top-1 text-[10px] text-muted-foreground">
+                  <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
                     {i + 1}
                   </span>
                   {slot ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-1">
-                      <div className="text-2xl">{slot.e}</div>
-                      <div className="text-[11px] leading-tight">{slot.t}</div>
+                    <div className="flex h-full flex-col items-center justify-center gap-0.5">
+                      <div className="text-xl">{slot.e}</div>
+                      <div className="text-[10px] leading-tight">{slot.t}</div>
                     </div>
                   ) : null}
                 </button>
