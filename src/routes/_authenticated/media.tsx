@@ -33,10 +33,15 @@ type Filter = "all" | "image" | "video" | "audio";
 
 const BUCKET = "joystick-media";
 
-function detectKind(mime: string): Kind | null {
+function detectKind(mime: string, name?: string): Kind | null {
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
   if (mime.startsWith("audio/")) return "audio";
+  // Fallback: infer from extension when browser reports empty mime
+  const ext = (name?.split(".").pop() ?? "").toLowerCase();
+  if (["jpg","jpeg","png","gif","webp","heic","heif","avif","bmp","svg"].includes(ext)) return "image";
+  if (["mp4","mov","webm","mkv","avi","m4v","3gp"].includes(ext)) return "video";
+  if (["mp3","wav","m4a","aac","ogg","flac","opus","weba"].includes(ext)) return "audio";
   return null;
 }
 

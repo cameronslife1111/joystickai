@@ -1,51 +1,39 @@
-## Goal
-Add a new menu button that lets you import a `.txt` file containing many checklists, and turn each checklist into its own document in Joystick AI — one document per title, one sentence per checkbox line.
+## Problem
 
-## File format (what the parser expects)
-```
-===Title One===
-[ ] First item
-[x] Second item
-[ ] Third item
+On the Media Gallery page, tapping + and choosing a file does nothing — no upload progress, no toast, no row in the database, no file in storage. Verified:
 
-===Title Two===
-[ ] Another item
-...
-```
+- `media_assets` table has 0 rows
+- `joystick-media` storage bucket has 0 objects
+- Bucket is public, no size limit, no MIME restriction
+- Storage RLS policies look correct (user folder = `auth.uid()`)
 
-Rules:
-- A title line starts and ends with exactly `===` (3 equal signs). Whatever is between becomes the document title.
-- Every non-title line that follows belongs to that title, until the next `===…===` line.
-- For each item line: strip a leading checkbox marker (`[ ]`, `[x]`, `[X]`, optionally preceded by `-` or `*` and whitespace). The remaining text is the sentence.
-- If the resulting sentence doesn't end in `.`, `!`, or `?`, a `.` is appended.
-- Blank lines and lines without a checkbox marker under a title are ignored (safest default — let me know if you want them kept as plain sentences instead).
-- Titles with zero checkbox lines are skipped (no empty documents).
+So the upload is failing silently before it reaches the server, or it's throwing an error that isn't being surfaced clearly.
 
-## New menu button
-- Emoji `📥`, label "Import checklists".
-- Place it in slot **9** (currently empty) so the existing layout stays intact.
-- Tap behavior: close the menu, open a hidden `<input type="file" accept=".txt,text/plain">`, then process the chosen file.
+## Plan
 
-## Import flow
-1. Read file as text (`file.text()`).
-2. Parse into `{ title, sentences: string[] }[]` using the rules above.
-3. If nothing parsed → `toast.error("No checklists found")` and stop.
-4. Show a confirm dialog: `Import N checklists as N new documents?`
-5. For each parsed checklist, in order:
-   - Insert a new row into `documents` (title = parsed title, `position` = current end + index).
-   - Call the existing `insert_sentences_at` RPC with `p_document_id`, `p_contents = sentences`, `p_insert_at = 0`.
-6. Show progress toast (`Imported X / N`) and a final `Imported N checklists` toast.
-7. `qc.invalidateQueries({ queryKey: ["documents"] })` and switch to the first newly created doc.
+1. **Add diagnostic visibility to the upload flow** in `src/routes/_authenticated/media.tsx` so we can see exactly where it breaks:
+   - `console.log` at the start of `handleFilesPicked` with the file count + first file's name/type/size
+   - `console.log` after `supabase.auth.getUser()` to confirm a session exists
+   - `console.log` before/after `supabase.storage.from(BUCKET).upload(...)` with the path
+   - `console.log` of the full error object (not just `e.message`) if anything throws
+   - Show an info toast immediately on file pick (`"Uploading N file(s)…"`) so the user gets feedback even if the async work fails
 
-## Files touched
-- `src/routes/_authenticated/app.tsx` only:
-  - Add the new action to the `grid` array.
-  - Place it at `filled[8]` (slot 9) in the `slots` memo.
-  - Add a hidden file input ref + `handleImportFile` async handler.
-  - Add a small `parseChecklists(text)` helper near the other text utilities.
+2. **Harden the file picker path** in case the picker itself isn't firing:
+   - Move the hidden `<input type="file">` reset (`fileInputRef.current.value = ""`) to run **before** the async handler so re-picking the same file works
+   - Add an `onClick` log on the + button to confirm the click handler runs
+   - Confirm `accept="image/*,video/*,audio/*"` isn't excluding the user's file (e.g. HEIC may report empty `file.type`); fall back to inferring kind from extension when `file.type` is empty
 
-No DB migrations, no schema changes — reuses existing `documents` table and `insert_sentences_at` RPC.
+3. **Verify in the live preview** by:
+   - Opening `/media`, tapping +, picking a small image
+   - Reading the browser console + network requests to identify the actual failure point (auth, storage upload, or DB insert)
 
-## Out of scope
-- No background/queued import; 300–400 small docs is fine to do sequentially client-side, but if it feels slow we can later batch. Tell me if you want a progress bar instead of a toast.
-- No de-dup against existing documents with the same title.
+4. **Apply the targeted fix** based on what step 3 reveals — most likely one of:
+   - Empty `file.type` → `detectKind` returns null → silent skip (fixed by extension fallback)
+   - Storage upload 4xx (RLS / path) → fix the path or policy
+   - DB insert RLS failure → fix policy or payload
+
+5. **Remove the diagnostic logs** once the root cause is fixed, keep the user-facing toast and the extension fallback.
+
+## Technical details
+
+Files touched: `src/routes/_authenticated/media.tsx` only. No schema changes expected unless step 3 reveals an RLS issue, in which case a small migration on `storage.objects` or `media_assets` policies will be added.
