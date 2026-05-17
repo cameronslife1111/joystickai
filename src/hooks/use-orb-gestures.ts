@@ -41,8 +41,8 @@ export function useOrbGestures(
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
     let isLongPressing = false;
     let pointerActive = false;
-    let lastTapTime = 0;
-    let pendingTapTimer: ReturnType<typeof setTimeout> | null = null;
+    let tapCount = 0;
+    let tapTimer: ReturnType<typeof setTimeout> | null = null;
     let activePointerId: number | null = null;
 
     const clearLongPress = () => {
