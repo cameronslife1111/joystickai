@@ -1,37 +1,51 @@
 ## Goal
-Resize the menu pop-up grid from 3×5 to 4×6 (24 slots) and add two new actions: Copy sentence and Copy full document. The whole grid must fit in the pop-up on mobile (390×701) with no scrolling.
+Add a new menu button that lets you import a `.txt` file containing many checklists, and turn each checklist into its own document in Joystick AI — one document per title, one sentence per checkbox line.
 
-## Changes (all in `src/routes/_authenticated/app.tsx`)
+## File format (what the parser expects)
+```
+===Title One===
+[ ] First item
+[x] Second item
+[ ] Third item
 
-### 1. Grid layout — 4 columns × 6 rows
-- Change the menu grid container from `grid-cols-3` to `grid-cols-4`.
-- Change the slots padding from `< 15` to `< 24` so empty squares fill the full 4×6.
-- Drop `aspect-square` on each tile (a 4×6 of square tiles overflows on a 390-wide phone) and give tiles a fixed compact height (e.g. `h-20`) so 6 rows + header + padding fit inside the pop-up without scrolling.
-- Shrink inner typography slightly (emoji `text-xl`, label `text-[10px]`) so the smaller tile still reads cleanly.
-- Keep the slot-number badge in the top-left corner.
+===Title Two===
+[ ] Another item
+...
+```
 
-### 2. New action — Copy sentence (📋)
-Append to the `grid` array. On tap:
-- Close the menu.
-- Take `currentSentence?.content`. If empty, show `toast.error("No sentence to copy")` and return.
-- Synchronously call `navigator.clipboard.writeText(text)` inside the tap handler (required for iOS clipboard permission).
-- On success: `toast.success("Copied sentence")`. On failure, fall back to a hidden textarea + `document.execCommand("copy")` and toast accordingly.
+Rules:
+- A title line starts and ends with exactly `===` (3 equal signs). Whatever is between becomes the document title.
+- Every non-title line that follows belongs to that title, until the next `===…===` line.
+- For each item line: strip a leading checkbox marker (`[ ]`, `[x]`, `[X]`, optionally preceded by `-` or `*` and whitespace). The remaining text is the sentence.
+- If the resulting sentence doesn't end in `.`, `!`, or `?`, a `.` is appended.
+- Blank lines and lines without a checkbox marker under a title are ignored (safest default — let me know if you want them kept as plain sentences instead).
+- Titles with zero checkbox lines are skipped (no empty documents).
 
-### 3. New action — Copy full document (📄)
-Append to the `grid` array. On tap:
-- Close the menu.
-- Read the cached `sentences` for `activeDocId` from React Query (`qc.getQueryData(["sentences", activeDocId])`). If missing, fetch via Supabase, then continue.
-- Join sentence `content` values with a single space (matching how the doc reads aloud) into one string.
-- Copy via the same clipboard logic as above.
-- Toast `Copied document` on success, `Failed to copy` on error.
+## New menu button
+- Emoji `📥`, label "Import checklists".
+- Place it in slot **9** (currently empty) so the existing layout stays intact.
+- Tap behavior: close the menu, open a hidden `<input type="file" accept=".txt,text/plain">`, then process the chosen file.
 
-Note: the existing toaster is already pinned to `top-center` from the earlier fix, so both toasts will appear at the top automatically.
+## Import flow
+1. Read file as text (`file.text()`).
+2. Parse into `{ title, sentences: string[] }[]` using the rules above.
+3. If nothing parsed → `toast.error("No checklists found")` and stop.
+4. Show a confirm dialog: `Import N checklists as N new documents?`
+5. For each parsed checklist, in order:
+   - Insert a new row into `documents` (title = parsed title, `position` = current end + index).
+   - Call the existing `insert_sentences_at` RPC with `p_document_id`, `p_contents = sentences`, `p_insert_at = 0`.
+6. Show progress toast (`Imported X / N`) and a final `Imported N checklists` toast.
+7. `qc.invalidateQueries({ queryKey: ["documents"] })` and switch to the first newly created doc.
 
-### 4. Order in the grid
-Insert the two new actions next to the existing doc-content actions for discoverability:
-1 Theme · 2 Sound · 3 New doc · 4 Rename · 5 Delete · 6 Favorites · 7 Jump to · 8 Move sentence · 9 Search docs · 10 Copy sentence · 11 Copy document · 12 Sign out. Remaining 12 slots stay empty (faded) inside the 4×6.
+## Files touched
+- `src/routes/_authenticated/app.tsx` only:
+  - Add the new action to the `grid` array.
+  - Place it at `filled[8]` (slot 9) in the `slots` memo.
+  - Add a hidden file input ref + `handleImportFile` async handler.
+  - Add a small `parseChecklists(text)` helper near the other text utilities.
+
+No DB migrations, no schema changes — reuses existing `documents` table and `insert_sentences_at` RPC.
 
 ## Out of scope
-- No DB changes.
-- No changes to existing actions' behavior.
-- No changes to send-to, edit, favorites flows.
+- No background/queued import; 300–400 small docs is fine to do sequentially client-side, but if it feels slow we can later batch. Tell me if you want a progress bar instead of a toast.
+- No de-dup against existing documents with the same title.
