@@ -4,8 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
-  RefreshCw, Film, Trash2,
+  RefreshCw, Film, Trash2, MoreVertical,
 } from "lucide-react";
+
+const NO_CALLOUT_STYLE: React.CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitUserSelect: "none",
+  userSelect: "none",
+};
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/media")({
@@ -95,8 +101,6 @@ function MediaPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressFiredRef = useRef(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { data: assets = [], isLoading } = useQuery({
@@ -132,25 +136,6 @@ function MediaPage() {
     if (a) void markSeen(a);
   }, [filtered, markSeen]);
 
-  // Long-press handlers (500ms)
-  const handlePressStart = useCallback((asset: Asset) => {
-    longPressFiredRef.current = false;
-    if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressFiredRef.current = true;
-      setSheetAsset(asset);
-    }, 500);
-  }, []);
-  const handlePressEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-  const handleClick = useCallback((idx: number) => {
-    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
-    openViewer(idx);
-  }, [openViewer]);
 
   // Upload
   const handleFilesPicked = useCallback(async (files: FileList | null) => {
@@ -260,16 +245,18 @@ function MediaPage() {
   const handleDelete = useCallback(async () => {
     if (!sheetAsset) return;
     const a = sheetAsset;
+    const viewing = viewerIdx !== null && filtered[viewerIdx]?.id === a.id;
     qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
     setConfirmDelete(false);
     setSheetAsset(null);
+    if (viewing) setViewerIdx(null);
     const { error: delErr } = await supabase.from("media_assets").delete().eq("id", a.id);
     if (delErr) { toast.error(delErr.message); return; }
     await supabase.storage.from(BUCKET).remove([a.storage_path]);
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
     toast.success("Deleted");
-  }, [sheetAsset, qc]);
+  }, [sheetAsset, qc, viewerIdx, filtered]);
 
   // Viewer keyboard + swipe
   useEffect(() => {
@@ -384,18 +371,20 @@ function MediaPage() {
             {filtered.map((a, i) => (
               <button
                 key={a.id}
-                onClick={() => handleClick(i)}
-                onMouseDown={() => handlePressStart(a)}
-                onMouseUp={handlePressEnd}
-                onMouseLeave={handlePressEnd}
-                onTouchStart={() => handlePressStart(a)}
-                onTouchEnd={handlePressEnd}
-                onTouchCancel={handlePressEnd}
-                onContextMenu={(e) => e.preventDefault()}
+                onClick={() => openViewer(i)}
+                onContextMenu={(e) => { e.preventDefault(); setSheetAsset(a); }}
+                style={NO_CALLOUT_STYLE}
                 className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
               >
                 {a.kind === "image" && (
-                  <img src={a.url} alt={a.title} loading="lazy" className="h-full w-full object-cover" />
+                  <img
+                    src={a.url}
+                    alt={a.title}
+                    loading="lazy"
+                    draggable={false}
+                    style={NO_CALLOUT_STYLE}
+                    className="h-full w-full object-cover"
+                  />
                 )}
                 {a.kind === "video" && (
                   <>
@@ -479,7 +468,13 @@ function MediaPage() {
           {/* Asset */}
           <div className="flex h-full w-full items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
             {currentAsset.kind === "image" && (
-              <img src={currentAsset.url} alt={currentAsset.title} className="max-h-full max-w-full object-contain" />
+              <img
+                src={currentAsset.url}
+                alt={currentAsset.title}
+                draggable={false}
+                style={NO_CALLOUT_STYLE}
+                className="max-h-full max-w-full object-contain"
+              />
             )}
             {currentAsset.kind === "video" && (
               <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
@@ -499,13 +494,22 @@ function MediaPage() {
               <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
                 {viewerIdx! + 1} / {filtered.length}
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
-                aria-label="Close"
-                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="absolute right-4 top-4 flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
+                  aria-label="Options"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
+                  aria-label="Close"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </>
           )}
         </div>
