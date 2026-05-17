@@ -125,6 +125,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      move_sentence: {
+        Args: {
+          p_document_id: string
+          p_from_index: number
+          p_to_index: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

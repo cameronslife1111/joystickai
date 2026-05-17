@@ -28,6 +28,7 @@ function AppPage() {
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
@@ -229,6 +230,25 @@ function AppPage() {
     speak(sentences[clamped].content, token);
     setJumpOpen(false);
   }, [sentences, setIndex, speak, claimSpeech]);
+
+  const moveSentence = useCallback(async (target: number) => {
+    if (!activeDocId || !sentences || sentences.length === 0) return;
+    const from = currentIdx;
+    const to = Math.max(0, Math.min(target, sentences.length - 1));
+    if (from === to) { setMoveOpen(false); return; }
+    const token = claimSpeech();
+    const { error } = await supabase.rpc("move_sentence", {
+      p_document_id: activeDocId,
+      p_from_index: from,
+      p_to_index: to,
+    });
+    if (error) { toast.error(error.message || "Failed to move"); return; }
+    await setIndex(to);
+    await qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    const moved = sentences.find((s) => s.order_index === from);
+    if (moved) speak(moved.content, token);
+    setMoveOpen(false);
+  }, [activeDocId, sentences, currentIdx, setIndex, qc, speak, claimSpeech]);
 
   const advanceSentence = useCallback(async () => {
     if (!activeDoc || !sentences) return;
@@ -730,6 +750,10 @@ function AppPage() {
       setMenuOpen(false);
       setJumpOpen(true);
     }},
+    { e: "↕️", t: "Move sentence", fn: () => {
+      setMenuOpen(false);
+      setMoveOpen(true);
+    }},
     { e: "🔍", t: "Search docs", fn: () => {
       setMenuOpen(false);
       setSearchQuery("");
@@ -1207,6 +1231,46 @@ function AppPage() {
                   key={opt.label}
                   onClick={() => jumpTo(opt.target)}
                   disabled={!sentences || sentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {moveOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setMoveOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">↕️ Move sentence</div>
+              <button
+                onClick={() => setMoveOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: "⤒  Move to top", target: 0, disabled: currentIdx === 0 },
+                { label: "⏫  Move up 2", target: currentIdx - 2, disabled: currentIdx < 1 },
+                { label: "🔼  Move up 1", target: currentIdx - 1, disabled: currentIdx === 0 },
+                { label: "🔽  Move down 1", target: currentIdx + 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
+                { label: "⏬  Move down 2", target: currentIdx + 2, disabled: !sentences || currentIdx >= sentences.length - 1 },
+                { label: "⤓  Move to bottom", target: (sentences?.length ?? 1) - 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => moveSentence(opt.target)}
+                  disabled={opt.disabled || !sentences || sentences.length === 0}
                   className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
                 >
                   {opt.label}
