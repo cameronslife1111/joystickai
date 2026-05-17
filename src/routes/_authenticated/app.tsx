@@ -296,7 +296,9 @@ function AppPage() {
     );
     setActiveDocId(targetId);
 
-    if (row?.content) speak(row.content, token);
+    const textToSpeak = row?.content
+      || (freshDoc?.title ? freshDoc.title : "Empty list");
+    speak(textToSpeak, token);
   }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
