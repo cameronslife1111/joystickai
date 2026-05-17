@@ -878,7 +878,14 @@ function AppPage() {
               Cancel
             </button>
             <button
-              onClick={() => setSendOpen(true)}
+              onClick={() => {
+                // Blur the compose textarea so iOS dismisses the keyboard
+                // before the destination picker (button-only UI) opens.
+                if (typeof document !== "undefined") {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                }
+                setSendOpen(true);
+              }}
               disabled={!composeText.trim()}
               className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
               style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
