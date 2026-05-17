@@ -613,9 +613,12 @@ function AppPage() {
   }, [activeDocId, editText, sentences, parseEditParts, qc, setIndex, speak, claimSpeech]);
 
   const handleEditDone = useCallback(() => {
-    void commitFullEdit(null);
+    const el = editTextareaRef.current;
+    const caret = el?.selectionStart ?? editText.length;
+    const idx = caretToSentenceIdx(editText, caret);
+    void commitFullEdit(idx);
     toast("Saved", { id: "edit-saved" });
-  }, [commitFullEdit]);
+  }, [editText, caretToSentenceIdx, commitFullEdit]);
 
   const handleEditJump = useCallback(() => {
     const el = editTextareaRef.current;
