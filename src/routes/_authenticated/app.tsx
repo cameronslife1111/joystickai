@@ -378,16 +378,27 @@ function AppPage() {
     { e: "🗑️", t: "Delete doc", fn: async () => {
       if (!activeDoc) return;
       if (!confirm(`Delete "${activeDoc.title}"? This cannot be undone.`)) return;
-      await supabase.from("documents").delete().eq("id", activeDoc.id);
+      const deletedId = activeDoc.id;
+      await supabase.from("documents").delete().eq("id", deletedId);
+      // Prune from favorites
+      if (favorites.some((id) => id === deletedId)) {
+        const pruned = favorites.map((id) => (id === deletedId ? null : id));
+        await saveFavorites(pruned);
+      }
       setActiveDocId(null);
+      favIdxRef.current = -1;
       qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+    }},
+    { e: "⭐", t: "Favorites", fn: () => {
+      setMenuOpen(false);
+      setFavoritesOpen(true);
     }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, docs, activeDoc, qc, navigate]);
+  ], [theme, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {
