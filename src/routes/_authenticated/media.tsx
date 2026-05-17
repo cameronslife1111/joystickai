@@ -154,28 +154,35 @@ function MediaPage() {
 
   // Upload
   const handleFilesPicked = useCallback(async (files: FileList | null) => {
+    console.log("[media] handleFilesPicked", { count: files?.length ?? 0 });
     if (!files || files.length === 0) return;
-    const { data: u } = await supabase.auth.getUser();
+    const { data: u, error: authErr } = await supabase.auth.getUser();
+    console.log("[media] auth", { user: u?.user?.id, authErr });
     if (!u.user) { toast.error("Not signed in"); return; }
     const userId = u.user.id;
     const arr = Array.from(files);
+    toast.info(`Uploading ${arr.length} file${arr.length === 1 ? "" : "s"}…`);
     setUploadProgress({ done: 0, total: arr.length });
     for (let i = 0; i < arr.length; i++) {
       const file = arr[i];
+      console.log("[media] file", { name: file.name, type: file.type, size: file.size });
       try {
-        const kind = detectKind(file.type || "");
+        const kind = detectKind(file.type || "", file.name);
         if (!kind) {
           toast.error(`Unsupported file type: ${file.name}`);
           setUploadProgress({ done: i + 1, total: arr.length });
           continue;
         }
-        const path = `${userId}/${Date.now()}_${file.name}`;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${userId}/${Date.now()}_${safeName}`;
+        console.log("[media] uploading to", path);
         const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
-          contentType: file.type, upsert: false,
+          contentType: file.type || "application/octet-stream", upsert: false,
         });
-        if (upErr) throw upErr;
+        if (upErr) { console.error("[media] storage upload error", upErr); throw upErr; }
         const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
         const url = pub.publicUrl;
+        console.log("[media] uploaded, public url", url);
 
         let width: number | null = null;
         let height: number | null = null;
@@ -203,14 +210,17 @@ function MediaPage() {
           width,
           height,
         });
-        if (insErr) throw insErr;
+        if (insErr) { console.error("[media] db insert error", insErr); throw insErr; }
+        console.log("[media] inserted row for", file.name);
       } catch (e: any) {
+        console.error("[media] upload failed", file.name, e);
         toast.error(`${file.name}: ${e?.message ?? "upload failed"}`);
       } finally {
         setUploadProgress({ done: i + 1, total: arr.length });
       }
     }
     setUploadProgress(null);
+    toast.success("Upload complete");
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
   }, [qc]);
