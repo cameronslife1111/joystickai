@@ -1208,22 +1208,24 @@ function AppPage() {
           >
             <div className="mb-3 flex items-center justify-between px-2">
               <div className="font-display text-lg">
-                {sendDocId ? "Where in the list?" : "Send to which list?"}
+                {sendStage === "doc" && "Send to which list?"}
+                {sendStage === "where" && "Where in the list?"}
+                {sendStage === "pickAnchor" && "After which sentence?"}
               </div>
               <button
-                onClick={() => { setSendOpen(false); setSendDocId(null); }}
+                onClick={cancelCompose}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Cancel
               </button>
             </div>
 
-            {!sendDocId ? (
+            {sendStage === "doc" && (
               <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
                 {(docs ?? []).map((d) => (
                   <button
                     key={d.id}
-                    onClick={() => setSendDocId(d.id)}
+                    onClick={() => pickSendDoc(d.id)}
                     className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
                   >
                     {d.title}
@@ -1235,7 +1237,9 @@ function AppPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            )}
+
+            {sendStage === "where" && sendDocId && (
               <div className="flex flex-col gap-2 p-1">
                 <button
                   onClick={() => sendIdea(sendDocId, "top")}
@@ -1244,10 +1248,16 @@ function AppPage() {
                   ⤒  Top of list
                 </button>
                 <button
-                  onClick={() => sendIdea(sendDocId, "current")}
+                  onClick={() => {
+                    if (sendTargetSentences.length === 0) {
+                      sendIdea(sendDocId, "top");
+                    } else {
+                      setSendStage("pickAnchor");
+                    }
+                  }}
                   className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
                 >
-                  ●  After current sentence
+                  ●  After a specific sentence…
                 </button>
                 <button
                   onClick={() => sendIdea(sendDocId, "bottom")}
@@ -1256,11 +1266,47 @@ function AppPage() {
                   ⤓  Bottom of list
                 </button>
                 <button
-                  onClick={() => setSendDocId(null)}
+                  onClick={() => { setSendDocId(null); setSendStage("doc"); setSendTargetSentences([]); }}
                   className="mt-1 w-full rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
                 >
                   ← Pick a different list
                 </button>
+              </div>
+            )}
+
+            {sendStage === "pickAnchor" && sendDocId && (
+              <div className="flex min-h-0 flex-col gap-2 p-1">
+                <div className="flex max-h-[55vh] flex-col gap-1 overflow-y-auto rounded-xl border border-foreground/10 bg-foreground/5 p-1">
+                  {sendTargetSentences.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSendAnchorIdx(i)}
+                      className={
+                        "w-full rounded-lg px-3 py-2 text-left text-sm transition " +
+                        (i === sendAnchorIdx
+                          ? "bg-primary/20 text-primary ring-1 ring-primary/40"
+                          : "hover:bg-foreground/10")
+                      }
+                    >
+                      <span className="mr-2 text-xs opacity-60">{i + 1}.</span>
+                      {s.content}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSendStage("where")}
+                    className="flex-1 rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => sendIdea(sendDocId, "afterAnchor", sendAnchorIdx)}
+                    className="flex-[2] rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
+                  >
+                    Insert after sentence {sendAnchorIdx + 1}
+                  </button>
+                </div>
               </div>
             )}
           </div>
