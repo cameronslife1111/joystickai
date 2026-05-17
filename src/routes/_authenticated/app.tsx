@@ -25,10 +25,13 @@ function AppPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
+  const favIdxRef = useRef<number>(-1);
   const callAi = useServerFn(aiContinue);
 
   // Apply theme
@@ -86,6 +89,31 @@ function AppPage() {
       return data ?? [];
     },
   });
+
+  // Load user preferences (favorites array)
+  const { data: prefs } = useQuery({
+    queryKey: ["user_preferences"],
+    queryFn: async (): Promise<{ favorites: (string | null)[] }> => {
+      const { data } = await supabase
+        .from("user_preferences")
+        .select("favorites")
+        .maybeSingle();
+      const raw = (data?.favorites as unknown) ?? [];
+      const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
+      return { favorites };
+    },
+  });
+  const favorites = prefs?.favorites ?? [];
+
+  const saveFavorites = useCallback(async (next: (string | null)[]) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], { favorites: next });
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, favorites: next as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc]);
 
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
@@ -156,12 +184,46 @@ function AppPage() {
   }, [currentSentence, qc, activeDocId]);
 
   const onSwipeRight = useCallback(async () => {
-    if (!docs || docs.length < 2 || !activeDoc) return;
+    if (!docs || !activeDoc) return;
+
+    // Filled favorite slots (preserve original slot index for cycling)
+    const filled = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } =>
+        !!s.id && docs.some((d) => d.id === s.id),
+      );
+
+    if (filled.length > 0) {
+      // Advance through favorites cycle
+      const curIdx = favIdxRef.current;
+      const pos = filled.findIndex((s) => s.i > curIdx);
+      const nextSlot = pos === -1 ? filled[0] : filled[pos];
+      favIdxRef.current = nextSlot.i;
+
+      const targetDoc = docs.find((d) => d.id === nextSlot.id);
+      if (!targetDoc) return;
+      setActiveDocId(targetDoc.id);
+      toast(`★ ${nextSlot.i + 1} · ${targetDoc.title}`);
+
+      // Fetch the exact sentence at the doc's saved index and speak it
+      const targetIdx = targetDoc.current_sentence_index ?? 0;
+      const { data: row } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", targetDoc.id)
+        .eq("order_index", targetIdx)
+        .maybeSingle();
+      if (row?.content) speak(row.content);
+      return;
+    }
+
+    // Fallback: cycle all docs
+    if (docs.length < 2) return;
     const idx = docs.findIndex((d) => d.id === activeDoc.id);
     const next = docs[(idx + 1) % docs.length];
     setActiveDocId(next.id);
     toast(next.title);
-  }, [docs, activeDoc]);
+  }, [docs, activeDoc, favorites, speak]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
@@ -316,16 +378,27 @@ function AppPage() {
     { e: "🗑️", t: "Delete doc", fn: async () => {
       if (!activeDoc) return;
       if (!confirm(`Delete "${activeDoc.title}"? This cannot be undone.`)) return;
-      await supabase.from("documents").delete().eq("id", activeDoc.id);
+      const deletedId = activeDoc.id;
+      await supabase.from("documents").delete().eq("id", deletedId);
+      // Prune from favorites
+      if (favorites.some((id) => id === deletedId)) {
+        const pruned = favorites.map((id) => (id === deletedId ? null : id));
+        await saveFavorites(pruned);
+      }
       setActiveDocId(null);
+      favIdxRef.current = -1;
       qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+    }},
+    { e: "⭐", t: "Favorites", fn: () => {
+      setMenuOpen(false);
+      setFavoritesOpen(true);
     }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, docs, activeDoc, qc, navigate]);
+  ], [theme, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {
@@ -430,6 +503,116 @@ function AppPage() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Favorites editor overlay */}
+      {favoritesOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">★ Favorites</div>
+              <button
+                onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mb-2 px-2 text-[11px] text-muted-foreground">
+              Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
+            </div>
+            <div className="grid grid-cols-5 gap-1.5 overflow-y-auto p-1">
+              {Array.from({ length: 50 }).map((_, i) => {
+                const docId = favorites[i] ?? null;
+                const doc = docId ? docs?.find((d) => d.id === docId) : null;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPickerSlot(i)}
+                    className="relative aspect-square rounded-xl border border-foreground/10 bg-foreground/5 p-1 text-center transition active:scale-95 hover:bg-foreground/10"
+                  >
+                    <span className="absolute left-1 top-0.5 text-[9px] text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <div className="flex h-full items-center justify-center">
+                      {doc ? (
+                        <div className="line-clamp-3 text-[10px] leading-tight">
+                          {doc.title}
+                        </div>
+                      ) : (
+                        <div className="text-lg text-muted-foreground/50">+</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {pickerSlot !== null && (
+            <div
+              className="absolute inset-0 z-10 flex items-end justify-center bg-background/70 px-4 pb-6 backdrop-blur-sm"
+              onClick={() => setPickerSlot(null)}
+            >
+              <div
+                className="w-full max-w-md rounded-3xl border border-foreground/10 bg-card/95 p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-3 flex items-center justify-between px-2">
+                  <div className="font-display text-base">Slot {pickerSlot + 1}</div>
+                  <button
+                    onClick={() => setPickerSlot(null)}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                  {favorites[pickerSlot] && (
+                    <button
+                      onClick={async () => {
+                        const next = [...favorites];
+                        while (next.length < 50) next.push(null);
+                        next[pickerSlot!] = null;
+                        await saveFavorites(next);
+                        setPickerSlot(null);
+                      }}
+                      className="w-full rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-left text-sm text-destructive"
+                    >
+                      Clear slot
+                    </button>
+                  )}
+                  {(docs ?? []).map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={async () => {
+                        const next = [...favorites];
+                        while (next.length < 50) next.push(null);
+                        next[pickerSlot!] = d.id;
+                        await saveFavorites(next);
+                        setPickerSlot(null);
+                      }}
+                      className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-left text-sm hover:bg-foreground/10"
+                    >
+                      {d.title}
+                    </button>
+                  ))}
+                  {(!docs || docs.length === 0) && (
+                    <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                      No documents yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </main>
