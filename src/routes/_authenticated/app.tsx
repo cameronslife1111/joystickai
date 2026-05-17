@@ -375,10 +375,14 @@ function AppPage() {
   }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
 
   useOrbGestures(orbRef, {
-    onTap, onDoubleTap, onLongPressStart, onLongPressEnd,
+    onTap: openNewIdea,
+    onDoubleTap,
+    onTripleTap: deleteCurrent,
+    onLongPressStart,
+    onLongPressEnd,
     onSwipe: (d) => {
       if (d === "up") onSwipeUp();
-      else if (d === "down") onSwipeDown();
+      else if (d === "down") advanceSentence();
       else if (d === "right") onSwipeRight();
       else onSwipeLeft();
     },
