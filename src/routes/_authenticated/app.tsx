@@ -564,53 +564,60 @@ function AppPage() {
     setComposeText("");
     setSendOpen(false);
     setSendDocId(null);
+    setSendStage("doc");
+    setSendTargetSentences([]);
+    setSendAnchorIdx(0);
   }, []);
+
+  // User picked a target document; load its sentences so they can either jump
+  // straight to top/bottom or scroll a sentence list and pick the exact anchor.
+  const pickSendDoc = useCallback(async (docId: string) => {
+    setSendDocId(docId);
+    setSendStage("where");
+    const { data } = await supabase
+      .from("sentences")
+      .select("*")
+      .eq("document_id", docId)
+      .order("order_index", { ascending: true })
+      .order("created_at", { ascending: true });
+    const list = (data ?? []) as Sentence[];
+    setSendTargetSentences(list);
+    const targetDoc = docs?.find((d) => d.id === docId);
+    const saved = docId === activeDocId
+      ? currentIdx
+      : (targetDoc?.current_sentence_index ?? 0);
+    setSendAnchorIdx(list.length === 0 ? 0 : Math.max(0, Math.min(saved, list.length - 1)));
+  }, [docs, activeDocId, currentIdx]);
 
   const sendIdea = useCallback(async (
     targetDocId: string,
-    position: "top" | "bottom" | "current",
+    position: "top" | "bottom" | "afterAnchor",
+    anchorIdx?: number,
   ) => {
     const parts = splitIntoSentences(composeText);
     if (parts.length === 0) { cancelCompose(); return; }
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
 
     const targetDoc = docs?.find((d) => d.id === targetDocId);
-    const { data: existing } = await supabase
-      .from("sentences")
-      .select("id, order_index")
-      .eq("document_id", targetDocId)
-      .order("order_index", { ascending: true });
-    const list = existing ?? [];
-
+    // Resolve insertion index from the freshly-loaded target list so it cannot
+    // drift between when the user picked the anchor and when we write.
     let insertAt: number;
     if (position === "top") insertAt = 0;
-    else if (position === "bottom") insertAt = list.length;
-    else {
-      const curIdx = targetDocId === activeDocId
-        ? currentIdx
-        : (targetDoc?.current_sentence_index ?? 0);
-      insertAt = list.length === 0 ? 0 : Math.min(curIdx + 1, list.length);
-    }
+    else if (position === "bottom") insertAt = sendTargetSentences.length;
+    else insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, sendTargetSentences.length));
 
-    const tail = list.slice(insertAt);
-    for (let i = tail.length - 1; i >= 0; i--) {
-      await supabase.from("sentences")
-        .update({ order_index: tail[i].order_index + parts.length })
-        .eq("id", tail[i].id);
+    const { error } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: targetDocId,
+      p_contents: parts,
+      p_insert_at: insertAt,
+    });
+    if (error) {
+      toast.error(error.message || "Failed to send");
+      return;
     }
-    await supabase.from("sentences").insert(
-      parts.map((content, i) => ({
-        user_id: u.user!.id,
-        document_id: targetDocId,
-        content,
-        order_index: insertAt + i,
-      })),
-    );
     qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
     toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
     cancelCompose();
-  }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose]);
 
   // Export current sentence + animated orb to an MP4 (falls back to webm).
   const exportMp4 = useCallback(async () => {
