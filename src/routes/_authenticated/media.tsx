@@ -369,18 +369,20 @@ function MediaPage() {
             {filtered.map((a, i) => (
               <button
                 key={a.id}
-                onClick={() => handleClick(i)}
-                onMouseDown={() => handlePressStart(a)}
-                onMouseUp={handlePressEnd}
-                onMouseLeave={handlePressEnd}
-                onTouchStart={() => handlePressStart(a)}
-                onTouchEnd={handlePressEnd}
-                onTouchCancel={handlePressEnd}
-                onContextMenu={(e) => e.preventDefault()}
+                onClick={() => openViewer(i)}
+                onContextMenu={(e) => { e.preventDefault(); setSheetAsset(a); }}
+                style={NO_CALLOUT_STYLE}
                 className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
               >
                 {a.kind === "image" && (
-                  <img src={a.url} alt={a.title} loading="lazy" className="h-full w-full object-cover" />
+                  <img
+                    src={a.url}
+                    alt={a.title}
+                    loading="lazy"
+                    draggable={false}
+                    style={NO_CALLOUT_STYLE}
+                    className="h-full w-full object-cover"
+                  />
                 )}
                 {a.kind === "video" && (
                   <>
