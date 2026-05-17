@@ -904,6 +904,12 @@ function AppPage() {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
+    { e: "📥", t: "Import checklists", fn: () => {
+      setMenuOpen(false);
+      // Reset value so picking the same file twice still fires onChange
+      if (importInputRef.current) importInputRef.current.value = "";
+      importInputRef.current?.click();
+    }},
   ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
@@ -917,6 +923,7 @@ function AppPage() {
     filled[5] = grid[7];   // 6  Move sentence
     filled[6] = grid[9];   // 7  Copy sentence
     filled[7] = grid[10];  // 8  Copy document
+    filled[8] = grid[12];  // 9  Import checklists
     filled[10] = grid[8];  // 11 Search docs
     filled[11] = grid[6];  // 12 Jump to
     filled[15] = grid[5];  // 16 Favorites
