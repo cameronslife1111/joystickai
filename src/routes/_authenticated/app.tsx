@@ -139,6 +139,14 @@ function AppPage() {
       .eq("id", activeDoc.id);
   }, [activeDoc, qc]);
 
+  const jumpTo = useCallback(async (target: number) => {
+    if (!sentences || sentences.length === 0) return;
+    const clamped = Math.max(0, Math.min(target, sentences.length - 1));
+    await setIndex(clamped);
+    speak(sentences[clamped].content);
+    setJumpOpen(false);
+  }, [sentences, setIndex, speak]);
+
   const onTap = useCallback(async () => {
     if (!activeDoc || !sentences) return;
     const next = currentIdx + 1;
