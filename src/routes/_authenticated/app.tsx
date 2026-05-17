@@ -37,8 +37,6 @@ function AppPage() {
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [recording, setRecording] = useState(false);
-  const recordingRef = useRef<{ stop: () => void } | null>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
