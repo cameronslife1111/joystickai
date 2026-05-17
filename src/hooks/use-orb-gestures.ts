@@ -139,7 +139,7 @@ export function useOrbGestures(
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("pointercancel", onPointerCancel);
       clearLongPress();
-      if (pendingTapTimer) clearTimeout(pendingTapTimer);
+      if (tapTimer) clearTimeout(tapTimer);
     };
   }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx]);
 }
