@@ -554,11 +554,17 @@ function AppPage() {
       {/* Top: doc title */}
       <header className="px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
-          {activeDoc?.title ?? "—"}
-          {sentences && (
-            <span className="ml-2 opacity-60">
-              {Math.min(currentIdx + 1, sentences.length || 1)} / {Math.max(sentences.length, 1)}
-            </span>
+          {composing ? (
+            <span className="text-primary">New idea · {activeDoc?.title ?? "—"}</span>
+          ) : (
+            <>
+              {activeDoc?.title ?? "—"}
+              {sentences && (
+                <span className="ml-2 opacity-60">
+                  {Math.min(currentIdx + 1, sentences.length || 1)} / {Math.max(sentences.length, 1)}
+                </span>
+              )}
+            </>
           )}
         </div>
       </header>
