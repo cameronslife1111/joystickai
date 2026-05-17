@@ -769,6 +769,29 @@ function AppPage() {
         </div>
       )}
 
+      {/* Edit action buttons (above orb) */}
+      {editing && (
+        <div className="pointer-events-none flex justify-center pb-4">
+          <div className="pointer-events-auto flex gap-3">
+            <button
+              onClick={handleEditDone}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Done
+            </button>
+            <button
+              onClick={handleEditJump}
+              disabled={!editText.trim()}
+              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+            >
+              Jump To
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Orb */}
       <section className="flex items-center justify-center pb-[max(env(safe-area-inset-bottom,1.5rem),2rem)]">
         <Orb ref={orbRef} state={orbState} size={200} />
