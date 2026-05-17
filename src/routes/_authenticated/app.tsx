@@ -411,6 +411,8 @@ function AppPage() {
     }
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    const token = claimSpeech();
+    speak(parts[0], token);
   }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex]);
 
   // Menu actions
