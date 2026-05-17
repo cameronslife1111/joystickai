@@ -624,7 +624,42 @@ function AppPage() {
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
-      fn: () => { void saveMuted(!muted); setMenuOpen(false); },
+      fn: () => {
+        // CRITICAL iOS: close popup + speak synchronously inside this tap
+        // gesture. Any async hop here breaks the user-gesture context and
+        // iOS Safari silently drops the utterance.
+        const next = !muted;
+        setMenuOpen(false);
+        if (next) {
+          // Muting: stop any in-flight speech immediately.
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            try { window.speechSynthesis.cancel(); } catch {}
+          }
+        } else {
+          // Unmuting: speak the currently displayed sentence right now,
+          // synchronously, from this exact tap. This is the iPhone-safe
+          // trigger for the Web Speech API.
+          const text = currentSentence?.content;
+          if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const clean = text
+                .replace(/\p{Extended_Pictographic}/gu, "")
+                .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
+                .replace(/[\u200D\uFE0F\uFE0E]/gu, "")
+                .replace(/\s{2,}/g, " ")
+                .trim();
+              if (clean) {
+                const u = new SpeechSynthesisUtterance(clean);
+                u.rate = 1; u.pitch = 1;
+                window.speechSynthesis.speak(u);
+              }
+            } catch {}
+          }
+        }
+        // Persist preference (async, fire-and-forget — happens AFTER speak).
+        void saveMuted(next);
+      },
     },
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
