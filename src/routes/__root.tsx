@@ -62,12 +62,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" },
-      { title: "Joystick AI — Focus on one thing at a time" },
-      { name: "description", content: "Joystick AI: a focus tool that shows you one sentence at a time. Move through your documents with a single glowing orb." },
+      { title: "🕹️ Joystick AI — Focus on one thing at a time" },
+      { name: "description", content: "Joystick AI: a focus tool that shows you one sentence at a time. Move through your checklists & documents with a single glowing orb." },
       { name: "theme-color", content: "#1a0f2e" },
-      { property: "og:title", content: "Joystick AI" },
-      { property: "og:description", content: "Focus on one sentence at a time. Powered by a glowing aurora orb." },
+      { property: "og:title", content: "🕹️ Joystick AI — Focus on one thing at a time" },
+      { property: "og:description", content: "Joystick AI: a focus tool that shows you one sentence at a time. Move through your checklists & documents with a single glowing orb." },
       { property: "og:type", content: "website" },
+      { name: "twitter:title", content: "🕹️ Joystick AI — Focus on one thing at a time" },
+      { name: "twitter:description", content: "Joystick AI: a focus tool that shows you one sentence at a time. Move through your checklists & documents with a single glowing orb." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/be757647-9386-4a90-907e-c8e2f7a3972b/id-preview-73f3a52d--5ee4b96e-1f07-4607-b19d-77a722776bfc.lovable.app-1779020263370.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/be757647-9386-4a90-907e-c8e2f7a3972b/id-preview-73f3a52d--5ee4b96e-1f07-4607-b19d-77a722776bfc.lovable.app-1779020263370.png" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -111,7 +116,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      <Toaster theme="dark" position="top-center" richColors offset={72} />
+      <Toaster theme="dark" position="bottom-center" richColors />
     </QueryClientProvider>
   );
 }
