@@ -85,6 +85,7 @@ export type Database = {
           favorites: Json
           grid_layout: Json
           id: string
+          muted: boolean
           theme: string
           updated_at: string
           user_id: string
@@ -94,6 +95,7 @@ export type Database = {
           favorites?: Json
           grid_layout?: Json
           id?: string
+          muted?: boolean
           theme?: string
           updated_at?: string
           user_id: string
@@ -103,6 +105,7 @@ export type Database = {
           favorites?: Json
           grid_layout?: Json
           id?: string
+          muted?: boolean
           theme?: string
           updated_at?: string
           user_id?: string
