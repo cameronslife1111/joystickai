@@ -418,22 +418,13 @@ function AppPage() {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
 
-      // shift order_index of everything after currentIdx
       const insertAt = currentSentence ? currentIdx + 1 : 0;
-      const tail = (sentences ?? []).slice(insertAt);
-      for (let i = tail.length - 1; i >= 0; i--) {
-        await supabase.from("sentences")
-          .update({ order_index: tail[i].order_index + newSentences.length })
-          .eq("id", tail[i].id);
-      }
-      await supabase.from("sentences").insert(
-        newSentences.map((content, i) => ({
-          user_id: u.user!.id,
-          document_id: activeDocId,
-          content,
-          order_index: insertAt + i,
-        })),
-      );
+      const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+        p_document_id: activeDocId,
+        p_contents: newSentences,
+        p_insert_at: insertAt,
+      });
+      if (rpcErr) throw rpcErr;
       await setIndex(insertAt);
       qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
       const token = claimSpeech();
