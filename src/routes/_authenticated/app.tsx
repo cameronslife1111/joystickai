@@ -120,13 +120,31 @@ function AppPage() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
-  // TTS
-  const speak = useCallback((text: string) => {
+  // TTS — token-gated, race-safe against rapid handler chains
+  const speak = useCallback((text: string, token?: number) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (!text) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1; u.pitch = 1;
-    window.speechSynthesis.speak(u);
+    // setTimeout(0) lets Chrome/Safari flush the canceled utterance before
+    // we queue the next one; without it the new utterance is often swallowed
+    // and the previous one keeps playing.
+    setTimeout(() => {
+      if (token != null && token !== speechTokenRef.current) return;
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1; u.pitch = 1;
+        window.speechSynthesis.speak(u);
+      } catch {}
+    }, 0);
+  }, []);
+
+  // Cancel any in-flight speech and claim a fresh speech token. Call at the
+  // start of every user-driven action that might end in speak().
+  const claimSpeech = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    return ++speechTokenRef.current;
   }, []);
 
   const setIndex = useCallback(async (newIdx: number) => {
