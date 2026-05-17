@@ -1115,12 +1115,7 @@ function AppPage() {
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = text
-                  .replace(/\p{Extended_Pictographic}/gu, "")
-                  .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
-                  .replace(/[\u200D\uFE0F\uFE0E]/gu, "")
-                  .replace(/\s{2,}/g, " ")
-                  .trim();
+                const clean = stripEmoji(text);
                 if (clean) {
                   window.speechSynthesis.cancel();
                   const u = new SpeechSynthesisUtterance(clean);
