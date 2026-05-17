@@ -1098,6 +1098,85 @@ function AppPage() {
           )}
         </div>
       )}
+      {/* Search-docs overlay */}
+      {searchOpen && (() => {
+        const q = searchQuery.trim().toLowerCase();
+        const results = (docs ?? []).filter((d) =>
+          q === "" ? true : d.title.toLowerCase().includes(q)
+        );
+        const pickDoc = (doc: Doc) => {
+          // iOS-safe: speak synchronously inside the tap gesture if unmuted.
+          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
+              const idx = doc.current_sentence_index ?? 0;
+              const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
+              if (text) {
+                const clean = text
+                  .replace(/\p{Extended_Pictographic}/gu, "")
+                  .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
+                  .replace(/[\u200D\uFE0F\uFE0E]/gu, "")
+                  .replace(/\s{2,}/g, " ")
+                  .trim();
+                if (clean) {
+                  window.speechSynthesis.cancel();
+                  const u = new SpeechSynthesisUtterance(clean);
+                  u.rate = 1; u.pitch = 1;
+                  window.speechSynthesis.speak(u);
+                }
+              }
+            } catch {}
+          }
+          setActiveDocId(doc.id);
+          setSearchOpen(false);
+          setSearchQuery("");
+        };
+        return (
+          <div
+            className="absolute inset-0 z-50 flex items-start justify-center bg-background/85 px-4 pt-20 backdrop-blur-md"
+            onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+          >
+            <div
+              className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between px-2">
+                <div className="font-display text-lg">🔍 Search docs</div>
+                <button
+                  onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              <input
+                ref={(el) => { if (el) el.focus(); }}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); }
+                  if (e.key === "Enter" && results[0]) { e.preventDefault(); pickDoc(results[0]); }
+                }}
+                placeholder="Search documents…"
+                className="mb-3 w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
+              />
+              <div className="flex max-h-[50vh] flex-col gap-1.5 overflow-y-auto">
+                {results.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">No matches</div>
+                ) : results.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => pickDoc(d)}
+                    className="w-full truncate rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* Jump-to overlay */}
       {jumpOpen && (
         <div
