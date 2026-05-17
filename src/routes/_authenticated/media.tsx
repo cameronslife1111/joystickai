@@ -245,16 +245,18 @@ function MediaPage() {
   const handleDelete = useCallback(async () => {
     if (!sheetAsset) return;
     const a = sheetAsset;
+    const viewing = currentAsset?.id === a.id;
     qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
     setConfirmDelete(false);
     setSheetAsset(null);
+    if (viewing) setViewerIdx(null);
     const { error: delErr } = await supabase.from("media_assets").delete().eq("id", a.id);
     if (delErr) { toast.error(delErr.message); return; }
     await supabase.storage.from(BUCKET).remove([a.storage_path]);
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
     toast.success("Deleted");
-  }, [sheetAsset, qc]);
+  }, [sheetAsset, qc, currentAsset]);
 
   // Viewer keyboard + swipe
   useEffect(() => {
