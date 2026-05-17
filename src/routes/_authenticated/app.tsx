@@ -33,6 +33,7 @@ function AppPage() {
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
+  const speechTokenRef = useRef<number>(0);
   const callAi = useServerFn(aiContinue);
 
   // Apply theme
@@ -119,13 +120,31 @@ function AppPage() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
-  // TTS
-  const speak = useCallback((text: string) => {
+  // TTS — token-gated, race-safe against rapid handler chains
+  const speak = useCallback((text: string, token?: number) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (!text) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1; u.pitch = 1;
-    window.speechSynthesis.speak(u);
+    // setTimeout(0) lets Chrome/Safari flush the canceled utterance before
+    // we queue the next one; without it the new utterance is often swallowed
+    // and the previous one keeps playing.
+    setTimeout(() => {
+      if (token != null && token !== speechTokenRef.current) return;
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1; u.pitch = 1;
+        window.speechSynthesis.speak(u);
+      } catch {}
+    }, 0);
+  }, []);
+
+  // Cancel any in-flight speech and claim a fresh speech token. Call at the
+  // start of every user-driven action that might end in speak().
+  const claimSpeech = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    return ++speechTokenRef.current;
   }, []);
 
   const setIndex = useCallback(async (newIdx: number) => {
@@ -141,37 +160,41 @@ function AppPage() {
 
   const jumpTo = useCallback(async (target: number) => {
     if (!sentences || sentences.length === 0) return;
+    const token = claimSpeech();
     const clamped = Math.max(0, Math.min(target, sentences.length - 1));
     await setIndex(clamped);
-    speak(sentences[clamped].content);
+    speak(sentences[clamped].content, token);
     setJumpOpen(false);
-  }, [sentences, setIndex, speak]);
+  }, [sentences, setIndex, speak, claimSpeech]);
 
   const onTap = useCallback(async () => {
     if (!activeDoc || !sentences) return;
+    const token = claimSpeech();
     const next = currentIdx + 1;
     if (next >= sentences.length) {
       toast("End of document");
-      if (sentences[currentIdx]) speak(sentences[currentIdx].content);
+      if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
     await setIndex(next);
-    speak(sentences[next].content);
-  }, [activeDoc, sentences, currentIdx, setIndex, speak]);
+    speak(sentences[next].content, token);
+  }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
   const onSwipeUp = useCallback(async () => {
+    const token = claimSpeech();
     if (currentIdx === 0) {
       toast("Start of document");
-      if (sentences?.[0]) speak(sentences[0].content);
+      if (sentences?.[0]) speak(sentences[0].content, token);
       return;
     }
     const prev = currentIdx - 1;
     await setIndex(prev);
-    if (sentences?.[prev]) speak(sentences[prev].content);
-  }, [currentIdx, setIndex, sentences, speak]);
+    if (sentences?.[prev]) speak(sentences[prev].content, token);
+  }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 
   const onSwipeDown = useCallback(async () => {
     if (!currentSentence || !sentences) return;
+    const token = claimSpeech();
     const deleted = currentSentence;
     const remaining = sentences.filter((s) => s.id !== deleted.id);
     // optimistic remove + reindex
@@ -185,7 +208,7 @@ function AppPage() {
     if (remaining.length > 0) {
       const nextIdx = Math.min(currentIdx, remaining.length - 1);
       if (nextIdx !== currentIdx) await setIndex(nextIdx);
-      speak(remaining[nextIdx].content);
+      speak(remaining[nextIdx].content, token);
     }
 
     toast("Sentence deleted", {
@@ -203,12 +226,17 @@ function AppPage() {
         },
       },
     });
-  }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId]);
+  }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
 
-    // Filled favorite slots (preserve original slot index for cycling)
+    // Claim TTS BEFORE the network round-trip so any in-flight utterance
+    // from a previous tap is killed immediately (not 100ms from now).
+    const token = claimSpeech();
+
+    // Pick the next target doc — favorites cycle, or fallback to all-docs cycle.
+    let targetId: string | null = null;
     const filled = favorites
       .map((id, i) => ({ id, i }))
       .filter((s): s is { id: string; i: number } =>
@@ -216,42 +244,45 @@ function AppPage() {
       );
 
     if (filled.length > 0) {
-      // Advance through favorites cycle
       const curIdx = favIdxRef.current;
       const pos = filled.findIndex((s) => s.i > curIdx);
       const nextSlot = pos === -1 ? filled[0] : filled[pos];
       favIdxRef.current = nextSlot.i;
-
-      const targetDoc = docs.find((d) => d.id === nextSlot.id);
-      if (!targetDoc) return;
-      setActiveDocId(targetDoc.id);
-
-      // Fetch the exact sentence at the doc's saved index and speak it
-      const targetIdx = targetDoc.current_sentence_index ?? 0;
-      const { data: row } = await supabase
-        .from("sentences")
-        .select("content")
-        .eq("document_id", targetDoc.id)
-        .eq("order_index", targetIdx)
-        .maybeSingle();
-      if (row?.content) speak(row.content);
-      return;
+      targetId = nextSlot.id;
+    } else {
+      if (docs.length < 2) return;
+      const idx = docs.findIndex((d) => d.id === activeDoc.id);
+      targetId = docs[(idx + 1) % docs.length].id;
     }
+    if (!targetId) return;
 
-    // Fallback: cycle all docs
-    if (docs.length < 2) return;
-    const idx = docs.findIndex((d) => d.id === activeDoc.id);
-    const next = docs[(idx + 1) % docs.length];
-    setActiveDocId(next.id);
-    const nextIdx = next.current_sentence_index ?? 0;
+    // Re-fetch the target doc's current_sentence_index from DB so the spoken
+    // text can NEVER disagree with the displayed sentence. Cache may be stale.
+    const { data: freshDoc } = await supabase
+      .from("documents")
+      .select("current_sentence_index, title")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (token !== speechTokenRef.current) return; // superseded by newer action
+    const targetIdx = freshDoc?.current_sentence_index ?? 0;
+
     const { data: row } = await supabase
       .from("sentences")
       .select("content")
-      .eq("document_id", next.id)
-      .eq("order_index", nextIdx)
+      .eq("document_id", targetId)
+      .eq("order_index", targetIdx)
       .maybeSingle();
-    if (row?.content) speak(row.content);
-  }, [docs, activeDoc, favorites, speak]);
+    if (token !== speechTokenRef.current) return;
+
+    // Keep the docs cache in sync with the value we're about to speak so the
+    // header counter and the spoken sentence agree.
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: targetIdx } : d) ?? prev,
+    );
+    setActiveDocId(targetId);
+
+    if (row?.content) speak(row.content, token);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
@@ -321,13 +352,14 @@ function AppPage() {
       );
       await setIndex(insertAt);
       qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
-      speak(newSentences[0]);
+      const token = claimSpeech();
+      speak(newSentences[0], token);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI failed");
     } finally {
       setOrbState("idle");
     }
-  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak]);
+  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
 
   useOrbGestures(orbRef, {
     onTap, onDoubleTap, onLongPressStart, onLongPressEnd,
