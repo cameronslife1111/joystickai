@@ -157,14 +157,22 @@ function AppPage() {
   }, [currentIdx, setIndex, sentences, speak]);
 
   const onSwipeDown = useCallback(async () => {
-    if (!currentSentence) return;
+    if (!currentSentence || !sentences) return;
     const deleted = currentSentence;
+    const remaining = sentences.filter((s) => s.id !== deleted.id);
     // optimistic remove + reindex
     qc.setQueryData<Sentence[]>(["sentences", activeDocId], (prev) =>
       prev?.filter((s) => s.id !== deleted.id).map((s, i) => ({ ...s, order_index: i })) ?? prev,
     );
     await supabase.from("sentences").delete().eq("id", deleted.id);
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+
+    // Move to the sentence that now occupies this slot (or the new last one)
+    if (remaining.length > 0) {
+      const nextIdx = Math.min(currentIdx, remaining.length - 1);
+      if (nextIdx !== currentIdx) await setIndex(nextIdx);
+      speak(remaining[nextIdx].content);
+    }
 
     toast("Sentence deleted", {
       duration: 5000,
@@ -181,7 +189,7 @@ function AppPage() {
         },
       },
     });
-  }, [currentSentence, qc, activeDocId]);
+  }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId]);
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
