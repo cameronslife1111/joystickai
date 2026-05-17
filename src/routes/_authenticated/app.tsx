@@ -359,7 +359,7 @@ function AppPage() {
     } finally {
       setOrbState("idle");
     }
-  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak]);
+  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
 
   useOrbGestures(orbRef, {
     onTap, onDoubleTap, onLongPressStart, onLongPressEnd,
