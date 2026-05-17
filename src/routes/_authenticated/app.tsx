@@ -307,9 +307,7 @@ function AppPage() {
     );
     setActiveDocId(targetId);
 
-    const textToSpeak = row?.content
-      || (freshDoc?.title ? freshDoc.title : "Empty list");
-    speak(textToSpeak, token);
+    if (row?.content) speak(row.content, token);
   }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
