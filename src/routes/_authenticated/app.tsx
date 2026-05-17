@@ -98,30 +98,48 @@ function AppPage() {
     },
   });
 
-  // Load user preferences (favorites array)
+  // Load user preferences (favorites array + muted flag)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[] }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites")
+        .select("favorites, muted")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites };
+      return { favorites, muted: !!(data as any)?.muted };
     },
   });
   const favorites = prefs?.favorites ?? [];
+  const muted = prefs?.muted ?? false;
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    qc.setQueryData(["user_preferences"], { favorites: next });
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), favorites: next,
+    }));
     await supabase.from("user_preferences").upsert(
       { user_id: u.user.id, favorites: next as any },
       { onConflict: "user_id" },
     );
   }, [qc]);
+
+  const saveMuted = useCallback(async (next: boolean) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), muted: next,
+    }));
+    if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, muted: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
 
   // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
   // the next swipe-right always advances to the NEXT filled slot — never
