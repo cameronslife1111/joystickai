@@ -154,8 +154,12 @@ function AppPage() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
+  // Keep mutedRef in sync with persisted preference.
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
   // TTS — token-gated, race-safe against rapid handler chains
   const speak = useCallback((text: string, token?: number) => {
+    if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
