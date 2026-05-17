@@ -983,9 +983,22 @@ function AppPage() {
         </div>
       )}
 
-      {/* Orb */}
-      <section className="flex items-center justify-center pb-[max(env(safe-area-inset-bottom,1.5rem),2rem)]">
-        <Orb ref={orbRef} state={orbState} size={200} />
+      {/* Orb — sized to fit any viewport (never causes scroll) */}
+      <section className="flex shrink-0 items-center justify-center pb-4">
+        <div
+          className="relative"
+          style={{
+            width: "min(55vw, 28svh, 220px)",
+            height: "min(55vw, 28svh, 220px)",
+          }}
+        >
+          <Orb
+            ref={orbRef}
+            state={orbState}
+            size={0}
+            className="!w-full !h-full"
+          />
+        </div>
       </section>
 
       {/* Grid menu overlay */}
