@@ -1020,21 +1020,21 @@ function AppPage() {
                 Close
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-1.5">
               {slots.map((slot, i) => (
                 <button
                   key={i}
                   onClick={slot ? slot.fn : undefined}
                   disabled={!slot}
-                  className="relative aspect-square rounded-2xl border border-foreground/10 bg-foreground/5 p-2 text-center transition active:scale-95 disabled:opacity-30"
+                  className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
                 >
-                  <span className="absolute left-1.5 top-1 text-[10px] text-muted-foreground">
+                  <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
                     {i + 1}
                   </span>
                   {slot ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-1">
-                      <div className="text-2xl">{slot.e}</div>
-                      <div className="text-[11px] leading-tight">{slot.t}</div>
+                    <div className="flex h-full flex-col items-center justify-center gap-0.5">
+                      <div className="text-xl">{slot.e}</div>
+                      <div className="text-[10px] leading-tight">{slot.t}</div>
                     </div>
                   ) : null}
                 </button>
