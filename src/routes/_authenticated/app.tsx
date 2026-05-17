@@ -416,6 +416,10 @@ function AppPage() {
       setMenuOpen(false);
       setFavoritesOpen(true);
     }},
+    { e: "🔃", t: "Jump to", fn: () => {
+      setMenuOpen(false);
+      setJumpOpen(true);
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
