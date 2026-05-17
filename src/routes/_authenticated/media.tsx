@@ -1,0 +1,596 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  ArrowLeft, Plus, Play, Music, X, Pencil, Download,
+  RefreshCw, Film, Trash2,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/_authenticated/media")({
+  head: () => ({ meta: [{ title: "Media Gallery · Joystick AI" }] }),
+  component: MediaPage,
+});
+
+type Kind = "image" | "video" | "audio";
+type Asset = {
+  id: string;
+  user_id: string;
+  title: string;
+  kind: Kind;
+  url: string;
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  seen_at: string | null;
+  created_at: string;
+};
+type Filter = "all" | "image" | "video" | "audio";
+
+const BUCKET = "joystick-media";
+
+function detectKind(mime: string): Kind | null {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return null;
+}
+
+function stripExt(name: string) {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(0, i) : name;
+}
+
+async function probeImage(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { resolve({ width: img.naturalWidth, height: img.naturalHeight }); URL.revokeObjectURL(url); };
+    img.onerror = () => { resolve({ width: 0, height: 0 }); URL.revokeObjectURL(url); };
+    img.src = url;
+  });
+}
+async function probeVideo(file: File): Promise<{ width: number; height: number; duration: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => {
+      resolve({ width: v.videoWidth, height: v.videoHeight, duration: isFinite(v.duration) ? v.duration : 0 });
+      URL.revokeObjectURL(url);
+    };
+    v.onerror = () => { resolve({ width: 0, height: 0, duration: 0 }); URL.revokeObjectURL(url); };
+    v.src = url;
+  });
+}
+async function probeAudio(file: File): Promise<{ duration: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("audio");
+    a.preload = "metadata";
+    a.onloadedmetadata = () => { resolve({ duration: isFinite(a.duration) ? a.duration : 0 }); URL.revokeObjectURL(url); };
+    a.onerror = () => { resolve({ duration: 0 }); URL.revokeObjectURL(url); };
+    a.src = url;
+  });
+}
+
+function MediaPage() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState<Filter>("all");
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameText, setRenameText] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const { data: assets = [], isLoading } = useQuery({
+    queryKey: ["media_assets"],
+    queryFn: async (): Promise<Asset[]> => {
+      const { data, error } = await supabase
+        .from("media_assets")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Asset[];
+    },
+  });
+
+  const filtered = useMemo(
+    () => filter === "all" ? assets : assets.filter((a) => a.kind === filter),
+    [assets, filter],
+  );
+
+  const markSeen = useCallback(async (asset: Asset) => {
+    if (asset.seen_at) return;
+    qc.setQueryData<Asset[]>(["media_assets"], (prev) =>
+      prev?.map((a) => a.id === asset.id ? { ...a, seen_at: new Date().toISOString() } : a) ?? prev,
+    );
+    await supabase.from("media_assets").update({ seen_at: new Date().toISOString() }).eq("id", asset.id);
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+  }, [qc]);
+
+  const openViewer = useCallback((idx: number) => {
+    setViewerIdx(idx);
+    setChromeVisible(true);
+    const a = filtered[idx];
+    if (a) void markSeen(a);
+  }, [filtered, markSeen]);
+
+  // Long-press handlers (500ms)
+  const handlePressStart = useCallback((asset: Asset) => {
+    longPressFiredRef.current = false;
+    if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressFiredRef.current = true;
+      setSheetAsset(asset);
+    }, 500);
+  }, []);
+  const handlePressEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+  const handleClick = useCallback((idx: number) => {
+    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
+    openViewer(idx);
+  }, [openViewer]);
+
+  // Upload
+  const handleFilesPicked = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) { toast.error("Not signed in"); return; }
+    const userId = u.user.id;
+    const arr = Array.from(files);
+    setUploadProgress({ done: 0, total: arr.length });
+    for (let i = 0; i < arr.length; i++) {
+      const file = arr[i];
+      try {
+        const kind = detectKind(file.type || "");
+        if (!kind) {
+          toast.error(`Unsupported file type: ${file.name}`);
+          setUploadProgress({ done: i + 1, total: arr.length });
+          continue;
+        }
+        const path = `${userId}/${Date.now()}_${file.name}`;
+        const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+          contentType: file.type, upsert: false,
+        });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        const url = pub.publicUrl;
+
+        let width: number | null = null;
+        let height: number | null = null;
+        let duration: number | null = null;
+        if (kind === "image") {
+          const m = await probeImage(file);
+          width = m.width || null; height = m.height || null;
+        } else if (kind === "video") {
+          const m = await probeVideo(file);
+          width = m.width || null; height = m.height || null; duration = m.duration || null;
+        } else if (kind === "audio") {
+          const m = await probeAudio(file);
+          duration = m.duration || null;
+        }
+
+        const { error: insErr } = await supabase.from("media_assets").insert({
+          user_id: userId,
+          title: stripExt(file.name),
+          kind,
+          url,
+          storage_path: path,
+          mime_type: file.type || null,
+          size_bytes: file.size,
+          duration_seconds: duration,
+          width,
+          height,
+        });
+        if (insErr) throw insErr;
+      } catch (e: any) {
+        toast.error(`${file.name}: ${e?.message ?? "upload failed"}`);
+      } finally {
+        setUploadProgress({ done: i + 1, total: arr.length });
+      }
+    }
+    setUploadProgress(null);
+    qc.invalidateQueries({ queryKey: ["media_assets"] });
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+  }, [qc]);
+
+  const handleRename = useCallback(async () => {
+    if (!sheetAsset) return;
+    const title = renameText.trim() || "Untitled";
+    qc.setQueryData<Asset[]>(["media_assets"], (prev) =>
+      prev?.map((a) => a.id === sheetAsset.id ? { ...a, title } : a) ?? prev,
+    );
+    await supabase.from("media_assets").update({ title }).eq("id", sheetAsset.id);
+    setRenameOpen(false);
+    setSheetAsset(null);
+    toast.success("Renamed");
+  }, [renameText, sheetAsset, qc]);
+
+  const handleDownload = useCallback(async (asset: Asset) => {
+    try {
+      const res = await fetch(asset.url);
+      const blob = await res.blob();
+      const ext = asset.storage_path.split(".").pop() ?? "";
+      const fname = ext ? `${asset.title}.${ext}` : asset.title;
+      const a = document.createElement("a");
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    } catch (e: any) {
+      toast.error(e?.message || "Download failed");
+    }
+    setSheetAsset(null);
+  }, []);
+
+  const handleDelete = useCallback(async () => {
+    if (!sheetAsset) return;
+    const a = sheetAsset;
+    qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
+    setConfirmDelete(false);
+    setSheetAsset(null);
+    const { error: delErr } = await supabase.from("media_assets").delete().eq("id", a.id);
+    if (delErr) { toast.error(delErr.message); return; }
+    await supabase.storage.from(BUCKET).remove([a.storage_path]);
+    qc.invalidateQueries({ queryKey: ["media_assets"] });
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+    toast.success("Deleted");
+  }, [sheetAsset, qc]);
+
+  // Viewer keyboard + swipe
+  useEffect(() => {
+    if (viewerIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setViewerIdx(null);
+      else if (e.key === "ArrowRight") advanceViewer(1);
+      else if (e.key === "ArrowLeft") advanceViewer(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerIdx, filtered]);
+
+  const advanceViewer = useCallback((delta: number) => {
+    setViewerIdx((cur) => {
+      if (cur === null) return cur;
+      const next = cur + delta;
+      if (next < 0 || next >= filtered.length) return cur;
+      const a = filtered[next];
+      if (a) void markSeen(a);
+      return next;
+    });
+  }, [filtered, markSeen]);
+
+  const currentAsset = viewerIdx !== null ? filtered[viewerIdx] : null;
+
+  return (
+    <main
+      className="relative flex min-h-[100svh] flex-col bg-background text-foreground"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
+      {/* Background flourish */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute left-1/2 top-0 h-[40vh] w-[80vw] -translate-x-1/2 rounded-full opacity-15 blur-3xl"
+          style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
+      </div>
+
+      {/* Top bar */}
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+        <button
+          onClick={() => navigate({ to: "/app" })}
+          aria-label="Back"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+        <h1 className="font-display text-lg">Media Gallery</h1>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload media"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+        >
+          <Plus className="h-5 w-5" />
+        </button>
+      </header>
+
+      {/* Filter chips */}
+      <div className="flex gap-2 overflow-x-auto px-4 py-3">
+        {([
+          { id: "all", label: "All" },
+          { id: "image", label: "Images" },
+          { id: "video", label: "Videos" },
+          { id: "audio", label: "Audio" },
+        ] as { id: Filter; label: string }[]).map((c) => {
+          const active = filter === c.id;
+          return (
+            <button
+              key={c.id}
+              onClick={() => setFilter(c.id)}
+              className={
+                "shrink-0 rounded-full border px-4 py-1.5 text-sm transition active:scale-95 " +
+                (active
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-foreground/10 bg-foreground/5 text-muted-foreground hover:bg-foreground/10")
+              }
+            >
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Upload progress banner */}
+      {uploadProgress && (
+        <div className="mx-4 mb-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-primary">
+          Uploading {Math.min(uploadProgress.done + 1, uploadProgress.total)} of {uploadProgress.total}…
+        </div>
+      )}
+
+      {/* Grid */}
+      <section className="px-4 pb-8">
+        {isLoading ? (
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="aspect-square animate-pulse rounded-2xl bg-foreground/5" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex min-h-[40vh] flex-col items-center justify-center text-center text-muted-foreground">
+            <p className="text-lg">Nothing here yet.</p>
+            <p className="text-sm">Tap + to upload.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+            {filtered.map((a, i) => (
+              <button
+                key={a.id}
+                onClick={() => handleClick(i)}
+                onMouseDown={() => handlePressStart(a)}
+                onMouseUp={handlePressEnd}
+                onMouseLeave={handlePressEnd}
+                onTouchStart={() => handlePressStart(a)}
+                onTouchEnd={handlePressEnd}
+                onTouchCancel={handlePressEnd}
+                onContextMenu={(e) => e.preventDefault()}
+                className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
+              >
+                {a.kind === "image" && (
+                  <img src={a.url} alt={a.title} loading="lazy" className="h-full w-full object-cover" />
+                )}
+                {a.kind === "video" && (
+                  <>
+                    <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <Play className="h-10 w-10 text-white drop-shadow" />
+                    </div>
+                  </>
+                )}
+                {a.kind === "audio" && (
+                  <div
+                    className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center"
+                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                  >
+                    <Music className="h-8 w-8 text-white" />
+                    <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
+                  </div>
+                )}
+                {!a.seen_at && (
+                  <span
+                    className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          void handleFilesPicked(files);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+      />
+
+      {/* Full-screen viewer */}
+      {currentAsset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeStartRef.current = { x: t.clientX, y: t.clientY };
+          }}
+          onTouchEnd={(e) => {
+            const start = swipeStartRef.current;
+            swipeStartRef.current = null;
+            if (!start) return;
+            const t = e.changedTouches[0];
+            const dx = t.clientX - start.x;
+            const dy = t.clientY - start.y;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+              if (dx < 0) advanceViewer(1);
+              else advanceViewer(-1);
+            }
+          }}
+          onClick={(e) => {
+            const w = (e.currentTarget as HTMLElement).clientWidth;
+            const x = e.clientX;
+            const third = w / 3;
+            if (x < third) advanceViewer(-1);
+            else if (x > w - third) advanceViewer(1);
+            else setChromeVisible((v) => !v);
+          }}
+        >
+          {/* Asset */}
+          <div className="flex h-full w-full items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
+            {currentAsset.kind === "image" && (
+              <img src={currentAsset.url} alt={currentAsset.title} className="max-h-full max-w-full object-contain" />
+            )}
+            {currentAsset.kind === "video" && (
+              <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
+            )}
+            {currentAsset.kind === "audio" && (
+              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
+                <Music className="mx-auto mb-3 h-10 w-10" />
+                <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
+                <audio src={currentAsset.url} controls className="w-full" />
+              </div>
+            )}
+          </div>
+
+          {/* Chrome */}
+          {chromeVisible && (
+            <>
+              <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+                {viewerIdx! + 1} / {filtered.length}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
+                aria-label="Close"
+                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Long-press action sheet */}
+      {sheetAsset && !renameOpen && !confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setSheetAsset(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+          >
+            <div className="mb-3 px-2">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-foreground/20" />
+              <p className="truncate text-center font-display text-base">{sheetAsset.title}</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <SheetButton icon={<Pencil className="h-4 w-4" />} label="Rename"
+                onClick={() => { setRenameText(sheetAsset.title); setRenameOpen(true); }}
+              />
+              <SheetButton icon={<Download className="h-4 w-4" />} label="Download"
+                onClick={() => handleDownload(sheetAsset)}
+              />
+              <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
+                onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
+              />
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Film className="h-4 w-4" />} label="Convert to Video"
+                  onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
+                />
+              )}
+              <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
+                onClick={() => setConfirmDelete(true)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename dialog */}
+      {sheetAsset && renameOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => { setRenameOpen(false); setSheetAsset(null); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 font-display text-base">Rename</p>
+            <input
+              autoFocus
+              value={renameText}
+              onChange={(e) => setRenameText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") { setRenameOpen(false); setSheetAsset(null); } }}
+              className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setRenameOpen(false); setSheetAsset(null); }}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={handleRename}
+                className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm */}
+      {sheetAsset && confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setConfirmDelete(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-4 font-display text-base">Delete this from your gallery?</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={handleDelete}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function SheetButton({
+  icon, label, onClick, danger,
+}: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition active:scale-[0.98] " +
+        (danger
+          ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+          : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10")
+      }
+    >
+      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground/5">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
