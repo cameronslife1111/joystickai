@@ -33,6 +33,7 @@ function AppPage() {
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
+  const speechTokenRef = useRef<number>(0);
   const callAi = useServerFn(aiContinue);
 
   // Apply theme
