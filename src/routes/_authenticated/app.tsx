@@ -315,15 +315,18 @@ function AppPage() {
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
   const onDoubleTap = useCallback(() => {
-    if (!currentSentence) {
-      // empty doc — start a brand new sentence
-      setEditing(true);
+    if (editing) return; // already editing — ignore
+    editOriginIdxRef.current = currentIdx;
+    const list = sentences ?? [];
+    if (list.length === 0) {
       setEditText("");
+      setEditing(true);
       return;
     }
+    const full = list.map((s) => s.content).join("\n\n");
+    setEditText(full);
     setEditing(true);
-    setEditText(currentSentence.content);
-  }, [currentSentence]);
+  }, [editing, currentIdx, sentences]);
 
   // Long press = voice mode
   const onLongPressStart = useCallback(() => {
