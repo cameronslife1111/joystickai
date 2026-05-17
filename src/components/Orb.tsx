@@ -11,6 +11,7 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
   { state = "idle", size = 200, className },
   ref,
 ) {
+  const sizeStyle = size > 0 ? { width: size, height: size } : undefined;
   return (
     <button
       ref={ref}
@@ -23,7 +24,7 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
         state === "thinking" && "orb-thinking",
         className,
       )}
-      style={{ width: size, height: size }}
+      style={sizeStyle}
     >
       <span className="orb-halo" />
       <span className="orb-core" />
