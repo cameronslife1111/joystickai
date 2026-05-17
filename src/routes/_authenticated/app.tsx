@@ -38,6 +38,8 @@ function AppPage() {
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
   const speechTokenRef = useRef<number>(0);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editOriginIdxRef = useRef<number>(0);
   const callAi = useServerFn(aiContinue);
 
   // Apply theme
@@ -313,15 +315,18 @@ function AppPage() {
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
   const onDoubleTap = useCallback(() => {
-    if (!currentSentence) {
-      // empty doc — start a brand new sentence
-      setEditing(true);
+    if (editing) return; // already editing — ignore
+    editOriginIdxRef.current = currentIdx;
+    const list = sentences ?? [];
+    if (list.length === 0) {
       setEditText("");
+      setEditing(true);
       return;
     }
+    const full = list.map((s) => s.content).join("\n\n");
+    setEditText(full);
     setEditing(true);
-    setEditText(currentSentence.content);
-  }, [currentSentence]);
+  }, [editing, currentIdx, sentences]);
 
   // Long press = voice mode
   const onLongPressStart = useCallback(() => {
@@ -401,48 +406,111 @@ function AppPage() {
     },
   });
 
-  // Save edited sentence — split on enter
-  const commitEdit = useCallback(async () => {
-    if (!activeDocId) return;
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const parts = splitIntoSentences(editText);
-    if (parts.length === 0) { setEditing(false); return; }
+  // Parse the full-doc editor text into sentence parts (paragraph-per-sentence).
+  const parseEditParts = useCallback((text: string) => {
+    return text.split(/\n\s*\n+/).map((s) => s.trim()).filter(Boolean);
+  }, []);
 
-    if (currentSentence) {
-      // Replace current with first part, insert rest after
-      await supabase.from("sentences")
-        .update({ content: parts[0] })
-        .eq("id", currentSentence.id);
-      if (parts.length > 1) {
-        const tail = (sentences ?? []).slice(currentIdx + 1);
-        for (let i = tail.length - 1; i >= 0; i--) {
-          await supabase.from("sentences")
-            .update({ order_index: tail[i].order_index + parts.length - 1 })
-            .eq("id", tail[i].id);
-        }
-        await supabase.from("sentences").insert(
-          parts.slice(1).map((content, i) => ({
-            user_id: u.user!.id,
-            document_id: activeDocId,
-            content,
-            order_index: currentIdx + 1 + i,
-          })),
+  // Map a caret position in the editor text to a sentence index (0-based).
+  const caretToSentenceIdx = useCallback((text: string, caret: number) => {
+    const before = text.slice(0, Math.max(0, Math.min(caret, text.length)));
+    // Split before-text the same way we split for saving; the last part is the
+    // sentence the caret sits in. Empty trailing => still last index.
+    const partsBefore = before.split(/\n\s*\n+/);
+    return Math.max(0, partsBefore.length - 1);
+  }, []);
+
+  // Bulk save the editor contents, then jump to `targetIdx` (clamped).
+  const commitFullEdit = useCallback(async (rawTargetIdx: number | null) => {
+    if (!activeDocId) { setEditing(false); return; }
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) { setEditing(false); return; }
+
+    const parts = parseEditParts(editText);
+    const existing = sentences ?? [];
+
+    // Empty doc: delete everything and bail.
+    if (parts.length === 0) {
+      if (existing.length > 0) {
+        await supabase.from("sentences")
+          .delete()
+          .in("id", existing.map((s) => s.id));
+        qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      }
+      await setIndex(0);
+      setEditing(false);
+      setEditText("");
+      toast("Saved", { id: "edit-saved" });
+      return;
+    }
+
+    // 1) Update existing rows in place (only when changed).
+    const overlap = Math.min(parts.length, existing.length);
+    const updates: Promise<unknown>[] = [];
+    for (let i = 0; i < overlap; i++) {
+      if (parts[i] !== existing[i].content) {
+        updates.push(
+          (async () => {
+            await supabase.from("sentences")
+              .update({ content: parts[i] })
+              .eq("id", existing[i].id);
+          })(),
         );
       }
-    } else {
-      await supabase.from("sentences").insert(
-        parts.map((content, i) => ({
-          user_id: u.user!.id, document_id: activeDocId, content, order_index: i,
-        })),
-      );
-      await setIndex(0);
     }
-    setEditing(false);
+    if (updates.length > 0) await Promise.all(updates);
+
+    // 2) Insert any new tail rows.
+    if (parts.length > existing.length) {
+      const newRows = parts.slice(existing.length).map((content, i) => ({
+        user_id: u.user!.id,
+        document_id: activeDocId,
+        content,
+        order_index: existing.length + i,
+      }));
+      await supabase.from("sentences").insert(newRows);
+    }
+
+    // 3) Delete any surplus tail rows.
+    if (parts.length < existing.length) {
+      const surplus = existing.slice(parts.length).map((s) => s.id);
+      await supabase.from("sentences").delete().in("id", surplus);
+    }
+
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+
+    // Resolve the post-save index.
+    const fallback = Math.min(editOriginIdxRef.current, parts.length - 1);
+    const targetIdx = rawTargetIdx == null
+      ? Math.max(0, fallback)
+      : Math.max(0, Math.min(rawTargetIdx, parts.length - 1));
+
+    await setIndex(targetIdx);
+    setEditing(false);
+    setEditText("");
+
     const token = claimSpeech();
-    speak(parts[0], token);
-  }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex, speak, claimSpeech]);
+    speak(parts[targetIdx], token);
+  }, [activeDocId, editText, sentences, parseEditParts, qc, setIndex, speak, claimSpeech]);
+
+  const handleEditDone = useCallback(() => {
+    void commitFullEdit(null);
+    toast("Saved", { id: "edit-saved" });
+  }, [commitFullEdit]);
+
+  const handleEditJump = useCallback(() => {
+    const el = editTextareaRef.current;
+    const caret = el?.selectionStart ?? 0;
+    const idx = caretToSentenceIdx(editText, caret);
+    void commitFullEdit(idx);
+    toast("Jumped", { id: "edit-jumped" });
+  }, [editText, caretToSentenceIdx, commitFullEdit]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+    setEditText("");
+  }, []);
+
 
   const cancelCompose = useCallback(() => {
     setComposing(false);
@@ -604,24 +672,67 @@ function AppPage() {
           ) : editing ? (
             <textarea
               ref={(el) => {
-                if (el) {
+                editTextareaRef.current = el;
+                if (!el) return;
+                // Defer focus + caret + scroll into the next frame so layout
+                // settles (important on iOS Safari/Chrome where the keyboard
+                // pushes the viewport).
+                if ((el as any).__joystickInit) return;
+                (el as any).__joystickInit = true;
+                requestAnimationFrame(() => {
                   el.focus();
-                  const len = el.value.length;
-                  el.setSelectionRange(len, len);
-                }
+                  // Compute caret = end of the originally-current sentence.
+                  const list = sentences ?? [];
+                  const originIdx = editOriginIdxRef.current;
+                  let caret = 0;
+                  for (let i = 0; i <= originIdx && i < list.length; i++) {
+                    caret += list[i].content.length;
+                    if (i < originIdx) caret += 2; // "\n\n" separator
+                  }
+                  caret = Math.min(caret, el.value.length);
+                  try { el.setSelectionRange(caret, caret); } catch {}
+                  // Center the caret line using a hidden mirror div.
+                  requestAnimationFrame(() => {
+                    try {
+                      const cs = window.getComputedStyle(el);
+                      const mirror = document.createElement("div");
+                      const copyProps = [
+                        "boxSizing","width","fontFamily","fontSize","fontWeight",
+                        "lineHeight","letterSpacing","padding","border",
+                        "whiteSpace","wordWrap","wordBreak",
+                      ] as const;
+                      for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
+                      mirror.style.position = "absolute";
+                      mirror.style.visibility = "hidden";
+                      mirror.style.whiteSpace = "pre-wrap";
+                      mirror.style.overflow = "hidden";
+                      mirror.style.left = "-9999px";
+                      mirror.style.top = "0";
+                      mirror.textContent = el.value.slice(0, caret);
+                      const marker = document.createElement("span");
+                      marker.textContent = "\u200b";
+                      mirror.appendChild(marker);
+                      document.body.appendChild(mirror);
+                      const caretTop = marker.offsetTop;
+                      document.body.removeChild(mirror);
+                      const target = caretTop - el.clientHeight / 2;
+                      el.scrollTop = Math.max(0, target);
+                    } catch {}
+                  });
+                });
               }}
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Escape") {
                   e.preventDefault();
-                  commitEdit();
+                  cancelEdit();
                 }
-                if (e.key === "Escape") setEditing(false);
               }}
-              onBlur={commitEdit}
-              className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none md:text-4xl"
-              rows={4}
+              placeholder="Edit your document. Leave a blank line between sentences."
+              inputMode="text"
+              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-2xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-3xl"
+              style={{ minHeight: "60vh", maxHeight: "70vh" }}
             />
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
@@ -653,6 +764,29 @@ function AppPage() {
               style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
             >
               Send to…
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit action buttons (above orb) */}
+      {editing && (
+        <div className="pointer-events-none flex justify-center pb-4">
+          <div className="pointer-events-auto flex gap-3">
+            <button
+              onClick={handleEditDone}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Done
+            </button>
+            <button
+              onClick={handleEditJump}
+              disabled={!editText.trim()}
+              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+            >
+              Jump To
             </button>
           </div>
         </div>
