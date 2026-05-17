@@ -672,24 +672,67 @@ function AppPage() {
           ) : editing ? (
             <textarea
               ref={(el) => {
-                if (el) {
+                editTextareaRef.current = el;
+                if (!el) return;
+                // Defer focus + caret + scroll into the next frame so layout
+                // settles (important on iOS Safari/Chrome where the keyboard
+                // pushes the viewport).
+                if ((el as any).__joystickInit) return;
+                (el as any).__joystickInit = true;
+                requestAnimationFrame(() => {
                   el.focus();
-                  const len = el.value.length;
-                  el.setSelectionRange(len, len);
-                }
+                  // Compute caret = end of the originally-current sentence.
+                  const list = sentences ?? [];
+                  const originIdx = editOriginIdxRef.current;
+                  let caret = 0;
+                  for (let i = 0; i <= originIdx && i < list.length; i++) {
+                    caret += list[i].content.length;
+                    if (i < originIdx) caret += 2; // "\n\n" separator
+                  }
+                  caret = Math.min(caret, el.value.length);
+                  try { el.setSelectionRange(caret, caret); } catch {}
+                  // Center the caret line using a hidden mirror div.
+                  requestAnimationFrame(() => {
+                    try {
+                      const cs = window.getComputedStyle(el);
+                      const mirror = document.createElement("div");
+                      const copyProps = [
+                        "boxSizing","width","fontFamily","fontSize","fontWeight",
+                        "lineHeight","letterSpacing","padding","border",
+                        "whiteSpace","wordWrap","wordBreak",
+                      ] as const;
+                      for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
+                      mirror.style.position = "absolute";
+                      mirror.style.visibility = "hidden";
+                      mirror.style.whiteSpace = "pre-wrap";
+                      mirror.style.overflow = "hidden";
+                      mirror.style.left = "-9999px";
+                      mirror.style.top = "0";
+                      mirror.textContent = el.value.slice(0, caret);
+                      const marker = document.createElement("span");
+                      marker.textContent = "\u200b";
+                      mirror.appendChild(marker);
+                      document.body.appendChild(mirror);
+                      const caretTop = marker.offsetTop;
+                      document.body.removeChild(mirror);
+                      const target = caretTop - el.clientHeight / 2;
+                      el.scrollTop = Math.max(0, target);
+                    } catch {}
+                  });
+                });
               }}
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Escape") {
                   e.preventDefault();
-                  commitEdit();
+                  cancelEdit();
                 }
-                if (e.key === "Escape") setEditing(false);
               }}
-              onBlur={commitEdit}
-              className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none md:text-4xl"
-              rows={4}
+              placeholder="Edit your document. Leave a blank line between sentences."
+              inputMode="text"
+              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-2xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-3xl"
+              style={{ minHeight: "60vh", maxHeight: "70vh" }}
             />
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
