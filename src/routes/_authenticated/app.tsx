@@ -500,8 +500,8 @@ function AppPage() {
     onLongPressStart,
     onLongPressEnd,
     onSwipe: (d) => {
-      if (d === "up") onSwipeUp();
-      else if (d === "down") advanceSentence();
+      if (d === "up") advanceSentence();
+      else if (d === "down") onSwipeUp();
       else if (d === "right") onSwipeRight();
       else onSwipeLeft();
     },
