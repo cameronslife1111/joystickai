@@ -231,7 +231,12 @@ function AppPage() {
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
 
-    // Filled favorite slots (preserve original slot index for cycling)
+    // Claim TTS BEFORE the network round-trip so any in-flight utterance
+    // from a previous tap is killed immediately (not 100ms from now).
+    const token = claimSpeech();
+
+    // Pick the next target doc — favorites cycle, or fallback to all-docs cycle.
+    let targetId: string | null = null;
     const filled = favorites
       .map((id, i) => ({ id, i }))
       .filter((s): s is { id: string; i: number } =>
@@ -239,42 +244,45 @@ function AppPage() {
       );
 
     if (filled.length > 0) {
-      // Advance through favorites cycle
       const curIdx = favIdxRef.current;
       const pos = filled.findIndex((s) => s.i > curIdx);
       const nextSlot = pos === -1 ? filled[0] : filled[pos];
       favIdxRef.current = nextSlot.i;
-
-      const targetDoc = docs.find((d) => d.id === nextSlot.id);
-      if (!targetDoc) return;
-      setActiveDocId(targetDoc.id);
-
-      // Fetch the exact sentence at the doc's saved index and speak it
-      const targetIdx = targetDoc.current_sentence_index ?? 0;
-      const { data: row } = await supabase
-        .from("sentences")
-        .select("content")
-        .eq("document_id", targetDoc.id)
-        .eq("order_index", targetIdx)
-        .maybeSingle();
-      if (row?.content) speak(row.content);
-      return;
+      targetId = nextSlot.id;
+    } else {
+      if (docs.length < 2) return;
+      const idx = docs.findIndex((d) => d.id === activeDoc.id);
+      targetId = docs[(idx + 1) % docs.length].id;
     }
+    if (!targetId) return;
 
-    // Fallback: cycle all docs
-    if (docs.length < 2) return;
-    const idx = docs.findIndex((d) => d.id === activeDoc.id);
-    const next = docs[(idx + 1) % docs.length];
-    setActiveDocId(next.id);
-    const nextIdx = next.current_sentence_index ?? 0;
+    // Re-fetch the target doc's current_sentence_index from DB so the spoken
+    // text can NEVER disagree with the displayed sentence. Cache may be stale.
+    const { data: freshDoc } = await supabase
+      .from("documents")
+      .select("current_sentence_index, title")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (token !== speechTokenRef.current) return; // superseded by newer action
+    const targetIdx = freshDoc?.current_sentence_index ?? 0;
+
     const { data: row } = await supabase
       .from("sentences")
       .select("content")
-      .eq("document_id", next.id)
-      .eq("order_index", nextIdx)
+      .eq("document_id", targetId)
+      .eq("order_index", targetIdx)
       .maybeSingle();
-    if (row?.content) speak(row.content);
-  }, [docs, activeDoc, favorites, speak]);
+    if (token !== speechTokenRef.current) return;
+
+    // Keep the docs cache in sync with the value we're about to speak so the
+    // header counter and the spoken sentence agree.
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: targetIdx } : d) ?? prev,
+    );
+    setActiveDocId(targetId);
+
+    if (row?.content) speak(row.content, token);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
