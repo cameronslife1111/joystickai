@@ -32,6 +32,9 @@ function AppPage() {
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
+  const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
+  const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
+  const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [recording, setRecording] = useState(false);
@@ -95,7 +98,8 @@ function AppPage() {
       const { data, error } = await supabase
         .from("sentences").select("*")
         .eq("document_id", activeDocId!)
-        .order("order_index", { ascending: true });
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
@@ -330,7 +334,8 @@ function AppPage() {
         .from("sentences")
         .select("*")
         .eq("document_id", targetId)
-        .order("order_index", { ascending: true }),
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
     ]);
     if (token !== speechTokenRef.current) return; // superseded by newer action
 
@@ -416,22 +421,13 @@ function AppPage() {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
 
-      // shift order_index of everything after currentIdx
       const insertAt = currentSentence ? currentIdx + 1 : 0;
-      const tail = (sentences ?? []).slice(insertAt);
-      for (let i = tail.length - 1; i >= 0; i--) {
-        await supabase.from("sentences")
-          .update({ order_index: tail[i].order_index + newSentences.length })
-          .eq("id", tail[i].id);
-      }
-      await supabase.from("sentences").insert(
-        newSentences.map((content, i) => ({
-          user_id: u.user!.id,
-          document_id: activeDocId,
-          content,
-          order_index: insertAt + i,
-        })),
-      );
+      const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+        p_document_id: activeDocId,
+        p_contents: newSentences,
+        p_insert_at: insertAt,
+      });
+      if (rpcErr) throw rpcErr;
       await setIndex(insertAt);
       qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
       const token = claimSpeech();
@@ -568,53 +564,60 @@ function AppPage() {
     setComposeText("");
     setSendOpen(false);
     setSendDocId(null);
+    setSendStage("doc");
+    setSendTargetSentences([]);
+    setSendAnchorIdx(0);
   }, []);
+
+  // User picked a target document; load its sentences so they can either jump
+  // straight to top/bottom or scroll a sentence list and pick the exact anchor.
+  const pickSendDoc = useCallback(async (docId: string) => {
+    setSendDocId(docId);
+    setSendStage("where");
+    const { data } = await supabase
+      .from("sentences")
+      .select("*")
+      .eq("document_id", docId)
+      .order("order_index", { ascending: true })
+      .order("created_at", { ascending: true });
+    const list = (data ?? []) as Sentence[];
+    setSendTargetSentences(list);
+    const targetDoc = docs?.find((d) => d.id === docId);
+    const saved = docId === activeDocId
+      ? currentIdx
+      : (targetDoc?.current_sentence_index ?? 0);
+    setSendAnchorIdx(list.length === 0 ? 0 : Math.max(0, Math.min(saved, list.length - 1)));
+  }, [docs, activeDocId, currentIdx]);
 
   const sendIdea = useCallback(async (
     targetDocId: string,
-    position: "top" | "bottom" | "current",
+    position: "top" | "bottom" | "afterAnchor",
+    anchorIdx?: number,
   ) => {
     const parts = splitIntoSentences(composeText);
     if (parts.length === 0) { cancelCompose(); return; }
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
 
     const targetDoc = docs?.find((d) => d.id === targetDocId);
-    const { data: existing } = await supabase
-      .from("sentences")
-      .select("id, order_index")
-      .eq("document_id", targetDocId)
-      .order("order_index", { ascending: true });
-    const list = existing ?? [];
-
+    // Resolve insertion index from the freshly-loaded target list so it cannot
+    // drift between when the user picked the anchor and when we write.
     let insertAt: number;
     if (position === "top") insertAt = 0;
-    else if (position === "bottom") insertAt = list.length;
-    else {
-      const curIdx = targetDocId === activeDocId
-        ? currentIdx
-        : (targetDoc?.current_sentence_index ?? 0);
-      insertAt = list.length === 0 ? 0 : Math.min(curIdx + 1, list.length);
-    }
+    else if (position === "bottom") insertAt = sendTargetSentences.length;
+    else insertAt = Math.max(0, Math.min((anchorIdx ?? 0) + 1, sendTargetSentences.length));
 
-    const tail = list.slice(insertAt);
-    for (let i = tail.length - 1; i >= 0; i--) {
-      await supabase.from("sentences")
-        .update({ order_index: tail[i].order_index + parts.length })
-        .eq("id", tail[i].id);
+    const { error } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: targetDocId,
+      p_contents: parts,
+      p_insert_at: insertAt,
+    });
+    if (error) {
+      toast.error(error.message || "Failed to send");
+      return;
     }
-    await supabase.from("sentences").insert(
-      parts.map((content, i) => ({
-        user_id: u.user!.id,
-        document_id: targetDocId,
-        content,
-        order_index: insertAt + i,
-      })),
-    );
     qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
     toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
     cancelCompose();
-  }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose]);
 
   // Export current sentence + animated orb to an MP4 (falls back to webm).
   const exportMp4 = useCallback(async () => {
@@ -1197,7 +1200,7 @@ function AppPage() {
       {sendOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
-          onClick={() => { setSendOpen(false); setSendDocId(null); }}
+          onClick={() => { setSendOpen(false); setSendDocId(null); setSendStage("doc"); setSendTargetSentences([]); }}
         >
           <div
             className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
@@ -1205,22 +1208,24 @@ function AppPage() {
           >
             <div className="mb-3 flex items-center justify-between px-2">
               <div className="font-display text-lg">
-                {sendDocId ? "Where in the list?" : "Send to which list?"}
+                {sendStage === "doc" && "Send to which list?"}
+                {sendStage === "where" && "Where in the list?"}
+                {sendStage === "pickAnchor" && "After which sentence?"}
               </div>
               <button
-                onClick={() => { setSendOpen(false); setSendDocId(null); }}
+                onClick={cancelCompose}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Cancel
               </button>
             </div>
 
-            {!sendDocId ? (
+            {sendStage === "doc" && (
               <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
                 {(docs ?? []).map((d) => (
                   <button
                     key={d.id}
-                    onClick={() => setSendDocId(d.id)}
+                    onClick={() => pickSendDoc(d.id)}
                     className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
                   >
                     {d.title}
@@ -1232,7 +1237,9 @@ function AppPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            )}
+
+            {sendStage === "where" && sendDocId && (
               <div className="flex flex-col gap-2 p-1">
                 <button
                   onClick={() => sendIdea(sendDocId, "top")}
@@ -1241,10 +1248,16 @@ function AppPage() {
                   ⤒  Top of list
                 </button>
                 <button
-                  onClick={() => sendIdea(sendDocId, "current")}
+                  onClick={() => {
+                    if (sendTargetSentences.length === 0) {
+                      sendIdea(sendDocId, "top");
+                    } else {
+                      setSendStage("pickAnchor");
+                    }
+                  }}
                   className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
                 >
-                  ●  After current sentence
+                  ●  After a specific sentence…
                 </button>
                 <button
                   onClick={() => sendIdea(sendDocId, "bottom")}
@@ -1253,11 +1266,47 @@ function AppPage() {
                   ⤓  Bottom of list
                 </button>
                 <button
-                  onClick={() => setSendDocId(null)}
+                  onClick={() => { setSendDocId(null); setSendStage("doc"); setSendTargetSentences([]); }}
                   className="mt-1 w-full rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
                 >
                   ← Pick a different list
                 </button>
+              </div>
+            )}
+
+            {sendStage === "pickAnchor" && sendDocId && (
+              <div className="flex min-h-0 flex-col gap-2 p-1">
+                <div className="flex max-h-[55vh] flex-col gap-1 overflow-y-auto rounded-xl border border-foreground/10 bg-foreground/5 p-1">
+                  {sendTargetSentences.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSendAnchorIdx(i)}
+                      className={
+                        "w-full rounded-lg px-3 py-2 text-left text-sm transition " +
+                        (i === sendAnchorIdx
+                          ? "bg-primary/20 text-primary ring-1 ring-primary/40"
+                          : "hover:bg-foreground/10")
+                      }
+                    >
+                      <span className="mr-2 text-xs opacity-60">{i + 1}.</span>
+                      {s.content}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSendStage("where")}
+                    className="flex-1 rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={() => sendIdea(sendDocId, "afterAnchor", sendAnchorIdx)}
+                    className="flex-[2] rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
+                  >
+                    Insert after sentence {sendAnchorIdx + 1}
+                  </button>
+                </div>
               </div>
             )}
           </div>

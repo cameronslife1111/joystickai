@@ -117,7 +117,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      insert_sentences_at: {
+        Args: {
+          p_contents: string[]
+          p_document_id: string
+          p_insert_at: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
