@@ -674,12 +674,7 @@ function AppPage() {
           if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
               window.speechSynthesis.cancel();
-              const clean = text
-                .replace(/\p{Extended_Pictographic}/gu, "")
-                .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")
-                .replace(/[\u200D\uFE0F\uFE0E]/gu, "")
-                .replace(/\s{2,}/g, " ")
-                .trim();
+              const clean = stripEmoji(text);
               if (clean) {
                 const u = new SpeechSynthesisUtterance(clean);
                 u.rate = 1; u.pitch = 1;
