@@ -322,7 +322,10 @@ function MediaPage() {
         </button>
         <h1 className="font-display text-lg">Media Gallery</h1>
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            console.log("[media] + clicked, input ref:", !!fileInputRef.current);
+            fileInputRef.current?.click();
+          }}
           aria-label="Upload media"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
         >
