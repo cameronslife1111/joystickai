@@ -557,46 +557,91 @@ function AppPage() {
   }, [parseEditParts]);
 
   // Bulk save the editor contents, then jump to `targetIdx` (clamped).
-  const commitFullEdit = useCallback(async (rawTargetIdx: number | null) => {
-    if (!activeDocId) { setEditing(false); return; }
+  // Returns true on success, false on failure (editor stays open on failure).
+  const commitFullEdit = useCallback(async (rawTargetIdx: number | null): Promise<boolean> => {
+    if (!activeDocId) { setEditing(false); return true; }
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) { setEditing(false); return; }
+    if (!u.user) { setEditing(false); return true; }
 
     const parts = parseEditParts(editText);
-    const existing = sentences ?? [];
+
+    // Re-fetch existing rows directly to avoid stale cache mid-edit.
+    const { data: freshExisting, error: fetchErr } = await supabase
+      .from("sentences")
+      .select("id, content, order_index")
+      .eq("document_id", activeDocId)
+      .order("order_index", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (fetchErr) {
+      console.error("[edit] fetch existing failed", fetchErr);
+      toast.error("Couldn't save edits");
+      return false;
+    }
+    const existing = freshExisting ?? [];
 
     // Empty doc: delete everything and bail.
     if (parts.length === 0) {
       if (existing.length > 0) {
-        await supabase.from("sentences")
+        const { error: delErr } = await supabase.from("sentences")
           .delete()
           .in("id", existing.map((s) => s.id));
-        qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+        if (delErr) {
+          console.error("[edit] delete-all failed", delErr);
+          toast.error("Couldn't save edits");
+          return false;
+        }
       }
+      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
       await setIndex(0);
       setEditing(false);
       setEditText("");
-      toast("Saved", { id: "edit-saved" });
-      return;
+      return true;
     }
 
-    // 1) Update existing rows in place (only when changed).
-    const overlap = Math.min(parts.length, existing.length);
-    const updates: Promise<unknown>[] = [];
-    for (let i = 0; i < overlap; i++) {
-      if (parts[i] !== existing[i].content) {
-        updates.push(
-          (async () => {
-            await supabase.from("sentences")
-              .update({ content: parts[i] })
-              .eq("id", existing[i].id);
-          })(),
-        );
+    // Step A: park all existing rows in a high range to free 0..N-1 for clean rewrite.
+    // Use negative offsets that mirror original index so we never collide with the
+    // unique (document_id, order_index) constraint and so we can recover positions if needed.
+    if (existing.length > 0) {
+      const PARK_BASE = 1_000_000;
+      // Park sequentially in descending original index order to avoid any transient
+      // collisions if some rows already sit above PARK_BASE.
+      const parkUpdates = await Promise.all(
+        existing.map((s, i) =>
+          supabase.from("sentences")
+            .update({ order_index: PARK_BASE + i })
+            .eq("id", s.id)
+            .then((res) => res),
+        ),
+      );
+      const parkErr = parkUpdates.find((r) => r.error)?.error;
+      if (parkErr) {
+        console.error("[edit] park step failed", parkErr);
+        toast.error("Couldn't save edits");
+        return false;
       }
     }
-    if (updates.length > 0) await Promise.all(updates);
 
-    // 2) Insert any new tail rows.
+    // Step B: update overlapping rows (always set order_index = i, plus content if changed).
+    const overlap = Math.min(parts.length, existing.length);
+    if (overlap > 0) {
+      const updateResults = await Promise.all(
+        existing.slice(0, overlap).map((s, i) =>
+          supabase.from("sentences")
+            .update({ content: parts[i], order_index: i })
+            .eq("id", s.id)
+            .then((res) => res),
+        ),
+      );
+      const updErr = updateResults.find((r) => r.error)?.error;
+      if (updErr) {
+        console.error("[edit] update step failed", updErr);
+        toast.error("Couldn't save edits");
+        return false;
+      }
+    }
+
+    // Step C: insert any new tail rows at clean indexes [existing.length .. parts.length - 1].
     if (parts.length > existing.length) {
       const newRows = parts.slice(existing.length).map((content, i) => ({
         user_id: u.user!.id,
@@ -604,13 +649,23 @@ function AppPage() {
         content,
         order_index: existing.length + i,
       }));
-      await supabase.from("sentences").insert(newRows);
+      const { error: insErr } = await supabase.from("sentences").insert(newRows);
+      if (insErr) {
+        console.error("[edit] insert step failed", insErr);
+        toast.error("Couldn't save edits");
+        return false;
+      }
     }
 
-    // 3) Delete any surplus tail rows.
+    // Step D: delete any surplus rows (still parked above PARK_BASE).
     if (parts.length < existing.length) {
       const surplus = existing.slice(parts.length).map((s) => s.id);
-      await supabase.from("sentences").delete().in("id", surplus);
+      const { error: delErr } = await supabase.from("sentences").delete().in("id", surplus);
+      if (delErr) {
+        console.error("[edit] delete-surplus step failed", delErr);
+        toast.error("Couldn't save edits");
+        return false;
+      }
     }
 
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
@@ -627,22 +682,23 @@ function AppPage() {
 
     const token = claimSpeech();
     speak(parts[targetIdx], token);
-  }, [activeDocId, editText, sentences, parseEditParts, qc, setIndex, speak, claimSpeech]);
+    return true;
+  }, [activeDocId, editText, parseEditParts, qc, setIndex, speak, claimSpeech]);
 
-  const handleEditDone = useCallback(() => {
+  const handleEditDone = useCallback(async () => {
     const el = editTextareaRef.current;
     const caret = el?.selectionStart ?? editText.length;
     const idx = caretToSentenceIdx(editText, caret);
-    void commitFullEdit(idx);
-    toast("Saved", { id: "edit-saved" });
+    const ok = await commitFullEdit(idx);
+    if (ok) toast("Saved", { id: "edit-saved" });
   }, [editText, caretToSentenceIdx, commitFullEdit]);
 
-  const handleEditJump = useCallback(() => {
+  const handleEditJump = useCallback(async () => {
     const el = editTextareaRef.current;
     const caret = el?.selectionStart ?? 0;
     const idx = caretToSentenceIdx(editText, caret);
-    void commitFullEdit(idx);
-    toast("Jumped", { id: "edit-jumped" });
+    const ok = await commitFullEdit(idx);
+    if (ok) toast("Jumped", { id: "edit-jumped" });
   }, [editText, caretToSentenceIdx, commitFullEdit]);
 
   const cancelEdit = useCallback(() => {
