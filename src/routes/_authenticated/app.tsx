@@ -941,7 +941,11 @@ function AppPage() {
       if (importInputRef.current) importInputRef.current.value = "";
       importInputRef.current?.click();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate]);
+    { e: "🖼️", t: "Media Gallery", fn: () => {
+      setMenuOpen(false);
+      navigate({ to: "/media" });
+    }, badge: unseenCount },
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
