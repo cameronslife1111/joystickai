@@ -25,10 +25,13 @@ function AppPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
+  const favIdxRef = useRef<number>(-1);
   const callAi = useServerFn(aiContinue);
 
   // Apply theme
