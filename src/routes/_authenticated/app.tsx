@@ -1240,6 +1240,46 @@ function AppPage() {
           </div>
         </div>
       )}
+      {moveOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setMoveOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">↕️ Move sentence</div>
+              <button
+                onClick={() => setMoveOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: "⤒  Move to top", target: 0, disabled: currentIdx === 0 },
+                { label: "⏫  Move up 2", target: currentIdx - 2, disabled: currentIdx < 1 },
+                { label: "🔼  Move up 1", target: currentIdx - 1, disabled: currentIdx === 0 },
+                { label: "🔽  Move down 1", target: currentIdx + 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
+                { label: "⏬  Move down 2", target: currentIdx + 2, disabled: !sentences || currentIdx >= sentences.length - 1 },
+                { label: "⤓  Move to bottom", target: (sentences?.length ?? 1) - 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => moveSentence(opt.target)}
+                  disabled={opt.disabled || !sentences || sentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Send-to overlay */}
       {sendOpen && (
         <div
