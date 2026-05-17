@@ -505,6 +505,116 @@ function AppPage() {
           </div>
         </div>
       )}
+
+      {/* Favorites editor overlay */}
+      {favoritesOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">★ Favorites</div>
+              <button
+                onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mb-2 px-2 text-[11px] text-muted-foreground">
+              Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
+            </div>
+            <div className="grid grid-cols-5 gap-1.5 overflow-y-auto p-1">
+              {Array.from({ length: 50 }).map((_, i) => {
+                const docId = favorites[i] ?? null;
+                const doc = docId ? docs?.find((d) => d.id === docId) : null;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPickerSlot(i)}
+                    className="relative aspect-square rounded-xl border border-foreground/10 bg-foreground/5 p-1 text-center transition active:scale-95 hover:bg-foreground/10"
+                  >
+                    <span className="absolute left-1 top-0.5 text-[9px] text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <div className="flex h-full items-center justify-center">
+                      {doc ? (
+                        <div className="line-clamp-3 text-[10px] leading-tight">
+                          {doc.title}
+                        </div>
+                      ) : (
+                        <div className="text-lg text-muted-foreground/50">+</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {pickerSlot !== null && (
+            <div
+              className="absolute inset-0 z-10 flex items-end justify-center bg-background/70 px-4 pb-6 backdrop-blur-sm"
+              onClick={() => setPickerSlot(null)}
+            >
+              <div
+                className="w-full max-w-md rounded-3xl border border-foreground/10 bg-card/95 p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-3 flex items-center justify-between px-2">
+                  <div className="font-display text-base">Slot {pickerSlot + 1}</div>
+                  <button
+                    onClick={() => setPickerSlot(null)}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+                  {favorites[pickerSlot] && (
+                    <button
+                      onClick={async () => {
+                        const next = [...favorites];
+                        while (next.length < 50) next.push(null);
+                        next[pickerSlot!] = null;
+                        await saveFavorites(next);
+                        setPickerSlot(null);
+                      }}
+                      className="w-full rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-left text-sm text-destructive"
+                    >
+                      Clear slot
+                    </button>
+                  )}
+                  {(docs ?? []).map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={async () => {
+                        const next = [...favorites];
+                        while (next.length < 50) next.push(null);
+                        next[pickerSlot!] = d.id;
+                        await saveFavorites(next);
+                        setPickerSlot(null);
+                      }}
+                      className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-left text-sm hover:bg-foreground/10"
+                    >
+                      {d.title}
+                    </button>
+                  ))}
+                  {(!docs || docs.length === 0) && (
+                    <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                      No documents yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </main>
   );
 }
