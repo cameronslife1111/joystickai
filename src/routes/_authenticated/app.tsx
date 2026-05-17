@@ -171,7 +171,7 @@ function AppPage() {
     setJumpOpen(false);
   }, [sentences, setIndex, speak, claimSpeech]);
 
-  const onTap = useCallback(async () => {
+  const advanceSentence = useCallback(async () => {
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
     const next = currentIdx + 1;
@@ -183,6 +183,14 @@ function AppPage() {
     await setIndex(next);
     speak(sentences[next].content, token);
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
+
+  const openNewIdea = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setComposeText("");
+    setComposing(true);
+  }, []);
 
   const onSwipeUp = useCallback(async () => {
     const token = claimSpeech();
