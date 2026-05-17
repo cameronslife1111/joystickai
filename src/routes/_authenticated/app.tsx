@@ -28,6 +28,8 @@ function AppPage() {
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
