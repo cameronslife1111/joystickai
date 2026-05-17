@@ -212,6 +212,7 @@ function AppPage() {
     }
 
     toast("Sentence deleted", {
+      id: "sentence-deleted",
       duration: 5000,
       action: {
         label: "Undo",
