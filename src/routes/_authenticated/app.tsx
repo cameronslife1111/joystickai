@@ -641,6 +641,47 @@ function AppPage() {
           )}
         </div>
       )}
+      {/* Jump-to overlay */}
+      {jumpOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setJumpOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">🔃 Jump to</div>
+              <button
+                onClick={() => setJumpOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: "⤒  Jump to top", target: 0 },
+                { label: "⏪  Jump back 10", target: currentIdx - 10 },
+                { label: "◀  Jump back 5", target: currentIdx - 5 },
+                { label: "▶  Jump ahead 5", target: currentIdx + 5 },
+                { label: "⏩  Jump ahead 10", target: currentIdx + 10 },
+                { label: "⤓  Jump to end", target: (sentences?.length ?? 1) - 1 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => jumpTo(opt.target)}
+                  disabled={!sentences || sentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
