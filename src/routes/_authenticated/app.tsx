@@ -157,11 +157,23 @@ function AppPage() {
   // Keep mutedRef in sync with persisted preference.
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
+  // Strip emojis, pictographs, symbols, and ZWJ/variation selectors so the
+  // synthesizer never tries to read them. Keeps regular punctuation/letters.
+  const stripEmoji = (s: string) =>
+    s
+      .replace(/\p{Extended_Pictographic}/gu, "")
+      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "") // regional indicator flags
+      .replace(/[\u200D\uFE0F\uFE0E]/gu, "") // ZWJ + variation selectors
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
   // TTS — token-gated, race-safe against rapid handler chains
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
+    const clean = stripEmoji(text);
+    if (!clean) return;
     const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
     window.speechSynthesis.cancel();
     // Give Chrome/Safari time to flush the canceled utterance before queuing
@@ -171,7 +183,7 @@ function AppPage() {
     setTimeout(() => {
       if (token != null && token !== speechTokenRef.current) return;
       try {
-        const u = new SpeechSynthesisUtterance(text);
+        const u = new SpeechSynthesisUtterance(clean);
         u.rate = 1; u.pitch = 1;
         window.speechSynthesis.speak(u);
       } catch {}
