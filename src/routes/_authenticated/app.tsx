@@ -727,6 +727,11 @@ function AppPage() {
       setMenuOpen(false);
       setJumpOpen(true);
     }},
+    { e: "🔍", t: "Search docs", fn: () => {
+      setMenuOpen(false);
+      setSearchQuery("");
+      setSearchOpen(true);
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
