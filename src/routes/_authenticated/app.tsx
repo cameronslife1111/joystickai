@@ -34,6 +34,8 @@ function AppPage() {
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [recording, setRecording] = useState(false);
+  const recordingRef = useRef<{ stop: () => void } | null>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
@@ -167,27 +169,24 @@ function AppPage() {
       .replace(/\s{2,}/g, " ")
       .trim();
 
-  // TTS — token-gated, race-safe against rapid handler chains
+  // TTS — token-gated, race-safe against rapid handler chains.
+  // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
+  // speechSynthesis.speak() when it's called synchronously after a user
+  // gesture (or after the one-time unlock in __root.tsx). Any delay or
+  // async hop here causes iOS to silently drop the utterance.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
+    if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
-    window.speechSynthesis.cancel();
-    // Give Chrome/Safari time to flush the canceled utterance before queuing
-    // the next one; without this delay (especially when an utterance was
-    // mid-flight) the new utterance is often swallowed.
-    const delay = wasSpeaking ? 60 : 0;
-    setTimeout(() => {
-      if (token != null && token !== speechTokenRef.current) return;
-      try {
-        const u = new SpeechSynthesisUtterance(clean);
-        u.rate = 1; u.pitch = 1;
-        window.speechSynthesis.speak(u);
-      } catch {}
-    }, delay);
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      u.rate = 1; u.pitch = 1;
+      window.speechSynthesis.speak(u);
+    } catch {}
   }, []);
 
   // Cancel any in-flight speech and claim a fresh speech token. Call at the
@@ -617,6 +616,131 @@ function AppPage() {
     cancelCompose();
   }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
 
+  // Export current sentence + animated orb to an MP4 (falls back to webm).
+  const exportMp4 = useCallback(async () => {
+    if (recording) return;
+    if (typeof window === "undefined" || typeof (window as any).MediaRecorder === "undefined") {
+      toast.error("Recording isn't supported in this browser");
+      return;
+    }
+    const sentenceText = currentSentence?.content ?? activeDoc?.title ?? "Joystick AI";
+    const W = 720;
+    const H = 1280;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { toast.error("Canvas unavailable"); return; }
+    const stream = (canvas as any).captureStream(30) as MediaStream;
+
+    // Pick the best supported container — Safari prefers mp4, others fall back to webm.
+    const candidates = [
+      "video/mp4;codecs=avc1.42E01E",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    const MR: any = (window as any).MediaRecorder;
+    const mimeType = candidates.find((m) => MR.isTypeSupported?.(m)) ?? "";
+    const recorder = mimeType
+      ? new MR(stream, { mimeType })
+      : new MR(stream);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e: any) => { if (e.data?.size > 0) chunks.push(e.data); };
+
+    let raf = 0;
+    const start = performance.now();
+    const draw = () => {
+      const t = (performance.now() - start) / 1000;
+      // Background gradient
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#1a0f2e");
+      bg.addColorStop(1, "#0b0618");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Animated orb
+      const cx = W / 2;
+      const cy = H * 0.62;
+      const baseR = Math.min(W, H) * 0.22;
+      const pulse = 1 + Math.sin(t * 1.6) * 0.04;
+      const r = baseR * pulse;
+      const grd = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
+      const hue = (t * 30) % 360;
+      grd.addColorStop(0, `hsl(${(hue + 200) % 360},100%,82%)`);
+      grd.addColorStop(0.5, `hsl(${(hue + 280) % 360},90%,58%)`);
+      grd.addColorStop(1, `hsl(${(hue + 320) % 360},90%,30%)`);
+      ctx.save();
+      ctx.shadowColor = `hsla(${(hue + 280) % 360},90%,60%,0.7)`;
+      ctx.shadowBlur = 80;
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Sentence text (wrapped)
+      const clean = sentenceText
+        .replace(/\p{Extended_Pictographic}/gu, "")
+        .replace(/\s{2,}/g, " ")
+        .trim() || sentenceText;
+      ctx.fillStyle = "#fafafa";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const fontSize = 44;
+      ctx.font = `${fontSize}px "Instrument Serif", Georgia, serif`;
+      const maxW = W * 0.85;
+      const words = clean.split(/\s+/);
+      const lines: string[] = [];
+      let line = "";
+      for (const w of words) {
+        const test = line ? line + " " + w : w;
+        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+        else line = test;
+      }
+      if (line) lines.push(line);
+      const visible = lines.slice(0, 6);
+      const lineH = fontSize * 1.2;
+      const startY = H * 0.25 - ((visible.length - 1) * lineH) / 2;
+      visible.forEach((ln, i) => ctx.fillText(ln, W / 2, startY + i * lineH));
+
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+
+    const DURATION_MS = 10000;
+    setRecording(true);
+    setMenuOpen(false);
+    toast("Recording 10s…", { id: "rec" });
+
+    const stop = () => {
+      try { recorder.stop(); } catch {}
+      cancelAnimationFrame(raf);
+      stream.getTracks().forEach((tr) => tr.stop());
+    };
+    recordingRef.current = { stop };
+
+    recorder.onstop = () => {
+      const outType = recorder.mimeType || mimeType || "video/webm";
+      const blob = new Blob(chunks, { type: outType });
+      const ext = outType.includes("mp4") ? "mp4" : "webm";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `joystick-${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setRecording(false);
+      recordingRef.current = null;
+      toast.success(`Saved ${ext.toUpperCase()}`, { id: "rec" });
+    };
+    recorder.start();
+    setTimeout(stop, DURATION_MS);
+  }, [recording, currentSentence, activeDoc]);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
@@ -668,11 +792,15 @@ function AppPage() {
       setMenuOpen(false);
       setJumpOpen(true);
     }},
+    { e: "🎬", t: recording ? "Recording…" : "Export MP4", fn: () => {
+      if (recording) return;
+      void exportMp4();
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, muted, saveMuted, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
+  ], [theme, muted, saveMuted, docs, activeDoc, favorites, saveFavorites, qc, navigate, recording, exportMp4]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {
@@ -682,7 +810,13 @@ function AppPage() {
   }, [grid]);
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-background text-foreground">
+    <main
+      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-background text-foreground"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
       {/* Background */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-1/2 h-[60vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
@@ -708,8 +842,8 @@ function AppPage() {
       </header>
 
       {/* Sentence */}
-      <section className="flex flex-1 items-center justify-center px-6 pb-8">
-        <div className="w-full max-w-2xl text-center">
+      <section className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-4">
+        <div className="w-full max-w-2xl max-h-full overflow-y-auto text-center">
           {composing ? (
             <textarea
               ref={(el) => { if (el) el.focus(); }}
@@ -849,9 +983,22 @@ function AppPage() {
         </div>
       )}
 
-      {/* Orb */}
-      <section className="flex items-center justify-center pb-[max(env(safe-area-inset-bottom,1.5rem),2rem)]">
-        <Orb ref={orbRef} state={orbState} size={200} />
+      {/* Orb — sized to fit any viewport (never causes scroll) */}
+      <section className="flex shrink-0 items-center justify-center pb-4">
+        <div
+          className="relative"
+          style={{
+            width: "min(55vw, 28svh, 220px)",
+            height: "min(55vw, 28svh, 220px)",
+          }}
+        >
+          <Orb
+            ref={orbRef}
+            state={orbState}
+            size={0}
+            className="!w-full !h-full"
+          />
+        </div>
       </section>
 
       {/* Grid menu overlay */}

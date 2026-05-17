@@ -1,82 +1,61 @@
 ## Goal
-Make cycling between documents fully deterministic so these three things always stay in sync:
-- the loaded document
-- the currently displayed sentence
-- the sentence spoken by web speech
+Make the app feel native on mobile: orb + sentence always fit the screen (no scroll), no double-tap zoom, web speech actually fires on iOS, and add an MP4 export of a session.
 
-## What I found
-The current cycle flow is vulnerable to drift because it mixes two different concepts of “current sentence”:
-- `current_sentence_index` on the document, which the UI uses as an array position
-- `order_index` on sentence rows, which the cycle path uses to fetch speech text
+## 1. Fit the whole UI to the device viewport (no scroll)
 
-After edits, deletes, inserts, or undo flows, those can stop matching exactly. When that happens, the app can display one sentence while speech reads a different one.
+Problem: `min-h-screen` uses `100vh`, which on iOS Safari is the *largest* viewport (includes the URL bar), so content gets pushed off and the user has to scroll to see the orb.
 
-There is also a race risk during document switching:
-- the next doc is selected
-- speech text is fetched separately
-- the active doc and sentences query update afterward
+- In `src/routes/_authenticated/app.tsx`, change the main wrapper from `min-h-screen` to a true viewport-locked container using `h-[100svh]` (small viewport height) with `overflow-hidden` and `overscroll-none`.
+- Add the same treatment to `src/routes/index.tsx` and the root error/404 shells in `src/routes/__root.tsx`.
+- Constrain the orb + sentence stack so it scales down on short screens:
+  - Wrap orb in a container sized off `min(70vw, 60svh)` so it never exceeds either axis.
+  - Cap the sentence area with `max-h-[30svh]` and switch internal text scrolling on only when content overflows.
+- Add safe-area padding (`env(safe-area-inset-*)`) so the orb isn't hidden behind the iPhone home indicator.
 
-That makes it possible for speech to run from stale lookup data instead of the exact sentence the UI settles on.
+## 2. Disable double-tap zoom and pinch zoom in-app
 
-## Plan
-### 1. Unify sentence resolution around one source of truth
-Refactor the app so the current sentence is always resolved by:
-- loading the target document’s ordered sentence list
-- clamping the saved `current_sentence_index` against that list length
-- deriving the spoken text from that exact resolved sentence object
+- Update the viewport meta in `src/routes/__root.tsx` to add `user-scalable=no` (alongside existing `maximum-scale=1`).
+- In `src/styles.css`, add `touch-action: manipulation` globally on `html, body` (kills the 300ms double-tap zoom on iOS) and `touch-action: none` on the orb.
+- Apply `touch-action: manipulation` to dialog/popover surfaces too so pop-ups don't zoom.
 
-This removes the `order_index === current_sentence_index` assumption from the cycle path.
+## 3. Fix web speech on iPhone (currently silent)
 
-### 2. Make cycle load document and sentence together
-Rewrite the swipe-right cycle flow so it:
-- picks the next target document
-- fetches that document’s latest saved `current_sentence_index`
-- fetches the target document’s full ordered sentence list
-- resolves the exact sentence object at that clamped index
-- updates cache/state for the target document before speaking
-- only then triggers speech for that exact resolved sentence
+Root cause: iOS Safari only allows `speechSynthesis.speak()` when called *synchronously inside a user gesture*. Today the flow is:
+- user taps orb →
+- async Supabase calls / `setTimeout(..., 60)` / awaited fetches →
+- *then* `new SpeechSynthesisUtterance` and `speak()`.
 
-If the document has no sentences, it will switch documents without speaking.
+By the time `speak()` runs the gesture context is gone, so iOS silently drops it. Desktop has no such restriction, which is why it works there.
 
-### 3. Clamp and persist index consistently after mutations
-Harden all sentence-changing paths so `current_sentence_index` never points past the real list:
-- delete current sentence
-- full edit save
-- AI insertions
-- send-to/current-position insertions
-- jump/advance/back actions
+Fix:
+- Add a one-time iOS unlock: on the very first `pointerdown` anywhere in the app, synchronously call `speechSynthesis.speak(new SpeechSynthesisUtterance(""))` to "prime" the engine, then remove the listener.
+- Refactor `speak()` in `src/routes/_authenticated/app.tsx`:
+  - Create the `SpeechSynthesisUtterance` object **synchronously** inside the gesture handler (orb tap / swipe handler) before any `await`.
+  - Pass that pre-created utterance into the async flow; only update `utterance.text` after data loads, then call `speechSynthesis.speak(utterance)`.
+  - Remove the `setTimeout(..., 60)` wrapper around `speak()` — replace the cancel/flush gap with `speechSynthesis.cancel()` immediately followed by `speak()` in the same tick (the delay is what kills it on iOS).
+- Keep the mute check and emoji stripping intact.
+- Keep the token-based race protection, but check the token *before* mutating utterance.text rather than wrapping the whole call in `setTimeout`.
 
-Where needed, I’ll make the cache and persisted document index update from the same resolved list length so future cycles always reopen on a valid sentence.
+## 4. MP4 export of the orb session
 
-### 4. Add a small sync helper instead of repeating fragile logic
-Extract a focused helper for “resolve current sentence for a document” that handles:
-- ordered sentence fetching
-- index clamping
-- cache update for corrected index
-- returning the exact sentence to display/speak
+- Add a new menu entry "Export MP4".
+- On tap, use `MediaRecorder` against `canvas.captureStream(30)` of a hidden canvas that mirrors the current orb + sentence frame-by-frame (via `requestAnimationFrame` painting the DOM area, or by recording the orb container with `html2canvas` frames composited onto the canvas).
+- Record for a user-controlled duration (default 10s, configurable later); on stop, download a `.mp4` (Safari supports `video/mp4;codecs=avc1`, Chrome falls back to `video/webm` which we transmux client-side via `mp4-muxer` if needed).
+- No backend changes.
 
-That keeps the cycle code, jump code, and mutation follow-ups using the same rules.
+Note: full-fidelity MP4 of a live DOM is non-trivial on the web. If `html2canvas`-per-frame proves too slow on mobile, fallback: record only the orb (it's a CSS animation we can repaint to canvas cheaply) and overlay the sentence text drawn directly on the canvas via `ctx.fillText`. I'll go with this fallback as the default to keep recording smooth on iPhone.
 
-### 5. Validate all speech entry points
-Review every `speak()` caller and ensure each one passes the sentence object that is actually being shown, including:
-- swipe right cycle
-- swipe up/down navigation
-- jump to
-- delete
-- edit save/jump
-- AI continuation insert
+## Files touched
+- `src/routes/_authenticated/app.tsx` — layout sizing, speech refactor, gesture-context utterance, export-MP4 button + recorder.
+- `src/routes/__root.tsx` — viewport meta (`user-scalable=no`), iOS speech unlock listener inside `RootComponent`, safe-area shells.
+- `src/routes/index.tsx` — `h-[100svh]` + safe area.
+- `src/styles.css` — global `touch-action`, safe-area utilities, orb container sizing helpers.
+- `package.json` — add `mp4-muxer` (and `html2canvas` only if needed for fallback frame capture).
 
-The existing mute behavior and emoji stripping will stay intact.
-
-## Technical details
-- File to update: `src/routes/_authenticated/app.tsx`
-- No new UI required
-- No schema change needed unless I discover the stored index itself is being persisted incorrectly
-- I’ll keep the current token-based speech cancellation, but make the resolved sentence object the only speech source
+## Out of scope
+No backend / schema changes. Rename, mute, cycle-sync behavior stays as-is.
 
 ## Expected outcome
-After the fix, when a user cycles to another document:
-- the document opens on the last saved sentence position
-- that same sentence is what appears on screen
-- that same sentence is what speech reads
-- no title and no stale sentence will ever be spoken during the switch
+- iPhone shows orb + sentence centered, no scrolling required, no double-tap zoom.
+- Tapping the orb actually speaks the sentence on iOS, matching desktop.
+- New menu item produces a downloadable MP4 of the current session.
