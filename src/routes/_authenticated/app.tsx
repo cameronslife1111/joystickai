@@ -969,7 +969,15 @@ function AppPage() {
         <div className="pointer-events-none flex justify-center pb-4">
           <div className="pointer-events-auto flex gap-3">
             <button
-              onClick={cancelCompose}
+              onClick={async () => {
+                const text = composeText.trim();
+                if (text) {
+                  const ok = await copyToClipboard(text);
+                  if (ok) toast.success("Copied to clipboard");
+                  else toast.error("Failed to copy");
+                }
+                cancelCompose();
+              }}
               className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
               style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
             >
