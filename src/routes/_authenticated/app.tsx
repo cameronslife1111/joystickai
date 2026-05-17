@@ -50,6 +50,22 @@ function AppPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
+  // Unseen media count (for menu badge). Invalidated whenever this page mounts
+  // (i.e. after returning from /media) and whenever media is seen/changed.
+  const { data: unseenCount = 0 } = useQuery({
+    queryKey: ["media_unseen_count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("media_assets")
+        .select("id", { count: "exact", head: true })
+        .is("seen_at", null);
+      return count ?? 0;
+    },
+  });
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+  }, [qc]);
+
   // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
