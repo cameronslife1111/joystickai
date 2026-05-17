@@ -245,7 +245,7 @@ function MediaPage() {
   const handleDelete = useCallback(async () => {
     if (!sheetAsset) return;
     const a = sheetAsset;
-    const viewing = currentAsset?.id === a.id;
+    const viewing = viewerIdx !== null && filtered[viewerIdx]?.id === a.id;
     qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
     setConfirmDelete(false);
     setSheetAsset(null);
@@ -256,7 +256,7 @@ function MediaPage() {
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
     toast.success("Deleted");
-  }, [sheetAsset, qc, currentAsset]);
+  }, [sheetAsset, qc, viewerIdx, filtered]);
 
   // Viewer keyboard + swipe
   useEffect(() => {
