@@ -572,7 +572,23 @@ function AppPage() {
       {/* Sentence */}
       <section className="flex flex-1 items-center justify-center px-6 pb-8">
         <div className="w-full max-w-2xl text-center">
-          {editing ? (
+          {composing ? (
+            <textarea
+              ref={(el) => { if (el) el.focus(); }}
+              value={composeText}
+              onChange={(e) => setComposeText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelCompose();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  if (composeText.trim()) setSendOpen(true);
+                }
+              }}
+              placeholder="Type your new idea…"
+              className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none placeholder:text-muted-foreground/40 md:text-4xl"
+              rows={4}
+            />
+          ) : editing ? (
             <textarea
               ref={(el) => {
                 if (el) {
@@ -605,6 +621,29 @@ function AppPage() {
           )}
         </div>
       </section>
+
+      {/* Compose action buttons (above orb) */}
+      {composing && (
+        <div className="pointer-events-none flex justify-center pb-4">
+          <div className="pointer-events-auto flex gap-3">
+            <button
+              onClick={cancelCompose}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setSendOpen(true)}
+              disabled={!composeText.trim()}
+              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+            >
+              Send to…
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Orb */}
       <section className="flex items-center justify-center pb-[max(env(safe-area-inset-bottom,1.5rem),2rem)]">
