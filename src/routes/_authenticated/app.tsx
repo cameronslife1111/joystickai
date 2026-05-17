@@ -168,10 +168,18 @@ function AppPage() {
   const stripEmoji = (s: string) =>
     s
       .replace(/\p{Extended_Pictographic}/gu, "")
+      .replace(/\p{Emoji_Presentation}/gu, "")
+      .replace(/\p{Emoji}/gu, "")
+      .replace(/\p{Emoji_Component}/gu, "")
+      .replace(/\p{So}/gu, "") // other symbols (dingbats, arrows w/ emoji presentation)
+      .replace(/\p{Sk}/gu, "") // modifier symbols
       .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "") // regional indicator flags
-      .replace(/[\u200D\uFE0F\uFE0E]/gu, "") // ZWJ + variation selectors
+      .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "") // skin tone modifiers
+      .replace(/[\u200D\uFE0F\uFE0E\u20E3]/gu, "") // ZWJ + variation selectors + keycap
+      .replace(/[\u{E0020}-\u{E007F}]/gu, "") // tag characters (flag sequences)
       .replace(/\s{2,}/g, " ")
       .trim();
+
 
   // TTS — token-gated, race-safe against rapid handler chains.
   // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
