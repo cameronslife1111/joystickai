@@ -704,15 +704,11 @@ function AppPage() {
       setMenuOpen(false);
       setJumpOpen(true);
     }},
-    { e: "🎬", t: recording ? "Recording…" : "Export MP4", fn: () => {
-      if (recording) return;
-      void exportMp4();
-    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, muted, saveMuted, docs, activeDoc, favorites, saveFavorites, qc, navigate, recording, exportMp4]);
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {
