@@ -50,6 +50,22 @@ function AppPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
+  // Unseen media count (for menu badge). Invalidated whenever this page mounts
+  // (i.e. after returning from /media) and whenever media is seen/changed.
+  const { data: unseenCount = 0 } = useQuery({
+    queryKey: ["media_unseen_count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("media_assets")
+        .select("id", { count: "exact", head: true })
+        .is("seen_at", null);
+      return count ?? 0;
+    },
+  });
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+  }, [qc]);
+
   // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
@@ -925,11 +941,15 @@ function AppPage() {
       if (importInputRef.current) importInputRef.current.value = "";
       importInputRef.current?.click();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate]);
+    { e: "🖼️", t: "Media Gallery", fn: () => {
+      setMenuOpen(false);
+      navigate({ to: "/media" });
+    }, badge: unseenCount },
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
-    const filled: Array<{ e: string; t: string; fn: () => void } | null> = Array(24).fill(null);
+    const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
     filled[1] = grid[3];   // 2  Rename
     filled[2] = grid[2];   // 3  New doc
@@ -939,6 +959,7 @@ function AppPage() {
     filled[6] = grid[9];   // 7  Copy sentence
     filled[7] = grid[10];  // 8  Copy document
     filled[8] = grid[12];  // 9  Import checklists
+    filled[9] = grid[13];  // 10 Media Gallery
     filled[10] = grid[8];  // 11 Search docs
     filled[11] = grid[6];  // 12 Jump to
     filled[15] = grid[5];  // 16 Favorites
@@ -1200,6 +1221,14 @@ function AppPage() {
                       <div className="text-xl">{slot.e}</div>
                       <div className="text-[10px] leading-tight">{slot.t}</div>
                     </div>
+                  ) : null}
+                  {slot?.badge && slot.badge > 0 ? (
+                    <span
+                      className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
+                      style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                    >
+                      {slot.badge > 99 ? "99+" : slot.badge}
+                    </span>
                   ) : null}
                 </button>
               ))}
