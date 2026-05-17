@@ -554,7 +554,7 @@ function AppPage() {
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
               Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
             </div>
-            <div className="grid grid-cols-5 gap-1.5 overflow-y-auto p-1">
+            <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
               {Array.from({ length: 50 }).map((_, i) => {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
@@ -562,20 +562,19 @@ function AppPage() {
                   <button
                     key={i}
                     onClick={() => setPickerSlot(i)}
-                    className="relative aspect-square rounded-xl border border-foreground/10 bg-foreground/5 p-1 text-center transition active:scale-95 hover:bg-foreground/10"
+                    className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition active:scale-[0.98] hover:bg-foreground/10"
                   >
-                    <span className="absolute left-1 top-0.5 text-[9px] text-muted-foreground">
+                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                       {i + 1}
                     </span>
-                    <div className="flex h-full items-center justify-center">
-                      {doc ? (
-                        <div className="line-clamp-3 text-[10px] leading-tight">
-                          {doc.title}
-                        </div>
-                      ) : (
-                        <div className="text-lg text-muted-foreground/50">+</div>
-                      )}
-                    </div>
+                    {doc ? (
+                      <span className="flex-1 truncate text-sm">{doc.title}</span>
+                    ) : (
+                      <span className="flex-1 text-sm italic text-muted-foreground/60">Empty</span>
+                    )}
+                    <span className="text-base text-muted-foreground/60">
+                      {doc ? "›" : "+"}
+                    </span>
                   </button>
                 );
               })}
