@@ -497,7 +497,13 @@ function AppPage() {
         <div className="w-full max-w-2xl text-center">
           {editing ? (
             <textarea
-              autoFocus
+              ref={(el) => {
+                if (el) {
+                  el.focus();
+                  const len = el.value.length;
+                  el.setSelectionRange(len, len);
+                }
+              }}
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onKeyDown={(e) => {
