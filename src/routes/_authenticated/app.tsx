@@ -225,7 +225,6 @@ function AppPage() {
       const targetDoc = docs.find((d) => d.id === nextSlot.id);
       if (!targetDoc) return;
       setActiveDocId(targetDoc.id);
-      toast(`★ ${nextSlot.i + 1} · ${targetDoc.title}`);
 
       // Fetch the exact sentence at the doc's saved index and speak it
       const targetIdx = targetDoc.current_sentence_index ?? 0;
@@ -244,7 +243,14 @@ function AppPage() {
     const idx = docs.findIndex((d) => d.id === activeDoc.id);
     const next = docs[(idx + 1) % docs.length];
     setActiveDocId(next.id);
-    toast(next.title);
+    const nextIdx = next.current_sentence_index ?? 0;
+    const { data: row } = await supabase
+      .from("sentences")
+      .select("content")
+      .eq("document_id", next.id)
+      .eq("order_index", nextIdx)
+      .maybeSingle();
+    if (row?.content) speak(row.content);
   }, [docs, activeDoc, favorites, speak]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
