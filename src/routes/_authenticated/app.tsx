@@ -331,7 +331,8 @@ function AppPage() {
         .from("sentences")
         .select("*")
         .eq("document_id", targetId)
-        .order("order_index", { ascending: true }),
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
     ]);
     if (token !== speechTokenRef.current) return; // superseded by newer action
 
