@@ -27,6 +27,7 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
@@ -138,11 +139,20 @@ function AppPage() {
       .eq("id", activeDoc.id);
   }, [activeDoc, qc]);
 
+  const jumpTo = useCallback(async (target: number) => {
+    if (!sentences || sentences.length === 0) return;
+    const clamped = Math.max(0, Math.min(target, sentences.length - 1));
+    await setIndex(clamped);
+    speak(sentences[clamped].content);
+    setJumpOpen(false);
+  }, [sentences, setIndex, speak]);
+
   const onTap = useCallback(async () => {
     if (!activeDoc || !sentences) return;
     const next = currentIdx + 1;
     if (next >= sentences.length) {
       toast("End of document");
+      if (sentences[currentIdx]) speak(sentences[currentIdx].content);
       return;
     }
     await setIndex(next);
@@ -150,7 +160,11 @@ function AppPage() {
   }, [activeDoc, sentences, currentIdx, setIndex, speak]);
 
   const onSwipeUp = useCallback(async () => {
-    if (currentIdx === 0) { toast("Start of document"); return; }
+    if (currentIdx === 0) {
+      toast("Start of document");
+      if (sentences?.[0]) speak(sentences[0].content);
+      return;
+    }
     const prev = currentIdx - 1;
     await setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content);
@@ -402,6 +416,10 @@ function AppPage() {
       setMenuOpen(false);
       setFavoritesOpen(true);
     }},
+    { e: "🔃", t: "Jump to", fn: () => {
+      setMenuOpen(false);
+      setJumpOpen(true);
+    }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
@@ -621,6 +639,47 @@ function AppPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* Jump-to overlay */}
+      {jumpOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setJumpOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">🔃 Jump to</div>
+              <button
+                onClick={() => setJumpOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { label: "⤒  Jump to top", target: 0 },
+                { label: "⏪  Jump back 10", target: currentIdx - 10 },
+                { label: "◀  Jump back 5", target: currentIdx - 5 },
+                { label: "▶  Jump ahead 5", target: currentIdx + 5 },
+                { label: "⏩  Jump ahead 10", target: currentIdx + 10 },
+                { label: "⤓  Jump to end", target: (sentences?.length ?? 1) - 1 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => jumpTo(opt.target)}
+                  disabled={!sentences || sentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </main>
