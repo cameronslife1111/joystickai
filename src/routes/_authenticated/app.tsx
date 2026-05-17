@@ -38,6 +38,7 @@ function AppPage() {
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
   const speechTokenRef = useRef<number>(0);
+  const mutedRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
   const callAi = useServerFn(aiContinue);
@@ -98,30 +99,48 @@ function AppPage() {
     },
   });
 
-  // Load user preferences (favorites array)
+  // Load user preferences (favorites array + muted flag)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[] }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites")
+        .select("favorites, muted")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites };
+      return { favorites, muted: !!(data as any)?.muted };
     },
   });
   const favorites = prefs?.favorites ?? [];
+  const muted = prefs?.muted ?? false;
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    qc.setQueryData(["user_preferences"], { favorites: next });
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), favorites: next,
+    }));
     await supabase.from("user_preferences").upsert(
       { user_id: u.user.id, favorites: next as any },
       { onConflict: "user_id" },
     );
   }, [qc]);
+
+  const saveMuted = useCallback(async (next: boolean) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), muted: next,
+    }));
+    if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, muted: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
 
   // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
   // the next swipe-right always advances to the NEXT filled slot — never
@@ -135,8 +154,12 @@ function AppPage() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
+  // Keep mutedRef in sync with persisted preference.
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+
   // TTS — token-gated, race-safe against rapid handler chains
   const speak = useCallback((text: string, token?: number) => {
+    if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     const wasSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
@@ -566,6 +589,11 @@ function AppPage() {
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
+    {
+      e: muted ? "🔇" : "🔊",
+      t: muted ? "Sound off" : "Sound on",
+      fn: () => { void saveMuted(!muted); setMenuOpen(false); },
+    },
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
@@ -613,7 +641,7 @@ function AppPage() {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-  ], [theme, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
+  ], [theme, muted, saveMuted, docs, activeDoc, favorites, saveFavorites, qc, navigate]);
 
   // Empty slots padding to 15
   const slots = useMemo(() => {

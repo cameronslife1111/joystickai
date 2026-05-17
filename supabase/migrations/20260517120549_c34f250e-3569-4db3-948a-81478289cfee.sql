@@ -1,0 +1,1 @@
+ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS muted boolean NOT NULL DEFAULT false;
