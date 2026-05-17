@@ -101,8 +101,6 @@ function MediaPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const longPressFiredRef = useRef(false);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { data: assets = [], isLoading } = useQuery({
