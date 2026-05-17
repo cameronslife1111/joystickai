@@ -717,6 +717,72 @@ function AppPage() {
   }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx]);
 
 
+  // Parse a .txt file of checklists into [{ title, sentences[] }, ...]
+  // Format: titles on their own line wrapped in ===...===, items below as
+  // checkbox lines like "[ ] foo", "[x] bar" (optionally prefixed with - or *).
+  const parseChecklists = useCallback((text: string) => {
+    const lines = text.replace(/\r\n?/g, "\n").split("\n");
+    const titleRe = /^\s*===\s*(.+?)\s*===\s*$/;
+    const itemRe = /^\s*(?:[-*]\s*)?\[[\sxX]?\]\s*(.+?)\s*$/;
+    const out: Array<{ title: string; sentences: string[] }> = [];
+    let cur: { title: string; sentences: string[] } | null = null;
+    for (const raw of lines) {
+      const tm = raw.match(titleRe);
+      if (tm) {
+        if (cur && cur.sentences.length > 0) out.push(cur);
+        cur = { title: tm[1] || "Untitled", sentences: [] };
+        continue;
+      }
+      if (!cur) continue;
+      const im = raw.match(itemRe);
+      if (!im) continue;
+      let s = im[1].trim();
+      if (!s) continue;
+      if (!/[.!?]$/.test(s)) s += ".";
+      cur.sentences.push(s);
+    }
+    if (cur && cur.sentences.length > 0) out.push(cur);
+    return out;
+  }, []);
+
+  const handleImportFile = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = parseChecklists(text);
+      if (parsed.length === 0) { toast.error("No checklists found"); return; }
+      if (!confirm(`Import ${parsed.length} checklist${parsed.length === 1 ? "" : "s"} as new document${parsed.length === 1 ? "" : "s"}?`)) return;
+
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) { toast.error("Not signed in"); return; }
+      const basePos = docs?.length ?? 0;
+      const tId = toast.loading(`Importing 0 / ${parsed.length}…`);
+      let firstId: string | null = null;
+      let done = 0;
+      for (let i = 0; i < parsed.length; i++) {
+        const item = parsed[i];
+        const { data: doc, error: dErr } = await supabase
+          .from("documents")
+          .insert({ user_id: u.user.id, title: item.title, position: basePos + i })
+          .select().single();
+        if (dErr || !doc) { toast.error(`Failed to create "${item.title}"`); continue; }
+        if (!firstId) firstId = doc.id;
+        const { error: sErr } = await supabase.rpc("insert_sentences_at", {
+          p_document_id: doc.id,
+          p_contents: item.sentences,
+          p_insert_at: 0,
+        });
+        if (sErr) toast.error(`Failed sentences for "${item.title}"`);
+        done++;
+        toast.loading(`Importing ${done} / ${parsed.length}…`, { id: tId });
+      }
+      toast.success(`Imported ${done} checklist${done === 1 ? "" : "s"}`, { id: tId });
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      if (firstId) setActiveDocId(firstId);
+    } catch (e: any) {
+      toast.error(e?.message || "Import failed");
+    }
+  }, [parseChecklists, docs, qc]);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
