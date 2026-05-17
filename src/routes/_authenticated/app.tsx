@@ -90,6 +90,31 @@ function AppPage() {
     },
   });
 
+  // Load user preferences (favorites array)
+  const { data: prefs } = useQuery({
+    queryKey: ["user_preferences"],
+    queryFn: async (): Promise<{ favorites: (string | null)[] }> => {
+      const { data } = await supabase
+        .from("user_preferences")
+        .select("favorites")
+        .maybeSingle();
+      const raw = (data?.favorites as unknown) ?? [];
+      const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
+      return { favorites };
+    },
+  });
+  const favorites = prefs?.favorites ?? [];
+
+  const saveFavorites = useCallback(async (next: (string | null)[]) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], { favorites: next });
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, favorites: next as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc]);
+
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
