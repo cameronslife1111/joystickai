@@ -181,6 +181,31 @@ function AppPage() {
       .replace(/\s{2,}/g, " ")
       .trim();
 
+  // Copy text to the device clipboard. Must be called synchronously from a
+  // user gesture on iOS. Falls back to a hidden textarea + execCommand.
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
 
   // TTS — token-gated, race-safe against rapid handler chains.
   // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
