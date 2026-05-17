@@ -434,9 +434,16 @@ function MediaPage() {
         multiple
         className="hidden"
         onChange={(e) => {
-          const files = e.target.files;
-          void handleFilesPicked(files);
-          if (fileInputRef.current) fileInputRef.current.value = "";
+          const input = e.currentTarget;
+          const picked = input.files;
+          console.log("[media] input onChange, files:", picked?.length ?? 0);
+          // Snapshot files into a new FileList-like array before resetting input
+          const snapshot = picked ? Array.from(picked) : [];
+          input.value = "";
+          // Re-wrap in a DataTransfer to preserve FileList shape
+          const dt = new DataTransfer();
+          snapshot.forEach((f) => dt.items.add(f));
+          void handleFilesPicked(dt.files);
         }}
       />
 
