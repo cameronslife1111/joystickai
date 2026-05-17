@@ -1200,7 +1200,7 @@ function AppPage() {
       {sendOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
-          onClick={() => { setSendOpen(false); setSendDocId(null); }}
+          onClick={() => { setSendOpen(false); setSendDocId(null); setSendStage("doc"); setSendTargetSentences([]); }}
         >
           <div
             className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
