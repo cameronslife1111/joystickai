@@ -160,37 +160,41 @@ function AppPage() {
 
   const jumpTo = useCallback(async (target: number) => {
     if (!sentences || sentences.length === 0) return;
+    const token = claimSpeech();
     const clamped = Math.max(0, Math.min(target, sentences.length - 1));
     await setIndex(clamped);
-    speak(sentences[clamped].content);
+    speak(sentences[clamped].content, token);
     setJumpOpen(false);
-  }, [sentences, setIndex, speak]);
+  }, [sentences, setIndex, speak, claimSpeech]);
 
   const onTap = useCallback(async () => {
     if (!activeDoc || !sentences) return;
+    const token = claimSpeech();
     const next = currentIdx + 1;
     if (next >= sentences.length) {
       toast("End of document");
-      if (sentences[currentIdx]) speak(sentences[currentIdx].content);
+      if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
     await setIndex(next);
-    speak(sentences[next].content);
-  }, [activeDoc, sentences, currentIdx, setIndex, speak]);
+    speak(sentences[next].content, token);
+  }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
   const onSwipeUp = useCallback(async () => {
+    const token = claimSpeech();
     if (currentIdx === 0) {
       toast("Start of document");
-      if (sentences?.[0]) speak(sentences[0].content);
+      if (sentences?.[0]) speak(sentences[0].content, token);
       return;
     }
     const prev = currentIdx - 1;
     await setIndex(prev);
-    if (sentences?.[prev]) speak(sentences[prev].content);
-  }, [currentIdx, setIndex, sentences, speak]);
+    if (sentences?.[prev]) speak(sentences[prev].content, token);
+  }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 
   const onSwipeDown = useCallback(async () => {
     if (!currentSentence || !sentences) return;
+    const token = claimSpeech();
     const deleted = currentSentence;
     const remaining = sentences.filter((s) => s.id !== deleted.id);
     // optimistic remove + reindex
@@ -204,7 +208,7 @@ function AppPage() {
     if (remaining.length > 0) {
       const nextIdx = Math.min(currentIdx, remaining.length - 1);
       if (nextIdx !== currentIdx) await setIndex(nextIdx);
-      speak(remaining[nextIdx].content);
+      speak(remaining[nextIdx].content, token);
     }
 
     toast("Sentence deleted", {
@@ -222,7 +226,7 @@ function AppPage() {
         },
       },
     });
-  }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId]);
+  }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
