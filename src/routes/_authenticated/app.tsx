@@ -1184,6 +1184,13 @@ function AppPage() {
                   ⤒  Top of list
                 </button>
                 <button
+                  onClick={() => sendIdea(sendDocId, "current")}
+                  disabled={sendTargetSentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  ●  After current sentence
+                </button>
+                <button
                   onClick={() => {
                     if (sendTargetSentences.length === 0) {
                       sendIdea(sendDocId, "top");
@@ -1193,7 +1200,7 @@ function AppPage() {
                   }}
                   className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
                 >
-                  ●  After a specific sentence…
+                  ⋯  After a specific sentence…
                 </button>
                 <button
                   onClick={() => sendIdea(sendDocId, "bottom")}
