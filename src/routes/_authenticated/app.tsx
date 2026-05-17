@@ -429,7 +429,60 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
     const token = claimSpeech();
     speak(parts[0], token);
-  }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex]);
+  }, [activeDocId, currentSentence, currentIdx, sentences, editText, qc, setIndex, speak, claimSpeech]);
+
+  const cancelCompose = useCallback(() => {
+    setComposing(false);
+    setComposeText("");
+    setSendOpen(false);
+    setSendDocId(null);
+  }, []);
+
+  const sendIdea = useCallback(async (
+    targetDocId: string,
+    position: "top" | "bottom" | "current",
+  ) => {
+    const parts = splitIntoSentences(composeText);
+    if (parts.length === 0) { cancelCompose(); return; }
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+
+    const targetDoc = docs?.find((d) => d.id === targetDocId);
+    const { data: existing } = await supabase
+      .from("sentences")
+      .select("id, order_index")
+      .eq("document_id", targetDocId)
+      .order("order_index", { ascending: true });
+    const list = existing ?? [];
+
+    let insertAt: number;
+    if (position === "top") insertAt = 0;
+    else if (position === "bottom") insertAt = list.length;
+    else {
+      const curIdx = targetDocId === activeDocId
+        ? currentIdx
+        : (targetDoc?.current_sentence_index ?? 0);
+      insertAt = list.length === 0 ? 0 : Math.min(curIdx + 1, list.length);
+    }
+
+    const tail = list.slice(insertAt);
+    for (let i = tail.length - 1; i >= 0; i--) {
+      await supabase.from("sentences")
+        .update({ order_index: tail[i].order_index + parts.length })
+        .eq("id", tail[i].id);
+    }
+    await supabase.from("sentences").insert(
+      parts.map((content, i) => ({
+        user_id: u.user!.id,
+        document_id: targetDocId,
+        content,
+        order_index: insertAt + i,
+      })),
+    );
+    qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
+    toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
+    cancelCompose();
+  }, [composeText, docs, activeDocId, currentIdx, qc, cancelCompose]);
 
   // Menu actions
   const grid = useMemo(() => [
