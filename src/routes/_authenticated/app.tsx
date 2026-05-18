@@ -1803,21 +1803,39 @@ function AppPage() {
             </div>
 
             {sendStage === "doc" && (
-              <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
-                {(docs ?? []).map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => pickSendDoc(d.id)}
-                    className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
-                  >
-                    {d.title}
-                  </button>
-                ))}
-                {(!docs || docs.length === 0) && (
-                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    No documents yet.
-                  </div>
-                )}
+              <div className="flex min-h-0 flex-col gap-2">
+                <Input
+                  placeholder="Search lists…"
+                  value={sendSearchQuery}
+                  onChange={(e) => setSendSearchQuery(e.target.value)}
+                  className="shrink-0"
+                />
+                <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+                  {(() => {
+                    const q = sendSearchQuery.trim().toLowerCase();
+                    const sorted = sortDocsByTitle(docs ?? []);
+                    const filtered = q
+                      ? sorted.filter((d) =>
+                          (d.title || "").toLowerCase().includes(q),
+                        )
+                      : sorted;
+                    return filtered.length > 0 ? (
+                      filtered.map((d) => (
+                        <button
+                          key={d.id}
+                          onClick={() => pickSendDoc(d.id)}
+                          className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                        >
+                          {d.title}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                        {q ? "No matching lists." : "No documents yet."}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 
