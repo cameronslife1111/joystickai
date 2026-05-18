@@ -114,7 +114,7 @@ export function AIPlansScreen({ onClose }: Props) {
           </section>
         ))}
       </div>
-      <PlanDetailDialog planId={openId} open={!!openId} onOpenChange={(v) => { if (!v) setOpenId(null); }} />
+      <PlanDetailDialog planId={openId} open={!!openId} onOpenChange={(v: boolean) => { if (!v) setOpenId(null); }} />
     </div>
   );
 }
