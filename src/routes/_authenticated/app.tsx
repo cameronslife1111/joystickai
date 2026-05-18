@@ -1056,7 +1056,7 @@ function AppPage() {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-    { e: "📥", t: "Import checklists", fn: () => {
+    { e: "📥", t: "Import text", fn: () => {
       setMenuOpen(false);
       // Reset value so picking the same file twice still fires onChange
       if (importInputRef.current) importInputRef.current.value = "";
@@ -1066,7 +1066,11 @@ function AppPage() {
       setMenuOpen(false);
       navigate({ to: "/media" });
     }, badge: unseenCount },
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount]);
+    { e: "📤", t: "Export text", fn: () => {
+      setMenuOpen(false);
+      void handleExportAll();
+    }},
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
