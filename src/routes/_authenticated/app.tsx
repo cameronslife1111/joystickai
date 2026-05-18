@@ -1102,7 +1102,7 @@ function AppPage() {
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
-    filled[1] = grid[5];   // 2  Rename
+    filled[1] = grid[6];   // 2  Rename
     filled[2] = grid[5];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc

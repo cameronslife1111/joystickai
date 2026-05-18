@@ -1,31 +1,36 @@
-## Changes to `src/routes/_authenticated/app.tsx`
+## 1. Fix duplicate "New doc" in menu slots 2 & 3
 
-### 1. Rename slot 9 button
-- In the `grid` array, change `t: "Import checklists"` → `t: "Import text"` (emoji 📥 unchanged, behavior unchanged).
+In `src/routes/_authenticated/app.tsx` (~line 1105), slot 2 (`filled[1]`) and slot 3 (`filled[2]`) both point to `grid[5]`, which is the "New doc" action — that's why two New doc buttons appear. The intent (per the comment) was Rename in slot 2 and New doc in slot 3.
 
-### 2. Loosen the importer to accept plain sentences
-- In `parseChecklists`, after the existing `itemRe` checkbox match, fall back to treating any non-empty, non-title line as a sentence (skip blanks). Still auto-append `.` if missing terminal punctuation. This keeps existing checkbox-format files importing exactly as before AND accepts the new plain-text export.
+Change:
+```
+filled[1] = grid[6];   // 2  Rename
+filled[2] = grid[5];   // 3  New doc
+```
+(grid[6] is the `✏️ Rename` entry.) No other slot mapping changes.
 
-### 3. Add Export text action
-- Add a new entry to the `grid` array:
-  - `{ e: "📤", t: "Export text", fn: handleExportAll }`
-- New `handleExportAll` callback:
-  1. Fetch all of the user's documents ordered by `position`.
-  2. For each document, fetch its sentences ordered by `order_index`.
-  3. Build a single string:
-     ```
-     === Title 1 ===
-     Sentence one.
-     Sentence two.
+## 2. Add search to the favorites slot picker
 
-     === Title 2 ===
-     ...
-     ```
-  4. Trigger a browser download as `joystick-export-YYYY-MM-DD.txt` using a Blob + temporary `<a download>` link.
-  5. Toast success / error.
-  6. Close the menu.
+Currently when the user taps a Favorites slot, a sheet lists all 300+ docs unfiltered. Add a search input at the top of that picker (lines ~1467–1516 of `app.tsx`).
 
-### 4. Wire into slot 17
-- In the `slots` useMemo, add `filled[16] = grid[<new export index>];` (the new entry is appended at the end of `grid`, so the index is `grid.length - 1` at definition time — use the explicit numeric index matching the new array length).
+- New local state `pickerQuery` (string), reset to `""` whenever `pickerSlot` opens or closes.
+- Render a sticky search `<input>` at the top of the sheet styled to match the existing dark-glass UI (rounded, border `border-foreground/10`, bg `bg-foreground/5`, autoFocus).
+- Filter `(docs ?? [])` by case-insensitive `title.includes(query)` before mapping to buttons.
+- "Clear slot" stays above the search (always visible when slot is filled), or moves to a small pinned row — keep it above the search so destructive action is never hidden by typed text. The filtered list scrolls beneath.
+- Empty filter result shows "No matches" in muted text.
 
-No other UI, no other dialogs, no styling changes. No backend changes — exports happen client-side; the importer change is local to `parseChecklists`.
+## 3. Add "Replace all matching slots" button
+
+Below the existing "Clear slot" button (only shown when `favorites[pickerSlot]` is set), add a second button:
+
+- Label: `Replace all matching slots`
+- Style: matches Clear slot's outlined look but neutral (e.g. `border-foreground/20 bg-foreground/5`, not destructive red).
+- Behavior: capture `targetId = favorites[pickerSlot]`. When the user then picks a doc `d` from the list, instead of writing only `next[pickerSlot] = d.id`, replace **every** slot whose current value equals `targetId` with `d.id`, then save.
+- Implement via a new state flag `replaceMatching: boolean` (default `false`). Tapping the button toggles it on and shows a small hint above the doc list ("Picking a doc will replace all N slots currently set to '<title>'"). Tapping a doc then performs the multi-slot replace and resets the flag.
+- Reset `replaceMatching` to `false` whenever `pickerSlot` changes or the picker closes.
+- If the target doc was deleted/missing, fall back to a single-slot replace.
+
+No backend changes (favorites are already stored as a JSON array on `user_preferences` via the existing `saveFavorites`). No new components, no schema changes — all edits are in `src/routes/_authenticated/app.tsx`.
+
+## Files touched
+- `src/routes/_authenticated/app.tsx` (slots map fix, picker search input, replace-all button + flag)
