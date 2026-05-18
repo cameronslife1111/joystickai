@@ -33,6 +33,7 @@ function AppPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
+  const [generateTextOpen, setGenerateTextOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
