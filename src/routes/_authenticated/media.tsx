@@ -4,8 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
-  RefreshCw, Film, Trash2, MoreVertical,
+  RefreshCw, Film, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers,
 } from "lucide-react";
+import { GenerateImageDialog } from "@/components/GenerateImageDialog";
+import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
+import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -20,13 +23,14 @@ export const Route = createFileRoute("/_authenticated/media")({
 });
 
 type Kind = "image" | "video" | "audio";
+type AssetStatus = "generating" | "completed" | "failed" | null;
 type Asset = {
   id: string;
   user_id: string;
   title: string;
   kind: Kind;
-  url: string;
-  storage_path: string;
+  url: string | null;
+  storage_path: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   duration_seconds: number | null;
@@ -34,6 +38,8 @@ type Asset = {
   height: number | null;
   seen_at: string | null;
   created_at: string;
+  status?: AssetStatus;
+  error_message?: string | null;
 };
 type Filter = "all" | "image" | "video" | "audio";
 
