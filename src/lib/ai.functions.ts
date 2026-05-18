@@ -247,3 +247,115 @@ export const analyzeImage = createServerFn({ method: "POST" })
       targetDocumentId: data.targetDocumentId,
     };
   });
+
+const webSearchSchema = z.object({
+  prompt: z.string().min(1).max(8000),
+  contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
+  targetDocumentId: z.string().uuid(),
+  position: z.enum(["top", "bottom", "after_current"]),
+});
+
+export const webSearch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => webSearchSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+
+    const parts: string[] = [];
+    if (data.prompt.trim()) parts.push(data.prompt.trim());
+    for (const docId of data.contextDocumentIds) {
+      const { data: rows } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", docId)
+        .order("order_index", { ascending: true });
+      const joined = (rows ?? []).map((r) => r.content).join(" ").trim();
+      if (joined) parts.push(joined);
+    }
+    const userInput = parts.join("\n\n");
+
+    const apiKey = process.env.PERPLEXITY_API_KEY;
+    if (!apiKey) throw new Error("Missing PERPLEXITY_API_KEY");
+
+    const res = await fetch("https://api.perplexity.ai/v1/agent", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        preset: "pro-search",
+        input: userInput,
+        tools: [{ type: "web_search" }],
+        instructions:
+          "You are Joystick AI, a focused writing companion. The user is researching a topic and your reply will be inserted directly into their document. " +
+          "Use web_search to find current, accurate information when relevant. " +
+          "Respond in concise, useful prose. Plain text only — no markdown, no lists, no headings, no inline citation numbers like [1] or footnote markers. " +
+          "Use clear, separable sentences each ending in . ! or ?. " +
+          "Keep total length under ~10 sentences unless the user explicitly asks for more.",
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Perplexity ${res.status}: ${errText.slice(0, 400)}`);
+    }
+
+    const result: any = await res.json();
+
+    let text = "";
+    if (Array.isArray(result?.output)) {
+      for (const item of result.output) {
+        if (item?.type === "message" && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c?.type === "output_text" && typeof c.text === "string") {
+              text += c.text;
+            }
+          }
+        }
+      }
+    }
+    text = text.trim();
+    if (!text) {
+      throw new Error("Perplexity returned an empty response");
+    }
+
+    text = text.replace(/\[\d+(?:,\s*\d+)*\]/g, "").replace(/\s+/g, " ").trim();
+
+    const newSentences = splitIntoSentences(text);
+    if (newSentences.length === 0) {
+      throw new Error("Could not parse a sentence from the response");
+    }
+
+    let insertAt = 0;
+    if (data.position === "top") {
+      insertAt = 0;
+    } else if (data.position === "bottom") {
+      const { count } = await supabase
+        .from("sentences")
+        .select("id", { count: "exact", head: true })
+        .eq("document_id", data.targetDocumentId);
+      insertAt = count ?? 0;
+    } else {
+      const { data: doc } = await supabase
+        .from("documents")
+        .select("current_sentence_index")
+        .eq("id", data.targetDocumentId)
+        .single();
+      const cur = typeof doc?.current_sentence_index === "number" ? doc.current_sentence_index : -1;
+      insertAt = cur + 1;
+    }
+
+    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: data.targetDocumentId,
+      p_contents: newSentences,
+      p_insert_at: insertAt,
+    });
+    if (rpcErr) throw new Error(rpcErr.message);
+
+    return {
+      insertedCount: newSentences.length,
+      insertAt,
+      targetDocumentId: data.targetDocumentId,
+    };
+  });
