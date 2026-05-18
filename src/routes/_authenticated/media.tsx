@@ -533,24 +533,38 @@ function MediaPage() {
         >
           {/* Asset */}
           <div className="flex h-full w-full items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-            {currentAsset.kind === "image" && (
-              <img
-                src={currentAsset.url}
-                alt={currentAsset.title}
-                draggable={false}
-                style={NO_CALLOUT_STYLE}
-                className="max-h-full max-w-full object-contain"
-              />
-            )}
-            {currentAsset.kind === "video" && (
-              <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
-            )}
-            {currentAsset.kind === "audio" && (
-              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
-                <Music className="mx-auto mb-3 h-10 w-10" />
-                <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
-                <audio src={currentAsset.url} controls className="w-full" />
+            {currentAsset.status === "generating" ? (
+              <div className="flex flex-col items-center gap-3 text-white">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm">Generating...</span>
               </div>
+            ) : currentAsset.status === "failed" ? (
+              <div className="flex flex-col items-center gap-3 text-white">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <span className="text-sm">{currentAsset.error_message ?? "Generation failed"}</span>
+              </div>
+            ) : (
+              <>
+                {currentAsset.kind === "image" && currentAsset.url && (
+                  <img
+                    src={currentAsset.url}
+                    alt={currentAsset.title}
+                    draggable={false}
+                    style={NO_CALLOUT_STYLE}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                )}
+                {currentAsset.kind === "video" && currentAsset.url && (
+                  <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
+                )}
+                {currentAsset.kind === "audio" && currentAsset.url && (
+                  <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
+                    <Music className="mx-auto mb-3 h-10 w-10" />
+                    <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
+                    <audio src={currentAsset.url} controls className="w-full" />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -602,9 +616,16 @@ function MediaPage() {
               <SheetButton icon={<Download className="h-4 w-4" />} label="Download"
                 onClick={() => handleDownload(sheetAsset)}
               />
-              <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
-                onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
-              />
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setRegenerateAsset(a); }}
+                />
+              )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Layers className="h-4 w-4" />} label="Remix"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setRemixAsset(a); }}
+                />
+              )}
               {sheetAsset.kind === "image" && (
                 <SheetButton icon={<Film className="h-4 w-4" />} label="Convert to Video"
                   onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
