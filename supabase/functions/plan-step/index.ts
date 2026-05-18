@@ -29,8 +29,13 @@ function resolveTemplates(value: any, steps: any[]): any {
     return value.replace(/\{\{step_(\d+)\.([^}]+)\}\}/g, (_, idxStr, path) => {
       const idx = parseInt(idxStr, 10);
       const src = steps[idx]?.result;
-      if (src == null) throw new Error(`Template refers to step_${idx} which has no result`);
-      return String(resolvePath(src, path));
+      if (src == null) {
+        const tool = steps[idx]?.tool ?? "unknown";
+        throw new Error(
+          `Template {{step_${idx}.${path}}} cannot resolve: step_${idx} (${tool}) has no result yet.`,
+        );
+      }
+      return String(resolvePath(src, path, idx, steps[idx]?.tool));
     });
   }
   if (Array.isArray(value)) return value.map((v) => resolveTemplates(v, steps));
@@ -42,7 +47,7 @@ function resolveTemplates(value: any, steps: any[]): any {
   return value;
 }
 
-function resolvePath(obj: any, path: string): any {
+function resolvePath(obj: any, path: string, stepIdx?: number, toolName?: string): any {
   const p = path.trim();
   const tokens: (string | number)[] = [];
   let i = 0;
@@ -61,14 +66,35 @@ function resolvePath(obj: any, path: string): any {
     }
   }
   if (tokens[0] === "result") tokens.shift();
+  const stepLabel = stepIdx != null ? `step_${stepIdx}${toolName ? ` (${toolName})` : ""}` : "step";
   let cur: any = obj;
+  const walked: (string | number)[] = [];
   for (const t of tokens) {
-    if (cur == null) throw new Error(`Path ${path} resolves to null mid-way`);
+    if (cur == null) {
+      throw new Error(
+        `Template {{step_${stepIdx}.${path}}} failed: ${stepLabel}.${walked.join(".") || "result"} is null/undefined, can't read "${t}".`,
+      );
+    }
+    // Friendlier message when indexing past an empty/short array — the most common cause.
+    if (typeof t === "number" && Array.isArray(cur) && t >= cur.length) {
+      const hint = cur.length === 0
+        ? `returned 0 results — the search probably didn't match anything.`
+        : `returned ${cur.length} result(s), so index [${t}] is out of range.`;
+      throw new Error(
+        `Template {{step_${stepIdx}.${path}}} failed: ${stepLabel} ${hint}`,
+      );
+    }
+    walked.push(t);
     cur = cur[t as any];
   }
-  if (cur == null) throw new Error(`Path ${path} resolved to null`);
+  if (cur == null) {
+    throw new Error(
+      `Template {{step_${stepIdx}.${path}}} resolved to null. ${stepLabel}.${walked.join(".")} exists but has no value.`,
+    );
+  }
   return cur;
 }
+
 
 type ToolCtx = { user_id: string; admin: any; supabase: any };
 
