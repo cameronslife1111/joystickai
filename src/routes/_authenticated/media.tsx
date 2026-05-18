@@ -22,7 +22,7 @@ const NO_CALLOUT_STYLE: React.CSSProperties = {
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/media")({
-  head: () => ({ meta: [{ title: "Media Gallery · Joystick AI" }] }),
+  head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
   component: MediaPage,
 });
 

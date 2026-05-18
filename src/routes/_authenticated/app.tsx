@@ -17,7 +17,7 @@ import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Link as LinkIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
-  head: () => ({ meta: [{ title: "Joystick AI" }] }),
+  head: () => ({ meta: [{ title: "Orby" }] }),
   component: AppPage,
 });
 
