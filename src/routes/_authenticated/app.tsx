@@ -8,6 +8,7 @@ import { Orb } from "@/components/Orb";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
+import { GenerateTextDialog } from "@/components/GenerateTextDialog";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Joystick AI" }] }),
