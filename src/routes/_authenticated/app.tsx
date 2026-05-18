@@ -8,6 +8,7 @@ import { Orb } from "@/components/Orb";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
+import { GenerateTextDialog } from "@/components/GenerateTextDialog";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Joystick AI" }] }),
@@ -32,6 +33,7 @@ function AppPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
+  const [generateTextOpen, setGenerateTextOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
@@ -908,6 +910,11 @@ function AppPage() {
         void saveMuted(next);
       },
     },
+    { e: "✨", t: "Gen text", fn: () => {
+      setMenuOpen(false);
+      if (!activeDocId) { toast.error("Open a document first"); return; }
+      setGenerateTextOpen(true);
+    }},
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
@@ -1007,19 +1014,20 @@ function AppPage() {
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
-    filled[1] = grid[3];   // 2  Rename
-    filled[2] = grid[2];   // 3  New doc
+    filled[1] = grid[4];   // 2  Rename
+    filled[2] = grid[3];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
-    filled[4] = grid[4];   // 5  Delete doc
-    filled[5] = grid[7];   // 6  Move sentence
-    filled[6] = grid[9];   // 7  Copy sentence
-    filled[7] = grid[10];  // 8  Copy document
-    filled[8] = grid[12];  // 9  Import checklists
-    filled[9] = grid[13];  // 10 Media Gallery
-    filled[10] = grid[8];  // 11 Search docs
-    filled[11] = grid[6];  // 12 Jump to
-    filled[15] = grid[5];  // 16 Favorites
-    filled[23] = grid[11]; // 24 Sign out
+    filled[4] = grid[5];   // 5  Delete doc
+    filled[5] = grid[8];   // 6  Move sentence
+    filled[6] = grid[10];  // 7  Copy sentence
+    filled[7] = grid[11];  // 8  Copy document
+    filled[8] = grid[13];  // 9  Import checklists
+    filled[9] = grid[14];  // 10 Media Gallery
+    filled[10] = grid[9];  // 11 Search docs
+    filled[11] = grid[7];  // 12 Jump to
+    filled[12] = grid[2];  // 13 Gen text
+    filled[15] = grid[6];  // 16 Favorites
+    filled[23] = grid[12]; // 24 Sign out
     return filled;
   }, [grid]);
 
@@ -1689,6 +1697,14 @@ function AppPage() {
           if (f) void handleImportFile(f);
         }}
       />
+      {activeDocId && (
+        <GenerateTextDialog
+          open={generateTextOpen}
+          onOpenChange={setGenerateTextOpen}
+          currentDocumentId={activeDocId}
+          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        />
+      )}
     </main>
   );
 }
