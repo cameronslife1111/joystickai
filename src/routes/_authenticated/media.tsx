@@ -9,6 +9,8 @@ import {
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
+import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
+import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -111,8 +113,11 @@ function MediaPage() {
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
+  const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useVideoJobPolling(userId);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -627,8 +632,13 @@ function MediaPage() {
                 />
               )}
               {sheetAsset.kind === "image" && (
-                <SheetButton icon={<Film className="h-4 w-4" />} label="Convert to Video"
-                  onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
+                <SheetButton icon={<Film className="h-4 w-4" />} label="Image to Video"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setViewerIdx(null);
+                    setI2vAsset(a);
+                  }}
                 />
               )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
@@ -721,6 +731,15 @@ function MediaPage() {
           onOpenChange={(o) => { if (!o) setRemixAsset(null); }}
           initialAsset={{ id: remixAsset.id, url: remixAsset.url, title: remixAsset.title }}
           onSubmitted={() => { setRemixAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {i2vAsset && (
+        <ImageToVideoDialog
+          open={!!i2vAsset}
+          onOpenChange={(o) => { if (!o) setI2vAsset(null); }}
+          sourceImage={{ id: i2vAsset.id, url: i2vAsset.url, title: i2vAsset.title }}
+          onSubmitted={() => setI2vAsset(null)}
         />
       )}
 

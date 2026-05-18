@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.edit-image]
 verify_jwt = false
+
+[functions.generate-kling-video]
+verify_jwt = false
+
+[functions.poll-video-job]
+verify_jwt = false

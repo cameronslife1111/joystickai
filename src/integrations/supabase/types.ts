@@ -49,6 +49,10 @@ export type Database = {
           created_at: string
           duration_seconds: number | null
           error_message: string | null
+          fal_model_id: string | null
+          fal_request_id: string | null
+          fal_response_url: string | null
+          fal_status_url: string | null
           generation_params: Json | null
           height: number | null
           id: string
@@ -69,6 +73,10 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          fal_model_id?: string | null
+          fal_request_id?: string | null
+          fal_response_url?: string | null
+          fal_status_url?: string | null
           generation_params?: Json | null
           height?: number | null
           id?: string
@@ -89,6 +97,10 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          fal_model_id?: string | null
+          fal_request_id?: string | null
+          fal_response_url?: string | null
+          fal_status_url?: string | null
           generation_params?: Json | null
           height?: number | null
           id?: string
