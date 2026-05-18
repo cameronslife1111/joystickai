@@ -910,7 +910,11 @@ function AppPage() {
         void saveMuted(next);
       },
     },
-    { e: "➕", t: "New doc", fn: async () => {
+    { e: "✨", t: "Gen text", fn: () => {
+      setMenuOpen(false);
+      if (!activeDocId) { toast.error("Open a document first"); return; }
+      setGenerateTextOpen(true);
+    }},
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
       const title = prompt("Document title?") || "Untitled";
