@@ -813,8 +813,13 @@ function AppPage() {
       }
       if (!cur) continue;
       const im = raw.match(itemRe);
-      if (!im) continue;
-      let s = im[1].trim();
+      let s: string;
+      if (im) {
+        s = im[1].trim();
+      } else {
+        s = raw.trim();
+        if (!s) continue;
+      }
       if (!s) continue;
       if (!/[.!?]$/.test(s)) s += ".";
       cur.sentences.push(s);
