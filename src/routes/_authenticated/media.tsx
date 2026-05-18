@@ -106,8 +106,34 @@ function MediaPage() {
   const [renameText, setRenameText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
+  const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
+  const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
+
+  // Realtime subscription so generating thumbnails flip to completed automatically
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`media_assets_${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "media_assets", filter: `user_id=eq.${userId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["media_assets"] });
+          qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, qc]);
 
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ["media_assets"],
