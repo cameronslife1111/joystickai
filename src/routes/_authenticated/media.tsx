@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
-  RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers,
+  RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2,
 } from "lucide-react";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
+import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
@@ -116,6 +117,7 @@ function MediaPage() {
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
+  const [aivAsset, setAivAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -653,6 +655,16 @@ function MediaPage() {
                   }}
                 />
               )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Mic2 className="h-4 w-4" />} label="Audio + Image to Video"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setViewerIdx(null);
+                    setAivAsset(a);
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
@@ -752,6 +764,14 @@ function MediaPage() {
           onOpenChange={(o) => { if (!o) setI2vAsset(null); }}
           sourceImage={{ id: i2vAsset.id, url: i2vAsset.url, title: i2vAsset.title }}
           onSubmitted={() => setI2vAsset(null)}
+        />
+      )}
+
+      {aivAsset && (
+        <AudioImageToVideoDialog
+          open={!!aivAsset}
+          onOpenChange={(o) => { if (!o) setAivAsset(null); }}
+          sourceImage={{ id: aivAsset.id, url: aivAsset.url, title: aivAsset.title }}
         />
       )}
 
