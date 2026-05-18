@@ -1143,7 +1143,15 @@ function AppPage() {
       setMenuOpen(false);
       void openLinkedDocument();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument]);
+    { e: "🧠", t: "Plan mode", fn: () => {
+      setMenuOpen(false);
+      setPlanComposerOpen(true);
+    }},
+    { e: "📋", t: "AI Plans", fn: () => {
+      setMenuOpen(false);
+      setPlansScreenOpen(true);
+    }, badge: pendingPlanCount },
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1167,6 +1175,8 @@ function AppPage() {
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
     filled[18] = grid[19]; // 19 Open link
+    filled[19] = grid[20]; // 20 Plan mode
+    filled[20] = grid[21]; // 21 AI Plans
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
