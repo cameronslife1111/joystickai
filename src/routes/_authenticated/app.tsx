@@ -11,6 +11,9 @@ import { aiContinue } from "@/lib/ai.functions";
 import { GenerateTextDialog } from "@/components/GenerateTextDialog";
 import { AnalyzeImageDialog } from "@/components/AnalyzeImageDialog";
 import { WebSearchDialog } from "@/components/WebSearchDialog";
+import { SentenceText } from "@/components/SentenceText";
+import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
+import { Link as LinkIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Joystick AI" }] }),
@@ -18,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 });
 
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
-type Sentence = { id: string; content: string; order_index: number; document_id: string };
+type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null };
 
 function AppPage() {
   const navigate = useNavigate();
@@ -41,6 +44,7 @@ function AppPage() {
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
@@ -881,6 +885,18 @@ function AppPage() {
     }
   }, [parseChecklists, docs, qc]);
 
+  const openLinkedDocument = useCallback(async () => {
+    const targetId = currentSentence?.linked_document_id;
+    if (!targetId) return;
+    const exists = docs?.some((d) => d.id === targetId);
+    if (!exists) {
+      toast.error("Linked document not found");
+      return;
+    }
+    setActiveDocId(targetId);
+    await setIndex(0);
+  }, [currentSentence, docs, setIndex]);
+
   const handleExportAll = useCallback(async () => {
     try {
       const { data: allDocs, error: dErr } = await supabase
@@ -1070,7 +1086,17 @@ function AppPage() {
       setMenuOpen(false);
       void handleExportAll();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll]);
+    { e: "🔗", t: "Link to doc", fn: () => {
+      if (!currentSentence) { toast.error("No sentence selected"); return; }
+      setMenuOpen(false);
+      setLinkPickerOpen(true);
+    }},
+    { e: "↗️", t: "Open link", fn: () => {
+      if (!currentSentence?.linked_document_id) { toast.error("This sentence has no linked document"); return; }
+      setMenuOpen(false);
+      void openLinkedDocument();
+    }},
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1092,6 +1118,8 @@ function AppPage() {
     filled[14] = grid[4];  // 15 Web search
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
+    filled[17] = grid[18]; // 18 Link to doc
+    filled[18] = grid[19]; // 19 Open link
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
@@ -1226,7 +1254,9 @@ function AppPage() {
             />
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
-              {currentSentence?.content ?? (
+              {currentSentence ? (
+                <SentenceText content={currentSentence.content} />
+              ) : (
                 <span className="text-muted-foreground italic text-2xl">
                   Hold the orb and speak, or double-tap to write.
                 </span>
@@ -1306,6 +1336,20 @@ function AppPage() {
             height: "min(55vw, 28svh, 220px)",
           }}
         >
+          {currentSentence?.linked_document_id && (() => {
+            const linkedDocTitle = docs?.find((d) => d.id === currentSentence.linked_document_id)?.title ?? null;
+            return (
+              <button
+                type="button"
+                onClick={() => void openLinkedDocument()}
+                className="absolute left-1/2 -top-10 z-10 flex max-w-[80vw] -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
+                style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+              >
+                <LinkIcon className="h-3 w-3 shrink-0" />
+                <span className="truncate">{linkedDocTitle ?? "Linked"}</span>
+              </button>
+            );
+          })()}
           <Orb
             ref={orbRef}
             state={orbState}
@@ -1784,6 +1828,17 @@ function AppPage() {
           onOpenChange={setWebSearchOpen}
           currentDocumentId={activeDocId}
           documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        />
+      )}
+      {currentSentence && (
+        <LinkDocumentDialog
+          open={linkPickerOpen}
+          onOpenChange={setLinkPickerOpen}
+          sentenceId={currentSentence.id}
+          currentLinkedDocumentId={currentSentence.linked_document_id}
+          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+          excludeDocumentId={activeDocId ?? undefined}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
         />
       )}
     </main>

@@ -45,7 +45,8 @@ export const aiContinue = createServerFn({ method: "POST" })
       "Respond with concise, useful prose that fits the document's flow. " +
       "Reply in plain text, no markdown, no lists, no headings. " +
       "Use clear, separable sentences (each ending in . ! or ?). " +
-      "Keep total length under ~6 sentences unless the user explicitly asks for more.";
+      "Keep total length under ~6 sentences unless the user explicitly asks for more. " +
+      "If you reference any URL, include the full http:// or https:// URL inline in the sentence; do not wrap it in markdown link syntax.";
 
     const user =
       `Document title: ${doc?.title ?? "Untitled"}\n\n` +
@@ -98,7 +99,8 @@ export const generateText = createServerFn({ method: "POST" })
       "Respond with concise, useful prose that fits naturally into the user's writing. " +
       "Plain text only — no markdown, no lists, no headings. " +
       "Use clear, separable sentences each ending in . ! or ?. " +
-      "Keep total length under ~10 sentences unless the user explicitly asks for more.";
+      "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
+      "If you reference any URL, include the full http:// or https:// URL inline in the sentence; do not wrap it in markdown link syntax.";
 
     const { text } = await aiSdkGenerateText({
       model,
@@ -190,7 +192,8 @@ export const analyzeImage = createServerFn({ method: "POST" })
       "Look at the image carefully and respond in concise, useful prose that fits naturally into the user's writing. " +
       "Plain text only — no markdown, no lists, no headings. " +
       "Use clear, separable sentences each ending in . ! or ?. " +
-      "Keep total length under ~10 sentences unless the user explicitly asks for more.";
+      "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
+      "If you reference any URL, include the full http:// or https:// URL inline in the sentence; do not wrap it in markdown link syntax.";
 
     const { text } = await aiSdkGenerateText({
       model,
@@ -292,7 +295,8 @@ export const webSearch = createServerFn({ method: "POST" })
           "Use web_search to find current, accurate information when relevant. " +
           "Respond in concise, useful prose. Plain text only — no markdown, no lists, no headings, no inline citation numbers like [1] or footnote markers. " +
           "Use clear, separable sentences each ending in . ! or ?. " +
-          "Keep total length under ~10 sentences unless the user explicitly asks for more.",
+          "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
+          "If you reference any URL, include the full http:// or https:// URL inline in the sentence; do not wrap it in markdown link syntax.",
       }),
     });
 

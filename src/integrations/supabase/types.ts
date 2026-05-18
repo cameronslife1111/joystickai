@@ -133,6 +133,7 @@ export type Database = {
           created_at: string
           document_id: string
           id: string
+          linked_document_id: string | null
           order_index: number
           user_id: string
         }
@@ -141,6 +142,7 @@ export type Database = {
           created_at?: string
           document_id: string
           id?: string
+          linked_document_id?: string | null
           order_index?: number
           user_id: string
         }
@@ -149,6 +151,7 @@ export type Database = {
           created_at?: string
           document_id?: string
           id?: string
+          linked_document_id?: string | null
           order_index?: number
           user_id?: string
         }
@@ -156,6 +159,13 @@ export type Database = {
           {
             foreignKeyName: "sentences_document_id_fkey"
             columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sentences_linked_document_id_fkey"
+            columns: ["linked_document_id"]
             isOneToOne: false
             referencedRelation: "documents"
             referencedColumns: ["id"]
