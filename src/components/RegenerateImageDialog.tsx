@@ -17,12 +17,20 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
 
+interface SourceAsset {
+  id: string;
+  url: string | null;
+  title: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sourceAsset: SourceAsset;
+  onSubmitted?: () => void;
 }
 
-export function GenerateImageDialog({ open, onOpenChange }: Props) {
+export function RegenerateImageDialog({ open, onOpenChange, sourceAsset, onSubmitted }: Props) {
   const [prompt, setPrompt] = useState("");
   const [docIds, setDocIds] = useState<string[]>([]);
   const [imageSize, setImageSize] = useState("portrait_16_9");
@@ -40,10 +48,13 @@ export function GenerateImageDialog({ open, onOpenChange }: Props) {
   const canSubmit = !submitting && (prompt.trim().length > 0 || docIds.length > 0);
 
   const handleGenerate = async () => {
+    if (!sourceAsset.url) {
+      toast.error("Source image has no URL yet");
+      return;
+    }
     setSubmitting(true);
     try {
       const finalPrompt = await assembleImagePrompt(prompt, docIds);
-      if (!finalPrompt.trim()) throw new Error("Prompt is empty");
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
 
@@ -51,25 +62,27 @@ export function GenerateImageDialog({ open, onOpenChange }: Props) {
         .from("media_assets")
         .insert({
           user_id: u.user.id,
-          title: prompt.trim().slice(0, 60) || "Generated image",
+          title: prompt.trim().slice(0, 60) || "Regenerated image",
           kind: "image",
           status: "generating",
           generation_params: {
-            mode: "text-to-image",
+            mode: "regenerate",
             user_text: prompt,
             document_ids: docIds,
             image_size: imageSize,
             quality,
+            source_asset_id: sourceAsset.id,
           },
         } as any)
         .select()
         .single();
       if (error || !row) throw error ?? new Error("Failed to create row");
 
-      const { error: fnErr } = await supabase.functions.invoke("generate-image", {
+      const { error: fnErr } = await supabase.functions.invoke("edit-image", {
         body: {
           row_id: row.id,
           prompt: finalPrompt,
+          image_urls: [sourceAsset.url],
           image_size: imageSize,
           quality,
           output_format: "png",
@@ -79,11 +92,12 @@ export function GenerateImageDialog({ open, onOpenChange }: Props) {
 
       onOpenChange(false);
       reset();
-      toast("Generating your image...", {
+      onSubmitted?.();
+      toast("Regenerating your image...", {
         description: "It'll appear in the gallery when ready.",
       });
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to start generation");
+      toast.error(e?.message ?? "Failed to start regeneration");
     } finally {
       setSubmitting(false);
     }
@@ -94,13 +108,24 @@ export function GenerateImageDialog({ open, onOpenChange }: Props) {
       <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Generate Image</DialogTitle>
+            <DialogTitle>Regenerate Image</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              {sourceAsset.url && (
+                <img
+                  src={sourceAsset.url}
+                  alt="Source"
+                  className="h-24 w-24 rounded-xl border border-foreground/10 object-cover"
+                />
+              )}
+              <span className="text-sm text-muted-foreground">Editing this image</span>
+            </div>
+
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe what you want to create..."
+              placeholder="What would you like to change?"
               rows={3}
               className="max-h-48 min-h-[80px] resize-y"
             />
@@ -126,7 +151,7 @@ export function GenerateImageDialog({ open, onOpenChange }: Props) {
 
             <div className="flex flex-col gap-1.5">
               <Label>Aspect ratio</Label>
-              <AspectRatioSelect value={imageSize} onChange={setImageSize} />
+              <AspectRatioSelect value={imageSize} onChange={setImageSize} includeAuto />
             </div>
 
             <div className="flex flex-col gap-1.5">
