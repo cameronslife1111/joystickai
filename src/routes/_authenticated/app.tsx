@@ -896,9 +896,48 @@ function AppPage() {
       toast.error("Linked document not found");
       return;
     }
+
+    // Mirror onSwipeRight: resume the target doc at its own saved sentence.
+    // Do NOT call setIndex here — it would write to the SOURCE doc's row
+    // (activeDoc is still stale until setActiveDocId flushes), wiping the
+    // user's position on the doc they're coming from.
+    const token = claimSpeech();
+
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+
     setActiveDocId(targetId);
-    await setIndex(0);
-  }, [currentSentence, docs, setIndex]);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [currentSentence, docs, claimSpeech, speak, qc]);
 
   const handleExportAll = useCallback(async () => {
     try {
