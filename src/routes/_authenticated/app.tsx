@@ -1697,6 +1697,14 @@ function AppPage() {
           if (f) void handleImportFile(f);
         }}
       />
+      {activeDocId && (
+        <GenerateTextDialog
+          open={generateTextOpen}
+          onOpenChange={setGenerateTextOpen}
+          currentDocumentId={activeDocId}
+          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        />
+      )}
     </main>
   );
 }
