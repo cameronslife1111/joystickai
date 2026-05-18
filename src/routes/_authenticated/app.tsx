@@ -33,6 +33,8 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [replaceMatching, setReplaceMatching] = useState(false);
   const [jumpOpen, setJumpOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1102,7 +1104,7 @@ function AppPage() {
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
-    filled[1] = grid[5];   // 2  Rename
+    filled[1] = grid[6];   // 2  Rename
     filled[2] = grid[5];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc
@@ -1459,49 +1461,95 @@ function AppPage() {
             </div>
           </div>
 
-          {pickerSlot !== null && (
+          {pickerSlot !== null && (() => {
+            const targetId = favorites[pickerSlot];
+            const targetDoc = targetId ? docs?.find((d) => d.id === targetId) : null;
+            const matchCount = targetId ? favorites.filter((id) => id === targetId).length : 0;
+            const q = pickerQuery.trim().toLowerCase();
+            const filtered = (docs ?? []).filter((d) =>
+              q === "" ? true : d.title.toLowerCase().includes(q)
+            );
+            const closePicker = () => {
+              setPickerSlot(null);
+              setPickerQuery("");
+              setReplaceMatching(false);
+            };
+            const pickDoc = async (docId: string) => {
+              const next = [...favorites];
+              while (next.length < 50) next.push(null);
+              if (replaceMatching && targetId) {
+                for (let i = 0; i < next.length; i++) {
+                  if (next[i] === targetId) next[i] = docId;
+                }
+              } else {
+                next[pickerSlot!] = docId;
+              }
+              await saveFavorites(next);
+              closePicker();
+            };
+            return (
             <div
               className="absolute inset-0 z-10 flex items-end justify-center bg-background/70 px-4 pb-6 backdrop-blur-sm"
-              onClick={() => setPickerSlot(null)}
+              onClick={closePicker}
             >
               <div
-                className="w-full max-w-md rounded-3xl border border-foreground/10 bg-card/95 p-4"
+                className="flex max-h-[80vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/95 p-4"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="mb-3 flex items-center justify-between px-2">
                   <div className="font-display text-base">Slot {pickerSlot + 1}</div>
                   <button
-                    onClick={() => setPickerSlot(null)}
+                    onClick={closePicker}
                     className="text-sm text-muted-foreground hover:text-foreground"
                   >
                     Cancel
                   </button>
                 </div>
-                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
-                  {favorites[pickerSlot] && (
+                {targetId && (
+                  <div className="mb-2 flex flex-col gap-1.5">
                     <button
                       onClick={async () => {
                         const next = [...favorites];
                         while (next.length < 50) next.push(null);
                         next[pickerSlot!] = null;
                         await saveFavorites(next);
-                        setPickerSlot(null);
+                        closePicker();
                       }}
                       className="w-full rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-left text-sm text-destructive"
                     >
                       Clear slot
                     </button>
-                  )}
-                  {(docs ?? []).map((d) => (
+                    <button
+                      onClick={() => setReplaceMatching((v) => !v)}
+                      className={`w-full rounded-xl border px-3 py-2 text-left text-sm transition ${
+                        replaceMatching
+                          ? "border-primary/40 bg-primary/15 text-foreground"
+                          : "border-foreground/20 bg-foreground/5 hover:bg-foreground/10"
+                      }`}
+                    >
+                      {replaceMatching ? "✓ " : ""}Replace all matching slots
+                      {matchCount > 1 ? ` (${matchCount})` : ""}
+                    </button>
+                    {replaceMatching && (
+                      <div className="px-1 text-[11px] text-muted-foreground">
+                        Picking a doc will replace all {matchCount} slot{matchCount === 1 ? "" : "s"} currently set to "{targetDoc?.title ?? "Unknown"}".
+                      </div>
+                    )}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={pickerQuery}
+                  onChange={(e) => setPickerQuery(e.target.value)}
+                  placeholder="Search documents…"
+                  autoFocus
+                  className="mb-2 w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-foreground/30"
+                />
+                <div className="flex-1 space-y-1 overflow-y-auto">
+                  {filtered.map((d) => (
                     <button
                       key={d.id}
-                      onClick={async () => {
-                        const next = [...favorites];
-                        while (next.length < 50) next.push(null);
-                        next[pickerSlot!] = d.id;
-                        await saveFavorites(next);
-                        setPickerSlot(null);
-                      }}
+                      onClick={() => pickDoc(d.id)}
                       className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-left text-sm hover:bg-foreground/10"
                     >
                       {d.title}
@@ -1512,10 +1560,16 @@ function AppPage() {
                       No documents yet.
                     </div>
                   )}
+                  {docs && docs.length > 0 && filtered.length === 0 && (
+                    <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                      No matches.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
       {/* Search-docs overlay */}
