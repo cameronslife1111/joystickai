@@ -14,6 +14,7 @@ import { WebSearchDialog } from "@/components/WebSearchDialog";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
