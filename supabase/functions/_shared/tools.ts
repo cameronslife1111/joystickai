@@ -122,6 +122,93 @@ export const TOOL_CATALOG: ToolDef[] = [
       prompt: { type: "string", description: "What to write", required: true },
     },
   },
+  {
+    name: "generate_image",
+    description:
+      "Create a brand-new image from a text prompt. The image is saved to the user's Media Gallery. Returns the new media asset id and title when complete. " +
+      "Optional overrides: image_size (one of 'portrait_16_9' [default, equals 9:16], 'portrait_4_3', 'square_hd', 'landscape_4_3', 'landscape_16_9'), " +
+      "quality ('low'|'medium'|'high', default 'high'), " +
+      "output_format ('png'|'jpeg'|'webp', default 'png'). " +
+      "Use defaults unless the user clearly asks otherwise (e.g. 'wide' → landscape_16_9, 'tall' or 'phone wallpaper' → portrait_16_9, 'square' → square_hd).",
+    args: {
+      prompt: { type: "string", description: "What to draw", required: true },
+      image_size: { type: "string", description: "Optional aspect/size preset", required: false },
+      quality: { type: "string", description: "Optional quality", required: false },
+      output_format: { type: "string", description: "Optional output format", required: false },
+    },
+  },
+  {
+    name: "regenerate_image",
+    description:
+      "Create a NEW image that's a variation of an existing image, with a modification prompt. Use this when the user says 'make a version of X that...' or 'redo the image of Y with...'. " +
+      "source_media_id must be the id of an existing image media asset. The new image is saved as a separate asset; the original is untouched. " +
+      "Optional overrides: image_size (allows 'auto' to match the input image; default 'portrait_16_9'), quality, output_format.",
+    args: {
+      source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
+      prompt: { type: "string", description: "What to change", required: true },
+      image_size: { type: "string", description: "Optional aspect preset (may be 'auto')", required: false },
+      quality: { type: "string", description: "Optional quality", required: false },
+      output_format: { type: "string", description: "Optional output format", required: false },
+    },
+  },
+  {
+    name: "remix_images",
+    description:
+      "Create a NEW image by combining 2-16 existing images with a prompt describing how to combine them. " +
+      "source_media_ids is an array of image asset UUIDs (length 2-16). The new image is saved as a separate asset. " +
+      "Optional overrides: image_size (allows 'auto'), quality, output_format.",
+    args: {
+      source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs", required: true },
+      prompt: { type: "string", description: "How to combine them", required: true },
+      image_size: { type: "string", description: "Optional aspect preset (may be 'auto')", required: false },
+      quality: { type: "string", description: "Optional quality", required: false },
+      output_format: { type: "string", description: "Optional output format", required: false },
+    },
+  },
+  {
+    name: "image_to_video",
+    description:
+      "Animate a still image into a short video using a motion prompt. source_media_id must be the id of an existing image asset. " +
+      "Optional overrides: duration (integer seconds 3-15, default 5), generate_audio (boolean, default false), end_media_id (uuid of an image to use as the final frame), negative_prompt (default 'blur, distort, and low quality'), cfg_scale (number 0-1, default 0.5).",
+    args: {
+      source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
+      prompt: { type: "string", description: "Describe the motion or action", required: true },
+      duration: { type: "number", description: "Seconds 3-15", required: false },
+      generate_audio: { type: "boolean", description: "Generate native audio", required: false },
+      end_media_id: { type: "string", description: "Optional UUID of an image to use as the end frame", required: false },
+      negative_prompt: { type: "string", description: "Negative prompt", required: false },
+      cfg_scale: { type: "number", description: "Prompt adherence 0-1", required: false },
+    },
+  },
+  {
+    name: "video_to_video",
+    description:
+      "Use the motion of a reference video applied to the appearance of an image. source_image_id is the appearance reference (an image asset). reference_video_id is the motion source (a video asset). " +
+      "Optional overrides: character_orientation ('image' or 'video'; default 'image'. 'image' is better for camera moves, capped at 10s. 'video' is better for complex motion, capped at 30s, and enables element_image_id), " +
+      "keep_original_sound (boolean, default true), element_image_id (uuid of an image used as a facial-element reference; ONLY usable when character_orientation is 'video').",
+    args: {
+      source_image_id: { type: "string", description: "UUID of the appearance image asset", required: true },
+      reference_video_id: { type: "string", description: "UUID of the motion video asset", required: true },
+      prompt: { type: "string", description: "Describe the scene or action", required: true },
+      character_orientation: { type: "string", description: "'image' or 'video'", required: false },
+      keep_original_sound: { type: "boolean", description: "Carry reference audio into output", required: false },
+      element_image_id: { type: "string", description: "Optional facial-element image asset UUID (only with character_orientation 'video')", required: false },
+    },
+  },
+  {
+    name: "audio_image_to_video",
+    description:
+      "Animate a face image to lip-sync to an audio clip, producing a talking-head video. source_image_id is the face source (image asset). audio_media_id is the audio asset to sync to. " +
+      "Optional overrides: talking_style ('stable' [default] or 'expressive'), resolution ('360p'|'480p'|'540p'|'720p'|'1080p', default '1080p'), aspect_ratio ('9:16' [default], '16:9', '1:1'), caption (boolean, default false).",
+    args: {
+      source_image_id: { type: "string", description: "UUID of the face image asset", required: true },
+      audio_media_id: { type: "string", description: "UUID of the audio asset", required: true },
+      talking_style: { type: "string", description: "Animation style", required: false },
+      resolution: { type: "string", description: "Output resolution", required: false },
+      aspect_ratio: { type: "string", description: "Output aspect ratio", required: false },
+      caption: { type: "boolean", description: "Burn captions into the video", required: false },
+    },
+  },
 ];
 
 export function toolCatalogForPrompt(): string {
