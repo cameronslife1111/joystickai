@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 });
 
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
-type Sentence = { id: string; content: string; order_index: number; document_id: string };
+type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null };
 
 function AppPage() {
   const navigate = useNavigate();
