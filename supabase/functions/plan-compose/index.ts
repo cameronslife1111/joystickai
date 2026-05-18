@@ -135,7 +135,36 @@ Deno.serve(async (req) => {
   if (plan.status !== "composing") return json({ error: `plan is ${plan.status}, not composing` }, 409);
 
   try {
-    const raw = await callPlannerLLM(systemPrompt, plan.user_request);
+    // ---- Inject lightweight USER CONTEXT so the planner can resolve references
+    //      like "this doc", "the current sentence", "add to here", etc.
+    let userContext = "";
+    const docId = plan.context_document_id as string | null | undefined;
+    const sentenceId = plan.context_sentence_id as string | null | undefined;
+    if (docId) {
+      const { data: doc } = await admin
+        .from("documents")
+        .select("id, title")
+        .eq("id", docId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (doc) {
+        userContext += `\nactive_document_id: ${doc.id}\nactive_document_title: ${JSON.stringify(doc.title ?? "")}`;
+      }
+    }
+    if (sentenceId) {
+      const { data: sent } = await admin
+        .from("sentences")
+        .select("id, text, position")
+        .eq("id", sentenceId)
+        .maybeSingle();
+      if (sent) {
+        userContext += `\ncurrent_sentence_id: ${sent.id}\ncurrent_sentence_text: ${JSON.stringify(sent.text ?? "")}\ncurrent_sentence_position: ${sent.position}`;
+      }
+    }
+    const effectiveSystemPrompt = userContext
+      ? `${systemPrompt}\n\nUSER CONTEXT (resolve pronouns like "this", "here", "the current doc" using these values; do NOT call find_doc_by_title if a relevant id is already provided here):${userContext}`
+      : systemPrompt;
+    const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
     let parsed: any;
     try {
       parsed = JSON.parse(raw);
