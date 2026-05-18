@@ -881,6 +881,45 @@ function AppPage() {
     }
   }, [parseChecklists, docs, qc]);
 
+  const handleExportAll = useCallback(async () => {
+    try {
+      const { data: allDocs, error: dErr } = await supabase
+        .from("documents")
+        .select("id, title")
+        .order("position", { ascending: true });
+      if (dErr) throw dErr;
+      if (!allDocs || allDocs.length === 0) {
+        toast.error("No documents to export");
+        return;
+      }
+      const parts: string[] = [];
+      for (const d of allDocs) {
+        const { data: rows } = await supabase
+          .from("sentences")
+          .select("content")
+          .eq("document_id", d.id)
+          .order("order_index", { ascending: true });
+        parts.push(`=== ${d.title} ===`);
+        for (const r of rows ?? []) parts.push(r.content);
+        parts.push("");
+      }
+      const text = parts.join("\n");
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `joystick-export-${today}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${allDocs.length} document${allDocs.length === 1 ? "" : "s"}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Export failed");
+    }
+  }, []);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
