@@ -885,6 +885,18 @@ function AppPage() {
     }
   }, [parseChecklists, docs, qc]);
 
+  const openLinkedDocument = useCallback(async () => {
+    const targetId = currentSentence?.linked_document_id;
+    if (!targetId) return;
+    const exists = docs?.some((d) => d.id === targetId);
+    if (!exists) {
+      toast.error("Linked document not found");
+      return;
+    }
+    setActiveDocId(targetId);
+    await setIndex(0);
+  }, [currentSentence, docs, setIndex]);
+
   const handleExportAll = useCallback(async () => {
     try {
       const { data: allDocs, error: dErr } = await supabase
