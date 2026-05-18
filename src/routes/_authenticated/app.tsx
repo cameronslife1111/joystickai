@@ -813,8 +813,13 @@ function AppPage() {
       }
       if (!cur) continue;
       const im = raw.match(itemRe);
-      if (!im) continue;
-      let s = im[1].trim();
+      let s: string;
+      if (im) {
+        s = im[1].trim();
+      } else {
+        s = raw.trim();
+        if (!s) continue;
+      }
       if (!s) continue;
       if (!/[.!?]$/.test(s)) s += ".";
       cur.sentences.push(s);
@@ -875,6 +880,45 @@ function AppPage() {
       toast.error(e?.message || "Import failed");
     }
   }, [parseChecklists, docs, qc]);
+
+  const handleExportAll = useCallback(async () => {
+    try {
+      const { data: allDocs, error: dErr } = await supabase
+        .from("documents")
+        .select("id, title")
+        .order("position", { ascending: true });
+      if (dErr) throw dErr;
+      if (!allDocs || allDocs.length === 0) {
+        toast.error("No documents to export");
+        return;
+      }
+      const parts: string[] = [];
+      for (const d of allDocs) {
+        const { data: rows } = await supabase
+          .from("sentences")
+          .select("content")
+          .eq("document_id", d.id)
+          .order("order_index", { ascending: true });
+        parts.push(`=== ${d.title} ===`);
+        for (const r of rows ?? []) parts.push(r.content);
+        parts.push("");
+      }
+      const text = parts.join("\n");
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `joystick-export-${today}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${allDocs.length} document${allDocs.length === 1 ? "" : "s"}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Export failed");
+    }
+  }, []);
 
   // Menu actions
   const grid = useMemo(() => [
@@ -1012,7 +1056,7 @@ function AppPage() {
       await supabase.auth.signOut();
       navigate({ to: "/" });
     }},
-    { e: "📥", t: "Import checklists", fn: () => {
+    { e: "📥", t: "Import text", fn: () => {
       setMenuOpen(false);
       // Reset value so picking the same file twice still fires onChange
       if (importInputRef.current) importInputRef.current.value = "";
@@ -1022,7 +1066,11 @@ function AppPage() {
       setMenuOpen(false);
       navigate({ to: "/media" });
     }, badge: unseenCount },
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount]);
+    { e: "📤", t: "Export text", fn: () => {
+      setMenuOpen(false);
+      void handleExportAll();
+    }},
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1043,6 +1091,7 @@ function AppPage() {
     filled[13] = grid[3];  // 14 Analyze img
     filled[14] = grid[4];  // 15 Web search
     filled[15] = grid[8];  // 16 Favorites
+    filled[16] = grid[17]; // 17 Export text
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
