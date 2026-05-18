@@ -16,6 +16,10 @@ import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
+import { PlanComposerDialog } from "@/components/PlanComposerDialog";
+import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
+import { AIPlansScreen } from "@/components/AIPlansScreen";
+import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
@@ -53,6 +57,11 @@ function AppPage() {
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
+  const [planComposerOpen, setPlanComposerOpen] = useState(false);
+  const [planApprovalOpen, setPlanApprovalOpen] = useState(false);
+  const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
+  const [plansScreenOpen, setPlansScreenOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const recognitionRef = useRef<any>(null);
@@ -80,6 +89,41 @@ function AppPage() {
   useEffect(() => {
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
   }, [qc]);
+
+  // Load current user id (for the plans advancer)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
+
+  // Pending plan badge count
+  const { data: pendingPlanCount = 0 } = useQuery({
+    queryKey: ["plans_pending_count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("plans")
+        .select("id", { count: "exact", head: true })
+        .eq("acknowledged", false)
+        .in("status", ["completed", "failed"]);
+      return count ?? 0;
+    },
+  });
+
+  // Background plan advancer
+  useRunningPlansAdvancer(
+    currentUserId,
+    () => {
+      toast.success("Your plan is done — tap to view", {
+        action: { label: "View", onClick: () => setPlansScreenOpen(true) },
+      });
+      qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    },
+    () => {
+      toast.error("A plan failed — tap to see what to do", {
+        action: { label: "View", onClick: () => setPlansScreenOpen(true) },
+      });
+      qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    },
+  );
 
   // Apply theme
   useEffect(() => {
@@ -473,60 +517,14 @@ function AppPage() {
     setEditing(true);
   }, [editing, currentIdx, sentences]);
 
-  // Long press = voice mode
+  // Long press = open Plan Mode composer (voice capture removed)
   const onLongPressStart = useCallback(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { toast.error("Voice not supported in this browser"); return; }
-    const r = new SR();
-    r.continuous = true; r.interimResults = true; r.lang = "en-US";
-    transcriptRef.current = "";
-    r.onresult = (e: any) => {
-      let final = "";
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
-      }
-      if (final) transcriptRef.current = final.trim();
-    };
-    r.onerror = () => {};
-    try { r.start(); } catch {}
-    recognitionRef.current = r;
-    setOrbState("listening");
+    setPlanComposerOpen(true);
   }, []);
 
-  const onLongPressEnd = useCallback(async () => {
-    const r = recognitionRef.current;
-    if (r) { try { r.stop(); } catch {} recognitionRef.current = null; }
-    setOrbState("idle");
-    const prompt = transcriptRef.current.trim();
-    transcriptRef.current = "";
-    if (!prompt || !activeDocId) return;
-
-    setOrbState("thinking");
-    try {
-      const { text } = await callAi({ data: { documentId: activeDocId, prompt } });
-      const newSentences = splitIntoSentences(text);
-      if (newSentences.length === 0) return;
-
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-
-      const insertAt = currentSentence ? currentIdx + 1 : 0;
-      const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
-        p_document_id: activeDocId,
-        p_contents: newSentences,
-        p_insert_at: insertAt,
-      });
-      if (rpcErr) throw rpcErr;
-      await setIndex(insertAt);
-      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
-      const token = claimSpeech();
-      speak(newSentences[0], token);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "AI failed");
-    } finally {
-      setOrbState("idle");
-    }
-  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
+  const onLongPressEnd = useCallback(() => {
+    // no-op; the composer takes over from here
+  }, []);
 
   useOrbGestures(orbRef, {
     onTap: openNewIdea,
@@ -1145,7 +1143,15 @@ function AppPage() {
       setMenuOpen(false);
       void openLinkedDocument();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument]);
+    { e: "🧠", t: "Plan mode", fn: () => {
+      setMenuOpen(false);
+      setPlanComposerOpen(true);
+    }},
+    { e: "📋", t: "AI Plans", fn: () => {
+      setMenuOpen(false);
+      setPlansScreenOpen(true);
+    }, badge: pendingPlanCount },
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1169,6 +1175,8 @@ function AppPage() {
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
     filled[18] = grid[19]; // 19 Open link
+    filled[19] = grid[20]; // 20 Plan mode
+    filled[20] = grid[21]; // 21 AI Plans
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
@@ -1963,6 +1971,28 @@ function AppPage() {
           excludeDocumentId={activeDocId ?? undefined}
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
         />
+      )}
+      <PlanComposerDialog
+        open={planComposerOpen}
+        onOpenChange={setPlanComposerOpen}
+        originDocumentId={activeDocId}
+        originSentenceIndex={currentIdx}
+        onPlanProposed={(id) => {
+          setPlanApprovalId(id);
+          setPlanApprovalOpen(true);
+        }}
+      />
+      <PlanApprovalDialog
+        open={planApprovalOpen}
+        onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
+        planId={planApprovalId}
+        onApproved={() => {
+          const text = currentSentence?.content;
+          if (text) speak(text, claimSpeech());
+        }}
+      />
+      {plansScreenOpen && (
+        <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
       )}
     </main>
   );

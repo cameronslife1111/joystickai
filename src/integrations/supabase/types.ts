@@ -127,6 +127,77 @@ export type Database = {
           },
         ]
       }
+      plans: {
+        Row: {
+          acknowledged: boolean
+          approved_at: string | null
+          completed_at: string | null
+          created_at: string
+          current_step: number
+          error_lovable_prompt: string | null
+          error_message: string | null
+          id: string
+          origin_document_id: string | null
+          origin_sentence_index: number | null
+          plan_summary: string | null
+          result_summary: string | null
+          status: string
+          steps: Json | null
+          total_steps: number
+          updated_at: string
+          user_id: string
+          user_request: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          approved_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number
+          error_lovable_prompt?: string | null
+          error_message?: string | null
+          id?: string
+          origin_document_id?: string | null
+          origin_sentence_index?: number | null
+          plan_summary?: string | null
+          result_summary?: string | null
+          status: string
+          steps?: Json | null
+          total_steps?: number
+          updated_at?: string
+          user_id: string
+          user_request: string
+        }
+        Update: {
+          acknowledged?: boolean
+          approved_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number
+          error_lovable_prompt?: string | null
+          error_message?: string | null
+          id?: string
+          origin_document_id?: string | null
+          origin_sentence_index?: number | null
+          plan_summary?: string | null
+          result_summary?: string | null
+          status?: string
+          steps?: Json | null
+          total_steps?: number
+          updated_at?: string
+          user_id?: string
+          user_request?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plans_origin_document_id_fkey"
+            columns: ["origin_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sentences: {
         Row: {
           content: string

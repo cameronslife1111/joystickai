@@ -13,6 +13,7 @@ import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
+import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -122,6 +123,11 @@ function MediaPage() {
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useVideoJobPolling(userId);
+  useRunningPlansAdvancer(
+    userId,
+    () => toast.success("Your plan is done"),
+    () => toast.error("A plan failed"),
+  );
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
