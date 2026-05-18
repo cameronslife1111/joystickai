@@ -1713,6 +1713,14 @@ function AppPage() {
           documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         />
       )}
+      {activeDocId && (
+        <AnalyzeImageDialog
+          open={analyzeImageOpen}
+          onOpenChange={setAnalyzeImageOpen}
+          currentDocumentId={activeDocId}
+          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        />
+      )}
     </main>
   );
 }
