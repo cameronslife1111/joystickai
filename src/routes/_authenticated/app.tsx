@@ -90,6 +90,41 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
   }, [qc]);
 
+  // Load current user id (for the plans advancer)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
+
+  // Pending plan badge count
+  const { data: pendingPlanCount = 0 } = useQuery({
+    queryKey: ["plans_pending_count"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("plans")
+        .select("id", { count: "exact", head: true })
+        .eq("acknowledged", false)
+        .in("status", ["completed", "failed"]);
+      return count ?? 0;
+    },
+  });
+
+  // Background plan advancer
+  useRunningPlansAdvancer(
+    currentUserId,
+    () => {
+      toast.success("Your plan is done — tap to view", {
+        action: { label: "View", onClick: () => setPlansScreenOpen(true) },
+      });
+      qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    },
+    () => {
+      toast.error("A plan failed — tap to see what to do", {
+        action: { label: "View", onClick: () => setPlansScreenOpen(true) },
+      });
+      qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    },
+  );
+
   // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
