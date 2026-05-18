@@ -11,6 +11,7 @@ import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
+import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
