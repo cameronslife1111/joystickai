@@ -1118,6 +1118,8 @@ function AppPage() {
     filled[14] = grid[4];  // 15 Web search
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
+    filled[17] = grid[18]; // 18 Link to doc
+    filled[18] = grid[19]; // 19 Open link
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
