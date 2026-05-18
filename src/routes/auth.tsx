@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Orb } from "@/components/Orb";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in — Joystick AI" }] }),
+  head: () => ({ meta: [{ title: "Sign in — Orby" }] }),
   component: AuthPage,
 });
 
@@ -54,7 +54,7 @@ function AuthPage() {
 
       <div className="w-full max-w-sm">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <span>← Joystick AI</span>
+          <span>← Orby</span>
         </Link>
 
         <div className="mb-8 flex justify-center">

@@ -4,7 +4,7 @@ import { Orb } from "@/components/Orb";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Joystick AI — Focus on one sentence at a time" },
+      { title: "Orby — Focus on one sentence at a time" },
       { name: "description", content: "A playful focus tool. One sentence. One orb. Tap, swipe, speak — and let AI carry you forward." },
     ],
   }),
@@ -30,7 +30,7 @@ function Landing() {
             background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2), var(--aurora-3))",
             boxShadow: "0 0 20px color-mix(in oklab, var(--aurora-2) 60%, transparent)",
           }} />
-          <span className="font-display text-xl">Joystick AI</span>
+          <span className="font-display text-xl">Orby</span>
         </div>
         <Link
           to="/auth"
@@ -48,7 +48,7 @@ function Landing() {
           Focus more <br /> in a busy world.
         </h1>
         <p className="mt-6 max-w-xl text-balance text-base text-muted-foreground md:text-lg">
-          Joystick AI shows you exactly one sentence at a time. Tap the orb to advance,
+          Orby shows you exactly one sentence at a time. Tap the orb to advance,
           swipe to navigate, hold to speak — and let AI continue your thought.
         </p>
 
@@ -86,7 +86,7 @@ function Landing() {
       </section>
 
       <footer className="border-t border-foreground/10 px-6 py-6 text-center text-xs text-muted-foreground">
-        Joystick AI · A focus instrument
+        Orby · A focus instrument
       </footer>
     </main>
   );
