@@ -1091,6 +1091,7 @@ function AppPage() {
     filled[13] = grid[3];  // 14 Analyze img
     filled[14] = grid[4];  // 15 Web search
     filled[15] = grid[8];  // 16 Favorites
+    filled[16] = grid[17]; // 17 Export text
     filled[23] = grid[14]; // 24 Sign out
     return filled;
   }, [grid]);
