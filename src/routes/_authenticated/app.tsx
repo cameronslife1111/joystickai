@@ -11,6 +11,9 @@ import { aiContinue } from "@/lib/ai.functions";
 import { GenerateTextDialog } from "@/components/GenerateTextDialog";
 import { AnalyzeImageDialog } from "@/components/AnalyzeImageDialog";
 import { WebSearchDialog } from "@/components/WebSearchDialog";
+import { SentenceText } from "@/components/SentenceText";
+import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
+import { Link as LinkIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Joystick AI" }] }),
