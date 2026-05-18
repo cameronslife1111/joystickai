@@ -15,6 +15,15 @@ const json = (body: unknown, status = 200) =>
 
 const TRASH = "\u{1F5D1}\u{FE0F}";
 
+// Invokes a sibling Supabase Edge Function with the user's auth, so RLS-aware functions
+// behave as if the user themself called them.
+async function invokeEdgeFunction(supabase: any, functionName: string, body: any) {
+  const { error } = await supabase.functions.invoke(functionName, { body });
+  if (error) {
+    throw new Error(`${functionName} failed: ${error.message ?? String(error)}`);
+  }
+}
+
 function resolveTemplates(value: any, steps: any[]): any {
   if (typeof value === "string") {
     return value.replace(/\{\{step_(\d+)\.([^}]+)\}\}/g, (_, idxStr, path) => {
