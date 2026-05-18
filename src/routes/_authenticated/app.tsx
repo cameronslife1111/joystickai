@@ -1729,6 +1729,14 @@ function AppPage() {
           documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         />
       )}
+      {activeDocId && (
+        <WebSearchDialog
+          open={webSearchOpen}
+          onOpenChange={setWebSearchOpen}
+          currentDocumentId={activeDocId}
+          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        />
+      )}
     </main>
   );
 }
