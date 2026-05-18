@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createLovableAiGatewayProvider } from "./ai-gateway";
+import { createOpenAiProvider } from "./ai-gateway";
 
 const inputSchema = z.object({
   documentId: z.string().uuid(),
@@ -33,11 +33,11 @@ export const aiContinue = createServerFn({ method: "POST" })
       .join(" ")
       .slice(-2000);
 
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("Missing LOVABLE_API_KEY");
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
-    const gateway = createLovableAiGatewayProvider(apiKey);
-    const model = gateway("google/gemini-3-flash-preview");
+    const provider = createOpenAiProvider(apiKey);
+    const model = provider("gpt-5.5");
 
     const system =
       "You are Joystick AI, a focused writing companion. The user speaks one short voice prompt at a time. " +
