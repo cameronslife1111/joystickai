@@ -367,6 +367,285 @@ const TOOL_HANDLERS: Record<string, (args: any, ctx: ToolCtx) => Promise<any>> =
     const text = data?.choices?.[0]?.message?.content ?? "";
     return { text };
   },
+
+  // ----- Internal helpers used by media generation handlers -----
+  async _load_media(admin: any, user_id: string, id: string, expectedKind: "image" | "video" | "audio") {
+    const { data } = await admin
+      .from("media_assets")
+      .select("id, kind, status, url, title")
+      .eq("id", id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!data) throw new Error(`Media asset ${id} not found`);
+    if (data.kind !== expectedKind) {
+      throw new Error(`Expected a ${expectedKind} asset, but ${id} is a ${data.kind}`);
+    }
+    if (data.status === "generating") {
+      throw new Error(`Source media is still generating; cannot use it as input yet`);
+    }
+    if (!data.url) {
+      throw new Error(`Source media has no URL`);
+    }
+    return data;
+  },
+
+  async generate_image(args, { user_id, admin, supabase }) {
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+    const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
+    const image_size = validSizes.includes(args.image_size) ? args.image_size : "portrait_16_9";
+    const validQuality = ["low", "medium", "high"];
+    const quality = validQuality.includes(args.quality) ? args.quality : "high";
+    const validFormat = ["png", "jpeg", "webp"];
+    const output_format = validFormat.includes(args.output_format) ? args.output_format : "png";
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: prompt.slice(0, 60) || "Generated image",
+        kind: "image",
+        status: "generating",
+        generation_params: {
+          mode: "text-to-image",
+          user_text: prompt,
+          image_size, quality, output_format,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "generate-image", {
+      row_id: row.id, prompt, image_size, quality, output_format,
+    });
+    return { __pending_media: row.id };
+  },
+
+  async regenerate_image(args, { user_id, admin, supabase }) {
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+    const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
+
+    const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9", "auto"];
+    const image_size = validSizes.includes(args.image_size) ? args.image_size : "portrait_16_9";
+    const validQuality = ["low", "medium", "high"];
+    const quality = validQuality.includes(args.quality) ? args.quality : "high";
+    const validFormat = ["png", "jpeg", "webp"];
+    const output_format = validFormat.includes(args.output_format) ? args.output_format : "png";
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: prompt.slice(0, 60) || "Regenerated image",
+        kind: "image",
+        status: "generating",
+        generation_params: {
+          mode: "regenerate",
+          source_asset_id: source.id,
+          user_text: prompt,
+          image_size, quality, output_format,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "edit-image", {
+      row_id: row.id, prompt, image_urls: [source.url], image_size, quality, output_format,
+    });
+    return { __pending_media: row.id };
+  },
+
+  async remix_images(args, { user_id, admin, supabase }) {
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+
+    let ids: string[] = [];
+    const raw = args.source_media_ids;
+    if (Array.isArray(raw)) ids = raw.map(String);
+    else if (typeof raw === "string") {
+      try { ids = JSON.parse(raw); } catch { throw new Error("source_media_ids must be a JSON array of UUIDs"); }
+    }
+    if (!Array.isArray(ids) || ids.length < 2 || ids.length > 16) {
+      throw new Error("source_media_ids must contain 2 to 16 UUIDs");
+    }
+    const sources = await Promise.all(ids.map((id) => TOOL_HANDLERS._load_media(admin, user_id, id, "image")));
+
+    const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9", "auto"];
+    const image_size = validSizes.includes(args.image_size) ? args.image_size : "portrait_16_9";
+    const validQuality = ["low", "medium", "high"];
+    const quality = validQuality.includes(args.quality) ? args.quality : "high";
+    const validFormat = ["png", "jpeg", "webp"];
+    const output_format = validFormat.includes(args.output_format) ? args.output_format : "png";
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: prompt.slice(0, 60) || "Remixed image",
+        kind: "image",
+        status: "generating",
+        generation_params: {
+          mode: "remix",
+          source_asset_ids: ids,
+          user_text: prompt,
+          image_size, quality, output_format,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "edit-image", {
+      row_id: row.id, prompt, image_urls: sources.map((s) => s.url), image_size, quality, output_format,
+    });
+    return { __pending_media: row.id };
+  },
+
+  async image_to_video(args, { user_id, admin, supabase }) {
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+    const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
+    let endImage: any = null;
+    if (args.end_media_id) {
+      endImage = await TOOL_HANDLERS._load_media(admin, user_id, args.end_media_id, "image");
+    }
+    let duration = typeof args.duration === "number" ? Math.round(args.duration) : 5;
+    if (duration < 3) duration = 3;
+    if (duration > 15) duration = 15;
+    const generate_audio = typeof args.generate_audio === "boolean" ? args.generate_audio : false;
+    const negative_prompt = typeof args.negative_prompt === "string" && args.negative_prompt.trim()
+      ? args.negative_prompt : "blur, distort, and low quality";
+    let cfg_scale = typeof args.cfg_scale === "number" ? args.cfg_scale : 0.5;
+    if (cfg_scale < 0) cfg_scale = 0;
+    if (cfg_scale > 1) cfg_scale = 1;
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: prompt.slice(0, 60) || "Generated video",
+        kind: "video",
+        status: "generating",
+        generation_params: {
+          mode: "image-to-video",
+          model: "kling-v3-pro-i2v",
+          source_image_id: source.id,
+          end_image_id: endImage?.id ?? null,
+          duration, generate_audio, negative_prompt, cfg_scale,
+          user_text: prompt,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "generate-kling-video", {
+      row_id: row.id,
+      mode: "i2v",
+      prompt,
+      image_url: source.url,
+      end_image_url: endImage?.url ?? null,
+      duration: String(duration),
+      generate_audio,
+      negative_prompt,
+      cfg_scale,
+    });
+    return { __pending_media: row.id };
+  },
+
+  async video_to_video(args, { user_id, admin, supabase }) {
+    const prompt = String(args.prompt ?? "").trim();
+    if (!prompt) throw new Error("prompt is required");
+    const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
+    const refVideo = await TOOL_HANDLERS._load_media(admin, user_id, args.reference_video_id, "video");
+    const character_orientation = args.character_orientation === "video" ? "video" : "image";
+    const keep_original_sound = typeof args.keep_original_sound === "boolean" ? args.keep_original_sound : true;
+    let elementImage: any = null;
+    if (character_orientation === "video" && args.element_image_id) {
+      elementImage = await TOOL_HANDLERS._load_media(admin, user_id, args.element_image_id, "image");
+    }
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: prompt.slice(0, 60) || "Generated video",
+        kind: "video",
+        status: "generating",
+        generation_params: {
+          mode: "video-to-video",
+          model: "kling-v3-pro-motion-control",
+          source_image_id: sourceImage.id,
+          reference_video_id: refVideo.id,
+          character_orientation, keep_original_sound,
+          element_image_id: elementImage?.id ?? null,
+          user_text: prompt,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "generate-kling-video", {
+      row_id: row.id,
+      mode: "v2v",
+      prompt,
+      image_url: sourceImage.url,
+      video_url: refVideo.url,
+      character_orientation,
+      keep_original_sound,
+      element_image_url: elementImage?.url ?? null,
+    });
+    return { __pending_media: row.id };
+  },
+
+  async audio_image_to_video(args, { user_id, admin, supabase }) {
+    const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
+    const audio = await TOOL_HANDLERS._load_media(admin, user_id, args.audio_media_id, "audio");
+    const validTalking = ["stable", "expressive"];
+    const talking_style = validTalking.includes(args.talking_style) ? args.talking_style : "stable";
+    const validRes = ["360p", "480p", "540p", "720p", "1080p"];
+    const resolution = validRes.includes(args.resolution) ? args.resolution : "1080p";
+    const validAspect = ["9:16", "16:9", "1:1"];
+    const aspect_ratio = validAspect.includes(args.aspect_ratio) ? args.aspect_ratio : "9:16";
+    const caption = typeof args.caption === "boolean" ? args.caption : false;
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: audio.title ? `${audio.title} (avatar)` : "Generated avatar video",
+        kind: "video",
+        status: "generating",
+        generation_params: {
+          mode: "audio-image-to-video",
+          model: "heygen-avatar-v4",
+          source_image_id: sourceImage.id,
+          audio_asset_id: audio.id,
+          talking_style, resolution, aspect_ratio, caption,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    await invokeEdgeFunction(supabase, "generate-heygen-avatar", {
+      row_id: row.id,
+      image_url: sourceImage.url,
+      audio_url: audio.url,
+      talking_style, resolution, aspect_ratio, caption,
+    });
+    return { __pending_media: row.id };
+  },
 };
 
 function summarizeRun(steps: any[]): string {
