@@ -123,6 +123,11 @@ function MediaPage() {
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useVideoJobPolling(userId);
+  useRunningPlansAdvancer(
+    userId,
+    () => toast.success("Your plan is done"),
+    () => toast.error("A plan failed"),
+  );
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
