@@ -1972,6 +1972,28 @@ function AppPage() {
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
         />
       )}
+      <PlanComposerDialog
+        open={planComposerOpen}
+        onOpenChange={setPlanComposerOpen}
+        originDocumentId={activeDocId}
+        originSentenceIndex={currentIdx}
+        onPlanProposed={(id) => {
+          setPlanApprovalId(id);
+          setPlanApprovalOpen(true);
+        }}
+      />
+      <PlanApprovalDialog
+        open={planApprovalOpen}
+        onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
+        planId={planApprovalId}
+        onApproved={() => {
+          const text = currentSentence?.content;
+          if (text) speak(text, claimSpeech());
+        }}
+      />
+      {plansScreenOpen && (
+        <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
+      )}
     </main>
   );
 }
