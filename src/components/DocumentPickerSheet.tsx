@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { sortDocsByTitle } from "@/lib/sortDocs";
 
 interface Props {
   open: boolean;
@@ -40,11 +41,13 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
       (sentences ?? []).forEach((s: any) => {
         counts.set(s.document_id, (counts.get(s.document_id) ?? 0) + 1);
       });
-      return (documents ?? []).map((d) => ({
-        id: d.id,
-        title: d.title,
-        sentence_count: counts.get(d.id) ?? 0,
-      }));
+      return sortDocsByTitle(
+        (documents ?? []).map((d) => ({
+          id: d.id,
+          title: d.title,
+          sentence_count: counts.get(d.id) ?? 0,
+        }))
+      );
     },
   });
 

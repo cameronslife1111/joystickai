@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { sortDocsByTitle } from "@/lib/sortDocs";
 
 interface Props {
   open: boolean;
@@ -39,11 +40,13 @@ export function LinkDocumentDialog({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return documents.filter((d) => {
-      if (excludeDocumentId && d.id === excludeDocumentId) return false;
-      if (!q) return true;
-      return (d.title || "").toLowerCase().includes(q);
-    });
+    return sortDocsByTitle(
+      documents.filter((d) => {
+        if (excludeDocumentId && d.id === excludeDocumentId) return false;
+        if (!q) return true;
+        return (d.title || "").toLowerCase().includes(q);
+      })
+    );
   }, [documents, query, excludeDocumentId]);
 
   const handlePick = async (docId: string | null) => {

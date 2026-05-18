@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { sortDocsByTitle } from "@/lib/sortDocs";
 
 export type DestinationPosition = "top" | "bottom" | "after_current";
 
@@ -38,7 +39,7 @@ export function DestinationPicker({
             <SelectValue placeholder="Select a document" />
           </SelectTrigger>
           <SelectContent>
-            {documents.map((d) => (
+            {sortDocsByTitle(documents).map((d) => (
               <SelectItem key={d.id} value={d.id}>
                 {d.title || "Untitled"}
               </SelectItem>
