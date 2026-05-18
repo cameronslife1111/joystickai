@@ -4,8 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
-  RefreshCw, Film, Trash2, MoreVertical,
+  RefreshCw, Film, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers,
 } from "lucide-react";
+import { GenerateImageDialog } from "@/components/GenerateImageDialog";
+import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
+import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -20,13 +23,14 @@ export const Route = createFileRoute("/_authenticated/media")({
 });
 
 type Kind = "image" | "video" | "audio";
+type AssetStatus = "generating" | "completed" | "failed" | null;
 type Asset = {
   id: string;
   user_id: string;
   title: string;
   kind: Kind;
-  url: string;
-  storage_path: string;
+  url: string | null;
+  storage_path: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   duration_seconds: number | null;
@@ -34,6 +38,8 @@ type Asset = {
   height: number | null;
   seen_at: string | null;
   created_at: string;
+  status?: AssetStatus;
+  error_message?: string | null;
 };
 type Filter = "all" | "image" | "video" | "audio";
 
@@ -100,8 +106,34 @@ function MediaPage() {
   const [renameText, setRenameText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
+  const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
+  const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
+
+  // Realtime subscription so generating thumbnails flip to completed automatically
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`media_assets_${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "media_assets", filter: `user_id=eq.${userId}` },
+        () => {
+          qc.invalidateQueries({ queryKey: ["media_assets"] });
+          qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, qc]);
 
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ["media_assets"],
@@ -223,10 +255,11 @@ function MediaPage() {
   }, [renameText, sheetAsset, qc]);
 
   const handleDownload = useCallback(async (asset: Asset) => {
+    if (!asset.url) { toast.error("No file to download yet"); setSheetAsset(null); return; }
     try {
       const res = await fetch(asset.url);
       const blob = await res.blob();
-      const ext = asset.storage_path.split(".").pop() ?? "";
+      const ext = (asset.storage_path ?? "").split(".").pop() ?? "";
       const fname = ext ? `${asset.title}.${ext}` : asset.title;
       const a = document.createElement("a");
       const objUrl = URL.createObjectURL(blob);
@@ -242,21 +275,25 @@ function MediaPage() {
     setSheetAsset(null);
   }, []);
 
-  const handleDelete = useCallback(async () => {
-    if (!sheetAsset) return;
-    const a = sheetAsset;
+  const deleteAsset = useCallback(async (a: Asset) => {
     const viewing = viewerIdx !== null && filtered[viewerIdx]?.id === a.id;
     qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
-    setConfirmDelete(false);
-    setSheetAsset(null);
     if (viewing) setViewerIdx(null);
     const { error: delErr } = await supabase.from("media_assets").delete().eq("id", a.id);
     if (delErr) { toast.error(delErr.message); return; }
-    await supabase.storage.from(BUCKET).remove([a.storage_path]);
+    if (a.storage_path) await supabase.storage.from(BUCKET).remove([a.storage_path]);
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
     toast.success("Deleted");
-  }, [sheetAsset, qc, viewerIdx, filtered]);
+  }, [qc, viewerIdx, filtered]);
+
+  const handleDelete = useCallback(async () => {
+    if (!sheetAsset) return;
+    const a = sheetAsset;
+    setConfirmDelete(false);
+    setSheetAsset(null);
+    await deleteAsset(a);
+  }, [sheetAsset, deleteAsset]);
 
   // Viewer keyboard + swipe
   useEffect(() => {
@@ -368,49 +405,78 @@ function MediaPage() {
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-            {filtered.map((a, i) => (
-              <button
-                key={a.id}
-                onClick={() => openViewer(i)}
-                onContextMenu={(e) => { e.preventDefault(); setSheetAsset(a); }}
-                style={NO_CALLOUT_STYLE}
-                className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
-              >
-                {a.kind === "image" && (
-                  <img
-                    src={a.url}
-                    alt={a.title}
-                    loading="lazy"
-                    draggable={false}
-                    style={NO_CALLOUT_STYLE}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                {a.kind === "video" && (
-                  <>
-                    <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <Play className="h-10 w-10 text-white drop-shadow" />
+            {filtered.map((a, i) => {
+              const isGenerating = a.status === "generating";
+              const isFailed = a.status === "failed";
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => {
+                    if (isGenerating) return;
+                    if (isFailed) { setFailedAsset(a); return; }
+                    openViewer(i);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (isGenerating) return;
+                    setSheetAsset(a);
+                  }}
+                  style={NO_CALLOUT_STYLE}
+                  className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
+                >
+                  {isGenerating ? (
+                    <div
+                      className="flex h-full w-full flex-col items-center justify-center gap-2 p-2"
+                      style={{ background: "linear-gradient(135deg, color-mix(in oklab, var(--aurora-1) 25%, transparent), color-mix(in oklab, var(--aurora-2) 25%, transparent))" }}
+                    >
+                      <Loader2 className="h-6 w-6 animate-spin text-foreground/80" />
+                      <span className="text-[10px] text-foreground/80">Generating...</span>
                     </div>
-                  </>
-                )}
-                {a.kind === "audio" && (
-                  <div
-                    className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center"
-                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                  >
-                    <Music className="h-8 w-8 text-white" />
-                    <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
-                  </div>
-                )}
-                {!a.seen_at && (
-                  <span
-                    className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
-                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                  />
-                )}
-              </button>
-            ))}
+                  ) : isFailed ? (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-destructive/10 p-2">
+                      <AlertCircle className="h-6 w-6 text-destructive" />
+                      <span className="text-[10px] text-destructive">Failed</span>
+                    </div>
+                  ) : (
+                    <>
+                      {a.kind === "image" && a.url && (
+                        <img
+                          src={a.url}
+                          alt={a.title}
+                          loading="lazy"
+                          draggable={false}
+                          style={NO_CALLOUT_STYLE}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      {a.kind === "video" && a.url && (
+                        <>
+                          <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <Play className="h-10 w-10 text-white drop-shadow" />
+                          </div>
+                        </>
+                      )}
+                      {a.kind === "audio" && (
+                        <div
+                          className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center"
+                          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                        >
+                          <Music className="h-8 w-8 text-white" />
+                          <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
+                        </div>
+                      )}
+                      {!a.seen_at && (
+                        <span
+                          className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                        />
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -467,24 +533,38 @@ function MediaPage() {
         >
           {/* Asset */}
           <div className="flex h-full w-full items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-            {currentAsset.kind === "image" && (
-              <img
-                src={currentAsset.url}
-                alt={currentAsset.title}
-                draggable={false}
-                style={NO_CALLOUT_STYLE}
-                className="max-h-full max-w-full object-contain"
-              />
-            )}
-            {currentAsset.kind === "video" && (
-              <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
-            )}
-            {currentAsset.kind === "audio" && (
-              <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
-                <Music className="mx-auto mb-3 h-10 w-10" />
-                <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
-                <audio src={currentAsset.url} controls className="w-full" />
+            {currentAsset.status === "generating" ? (
+              <div className="flex flex-col items-center gap-3 text-white">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm">Generating...</span>
               </div>
+            ) : currentAsset.status === "failed" ? (
+              <div className="flex flex-col items-center gap-3 text-white">
+                <AlertCircle className="h-8 w-8 text-destructive" />
+                <span className="text-sm">{currentAsset.error_message ?? "Generation failed"}</span>
+              </div>
+            ) : (
+              <>
+                {currentAsset.kind === "image" && currentAsset.url && (
+                  <img
+                    src={currentAsset.url}
+                    alt={currentAsset.title}
+                    draggable={false}
+                    style={NO_CALLOUT_STYLE}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                )}
+                {currentAsset.kind === "video" && currentAsset.url && (
+                  <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
+                )}
+                {currentAsset.kind === "audio" && currentAsset.url && (
+                  <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
+                    <Music className="mx-auto mb-3 h-10 w-10" />
+                    <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
+                    <audio src={currentAsset.url} controls className="w-full" />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -536,9 +616,16 @@ function MediaPage() {
               <SheetButton icon={<Download className="h-4 w-4" />} label="Download"
                 onClick={() => handleDownload(sheetAsset)}
               />
-              <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
-                onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
-              />
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setRegenerateAsset(a); }}
+                />
+              )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Layers className="h-4 w-4" />} label="Remix"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setRemixAsset(a); }}
+                />
+              )}
               {sheetAsset.kind === "image" && (
                 <SheetButton icon={<Film className="h-4 w-4" />} label="Convert to Video"
                   onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
@@ -596,6 +683,81 @@ function MediaPage() {
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button onClick={handleDelete}
                 className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Generate FAB — hidden when viewer is open */}
+      {viewerIdx === null && (
+        <button
+          onClick={() => setGenerateOpen(true)}
+          aria-label="Generate image"
+          className="fixed right-4 z-30 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-white shadow-lg transition active:scale-95"
+          style={{
+            bottom: "calc(1rem + env(safe-area-inset-bottom))",
+            background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
+          }}
+        >
+          <Sparkles className="h-4 w-4" />
+          Generate
+        </button>
+      )}
+
+      <GenerateImageDialog open={generateOpen} onOpenChange={setGenerateOpen} />
+
+      {regenerateAsset && (
+        <RegenerateImageDialog
+          open={!!regenerateAsset}
+          onOpenChange={(o) => { if (!o) setRegenerateAsset(null); }}
+          sourceAsset={{ id: regenerateAsset.id, url: regenerateAsset.url, title: regenerateAsset.title }}
+          onSubmitted={() => { setRegenerateAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {remixAsset && (
+        <RemixImagesDialog
+          open={!!remixAsset}
+          onOpenChange={(o) => { if (!o) setRemixAsset(null); }}
+          initialAsset={{ id: remixAsset.id, url: remixAsset.url, title: remixAsset.title }}
+          onSubmitted={() => { setRemixAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {/* Failed asset dialog */}
+      {failedAsset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setFailedAsset(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <p className="font-display text-base">Generation failed</p>
+            </div>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {failedAsset.error_message ?? "Something went wrong."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setFailedAsset(null)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+              <button
+                onClick={async () => {
+                  const a = failedAsset;
+                  setFailedAsset(null);
+                  await deleteAsset(a);
+                }}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
