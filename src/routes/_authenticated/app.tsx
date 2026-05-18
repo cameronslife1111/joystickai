@@ -184,6 +184,10 @@ function AppPage() {
   // re-selects the slot the user is already on.
   useEffect(() => {
     if (!activeDocId) return;
+    // If the current ref already points at a slot holding the active doc,
+    // keep it — otherwise the same doc appearing in multiple slots would
+    // snap the cursor back to the first match and trap the cycle.
+    if (favorites[favIdxRef.current] === activeDocId) return;
     const slot = favorites.findIndex((id) => id === activeDocId);
     if (slot >= 0) favIdxRef.current = slot;
   }, [favorites, activeDocId]);
