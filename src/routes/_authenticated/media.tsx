@@ -494,22 +494,21 @@ function MediaPage() {
               <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
                 {viewerIdx! + 1} / {filtered.length}
               </div>
-              <div className="absolute right-4 top-4 flex items-center gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
-                  aria-label="Options"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
-                  aria-label="Close"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
+                aria-label="Options"
+                className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+                style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
+                aria-label="Close"
+                className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </>
           )}
         </div>
