@@ -22,7 +22,10 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "find_media_by_title",
-    description: "Find media assets (images, videos, audio) whose title matches the query. Returns up to 5 results.",
+    description:
+      "Find media assets (images, videos, audio) whose TITLE or original generation prompt contains the query (case-insensitive substring). " +
+      "Returns up to 5 results, each with id, title, kind, and source_text (the original prompt if the asset was AI-generated, otherwise null). " +
+      "Use this whenever the user refers to media by description — even if they don't know the exact title (e.g. 'the cat image' will match an asset generated from a prompt containing 'cat').",
     args: {
       query: { type: "string", description: "Search text", required: true },
     },
