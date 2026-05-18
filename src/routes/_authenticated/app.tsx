@@ -13,6 +13,7 @@ import { AnalyzeImageDialog } from "@/components/AnalyzeImageDialog";
 import { WebSearchDialog } from "@/components/WebSearchDialog";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
+import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Link as LinkIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
@@ -1466,8 +1467,10 @@ function AppPage() {
             const targetDoc = targetId ? docs?.find((d) => d.id === targetId) : null;
             const matchCount = targetId ? favorites.filter((id) => id === targetId).length : 0;
             const q = pickerQuery.trim().toLowerCase();
-            const filtered = (docs ?? []).filter((d) =>
-              q === "" ? true : d.title.toLowerCase().includes(q)
+            const filtered = sortDocsByTitle(
+              (docs ?? []).filter((d) =>
+                q === "" ? true : d.title.toLowerCase().includes(q)
+              )
             );
             const closePicker = () => {
               setPickerSlot(null);
@@ -1575,8 +1578,10 @@ function AppPage() {
       {/* Search-docs overlay */}
       {searchOpen && (() => {
         const q = searchQuery.trim().toLowerCase();
-        const results = (docs ?? []).filter((d) =>
-          q === "" ? true : d.title.toLowerCase().includes(q)
+        const results = sortDocsByTitle(
+          (docs ?? []).filter((d) =>
+            q === "" ? true : d.title.toLowerCase().includes(q)
+          )
         );
         const pickDoc = (doc: Doc) => {
           // iOS-safe: speak synchronously inside the tap gesture if unmuted.
