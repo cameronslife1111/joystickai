@@ -405,49 +405,78 @@ function MediaPage() {
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
-            {filtered.map((a, i) => (
-              <button
-                key={a.id}
-                onClick={() => openViewer(i)}
-                onContextMenu={(e) => { e.preventDefault(); setSheetAsset(a); }}
-                style={NO_CALLOUT_STYLE}
-                className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
-              >
-                {a.kind === "image" && (
-                  <img
-                    src={a.url}
-                    alt={a.title}
-                    loading="lazy"
-                    draggable={false}
-                    style={NO_CALLOUT_STYLE}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                {a.kind === "video" && (
-                  <>
-                    <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <Play className="h-10 w-10 text-white drop-shadow" />
+            {filtered.map((a, i) => {
+              const isGenerating = a.status === "generating";
+              const isFailed = a.status === "failed";
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => {
+                    if (isGenerating) return;
+                    if (isFailed) { setFailedAsset(a); return; }
+                    openViewer(i);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (isGenerating) return;
+                    setSheetAsset(a);
+                  }}
+                  style={NO_CALLOUT_STYLE}
+                  className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
+                >
+                  {isGenerating ? (
+                    <div
+                      className="flex h-full w-full flex-col items-center justify-center gap-2 p-2"
+                      style={{ background: "linear-gradient(135deg, color-mix(in oklab, var(--aurora-1) 25%, transparent), color-mix(in oklab, var(--aurora-2) 25%, transparent))" }}
+                    >
+                      <Loader2 className="h-6 w-6 animate-spin text-foreground/80" />
+                      <span className="text-[10px] text-foreground/80">Generating...</span>
                     </div>
-                  </>
-                )}
-                {a.kind === "audio" && (
-                  <div
-                    className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center"
-                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                  >
-                    <Music className="h-8 w-8 text-white" />
-                    <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
-                  </div>
-                )}
-                {!a.seen_at && (
-                  <span
-                    className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
-                    style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                  />
-                )}
-              </button>
-            ))}
+                  ) : isFailed ? (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-destructive/10 p-2">
+                      <AlertCircle className="h-6 w-6 text-destructive" />
+                      <span className="text-[10px] text-destructive">Failed</span>
+                    </div>
+                  ) : (
+                    <>
+                      {a.kind === "image" && a.url && (
+                        <img
+                          src={a.url}
+                          alt={a.title}
+                          loading="lazy"
+                          draggable={false}
+                          style={NO_CALLOUT_STYLE}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      {a.kind === "video" && a.url && (
+                        <>
+                          <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <Play className="h-10 w-10 text-white drop-shadow" />
+                          </div>
+                        </>
+                      )}
+                      {a.kind === "audio" && (
+                        <div
+                          className="flex h-full w-full flex-col items-center justify-center gap-2 p-2 text-center"
+                          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                        >
+                          <Music className="h-8 w-8 text-white" />
+                          <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
+                        </div>
+                      )}
+                      {!a.seen_at && (
+                        <span
+                          className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+                        />
+                      )}
+                    </>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
