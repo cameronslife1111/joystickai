@@ -255,10 +255,11 @@ function MediaPage() {
   }, [renameText, sheetAsset, qc]);
 
   const handleDownload = useCallback(async (asset: Asset) => {
+    if (!asset.url) { toast.error("No file to download yet"); setSheetAsset(null); return; }
     try {
       const res = await fetch(asset.url);
       const blob = await res.blob();
-      const ext = asset.storage_path.split(".").pop() ?? "";
+      const ext = (asset.storage_path ?? "").split(".").pop() ?? "";
       const fname = ext ? `${asset.title}.${ext}` : asset.title;
       const a = document.createElement("a");
       const objUrl = URL.createObjectURL(blob);
@@ -274,21 +275,25 @@ function MediaPage() {
     setSheetAsset(null);
   }, []);
 
-  const handleDelete = useCallback(async () => {
-    if (!sheetAsset) return;
-    const a = sheetAsset;
+  const deleteAsset = useCallback(async (a: Asset) => {
     const viewing = viewerIdx !== null && filtered[viewerIdx]?.id === a.id;
     qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => x.id !== a.id) ?? prev);
-    setConfirmDelete(false);
-    setSheetAsset(null);
     if (viewing) setViewerIdx(null);
     const { error: delErr } = await supabase.from("media_assets").delete().eq("id", a.id);
     if (delErr) { toast.error(delErr.message); return; }
-    await supabase.storage.from(BUCKET).remove([a.storage_path]);
+    if (a.storage_path) await supabase.storage.from(BUCKET).remove([a.storage_path]);
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
     toast.success("Deleted");
-  }, [sheetAsset, qc, viewerIdx, filtered]);
+  }, [qc, viewerIdx, filtered]);
+
+  const handleDelete = useCallback(async () => {
+    if (!sheetAsset) return;
+    const a = sheetAsset;
+    setConfirmDelete(false);
+    setSheetAsset(null);
+    await deleteAsset(a);
+  }, [sheetAsset, deleteAsset]);
 
   // Viewer keyboard + swipe
   useEffect(() => {
