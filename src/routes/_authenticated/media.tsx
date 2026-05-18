@@ -767,6 +767,14 @@ function MediaPage() {
         />
       )}
 
+      {aivAsset && (
+        <AudioImageToVideoDialog
+          open={!!aivAsset}
+          onOpenChange={(o) => { if (!o) setAivAsset(null); }}
+          sourceImage={{ id: aivAsset.id, url: aivAsset.url, title: aivAsset.title }}
+        />
+      )}
+
       {v2vAsset && (
         <VideoToVideoDialog
           open={!!v2vAsset}
