@@ -119,8 +119,15 @@ const TOOL_HANDLERS: Record<string, any> = {
       .limit(5);
     if (args.document_id) q = q.eq("document_id", args.document_id);
     const { data } = await q;
-    return data ?? [];
+    const rows = data ?? [];
+    if (rows.length === 0) {
+      throw new Error(
+        `No sentence matched "${args.query}"${args.document_id ? " in the specified document" : ""}.`,
+      );
+    }
+    return rows;
   },
+
   async find_media_by_title(args, { user_id, admin }) {
     const q = String(args.query ?? "").trim();
     if (!q) return [];
