@@ -113,8 +113,11 @@ function MediaPage() {
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
+  const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useVideoJobPolling(userId);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
