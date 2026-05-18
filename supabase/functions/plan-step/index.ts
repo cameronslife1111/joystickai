@@ -72,7 +72,7 @@ function resolvePath(obj: any, path: string): any {
 
 type ToolCtx = { user_id: string; admin: any; supabase: any };
 
-const TOOL_HANDLERS: Record<string, (args: any, ctx: ToolCtx) => Promise<any>> = {
+const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const { data } = await admin
       .from("documents")
