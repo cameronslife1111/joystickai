@@ -147,3 +147,103 @@ export const generateText = createServerFn({ method: "POST" })
       targetDocumentId: data.targetDocumentId,
     };
   });
+
+const analyzeImageSchema = z.object({
+  prompt: z.string().max(8000).default(""),
+  imageUrl: z.string().url(),
+  contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
+  targetDocumentId: z.string().uuid(),
+  position: z.enum(["top", "bottom", "after_current"]),
+});
+
+export const analyzeImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => analyzeImageSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+
+    const parts: string[] = [];
+    const trimmedPrompt = data.prompt.trim();
+    if (trimmedPrompt) {
+      parts.push(trimmedPrompt);
+    } else {
+      parts.push("Describe what you see in this image in clear, useful prose.");
+    }
+    for (const docId of data.contextDocumentIds) {
+      const { data: rows } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", docId)
+        .order("order_index", { ascending: true });
+      const joined = (rows ?? []).map((r) => r.content).join(" ").trim();
+      if (joined) parts.push(joined);
+    }
+    const textPart = parts.join("\n\n");
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+    const provider = createOpenAiProvider(apiKey);
+    const model = provider("gpt-5.5");
+
+    const system =
+      "You are Joystick AI, a focused writing companion. The user provides an image and optional context. " +
+      "Look at the image carefully and respond in concise, useful prose that fits naturally into the user's writing. " +
+      "Plain text only — no markdown, no lists, no headings. " +
+      "Use clear, separable sentences each ending in . ! or ?. " +
+      "Keep total length under ~10 sentences unless the user explicitly asks for more.";
+
+    const { text } = await aiSdkGenerateText({
+      model,
+      system,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: textPart },
+            { type: "image", image: data.imageUrl },
+          ],
+        },
+      ],
+    });
+
+    if (!text || !text.trim()) {
+      throw new Error("AI returned an empty response");
+    }
+
+    const newSentences = splitIntoSentences(text);
+    if (newSentences.length === 0) {
+      throw new Error("Could not parse a sentence from the AI response");
+    }
+
+    let insertAt = 0;
+    if (data.position === "top") {
+      insertAt = 0;
+    } else if (data.position === "bottom") {
+      const { count } = await supabase
+        .from("sentences")
+        .select("id", { count: "exact", head: true })
+        .eq("document_id", data.targetDocumentId);
+      insertAt = count ?? 0;
+    } else {
+      const { data: doc } = await supabase
+        .from("documents")
+        .select("current_sentence_index")
+        .eq("id", data.targetDocumentId)
+        .single();
+      const cur = typeof doc?.current_sentence_index === "number" ? doc.current_sentence_index : -1;
+      insertAt = cur + 1;
+    }
+
+    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: data.targetDocumentId,
+      p_contents: newSentences,
+      p_insert_at: insertAt,
+    });
+    if (rpcErr) throw new Error(rpcErr.message);
+
+    return {
+      insertedCount: newSentences.length,
+      insertAt,
+      targetDocumentId: data.targetDocumentId,
+    };
+  });
