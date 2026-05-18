@@ -70,7 +70,7 @@ function resolvePath(obj: any, path: string): any {
   return cur;
 }
 
-type ToolCtx = { user_id: string; admin: any };
+type ToolCtx = { user_id: string; admin: any; supabase: any };
 
 const TOOL_HANDLERS: Record<string, (args: any, ctx: ToolCtx) => Promise<any>> = {
   async find_document_by_title(args, { user_id, admin }) {
