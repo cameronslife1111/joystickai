@@ -9,6 +9,8 @@ import {
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
+import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
+import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
