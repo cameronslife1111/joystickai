@@ -97,7 +97,7 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
             {plan.error_lovable_prompt && (
               <button
                 onClick={async () => {
-                  const ok = await copyToClipboard(plan.error_lovable_prompt);
+                  const ok = await copyToClipboard(plan.error_lovable_prompt ?? "");
                   if (ok) toast.success("Copied fix prompt to clipboard");
                   else toast.error("Failed to copy");
                 }}
