@@ -632,8 +632,13 @@ function MediaPage() {
                 />
               )}
               {sheetAsset.kind === "image" && (
-                <SheetButton icon={<Film className="h-4 w-4" />} label="Convert to Video"
-                  onClick={() => { toast("Coming soon"); setSheetAsset(null); }}
+                <SheetButton icon={<Film className="h-4 w-4" />} label="Image to Video"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setViewerIdx(null);
+                    setI2vAsset(a);
+                  }}
                 />
               )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
