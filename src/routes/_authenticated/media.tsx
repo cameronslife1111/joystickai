@@ -655,6 +655,16 @@ function MediaPage() {
                   }}
                 />
               )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Mic2 className="h-4 w-4" />} label="Audio + Image to Video"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setViewerIdx(null);
+                    setAivAsset(a);
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
