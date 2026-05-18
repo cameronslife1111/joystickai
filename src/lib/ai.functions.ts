@@ -53,7 +53,7 @@ export const aiContinue = createServerFn({ method: "POST" })
       `User said: ${data.prompt}\n\n` +
       `Continue or respond, picking up after the current position.`;
 
-    const { text } = await generateText({
+    const { text } = await aiSdkGenerateText({
       model,
       system,
       prompt: user,
