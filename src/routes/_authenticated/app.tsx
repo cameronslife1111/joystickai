@@ -473,60 +473,14 @@ function AppPage() {
     setEditing(true);
   }, [editing, currentIdx, sentences]);
 
-  // Long press = voice mode
+  // Long press = open Plan Mode composer (voice capture removed)
   const onLongPressStart = useCallback(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { toast.error("Voice not supported in this browser"); return; }
-    const r = new SR();
-    r.continuous = true; r.interimResults = true; r.lang = "en-US";
-    transcriptRef.current = "";
-    r.onresult = (e: any) => {
-      let final = "";
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
-      }
-      if (final) transcriptRef.current = final.trim();
-    };
-    r.onerror = () => {};
-    try { r.start(); } catch {}
-    recognitionRef.current = r;
-    setOrbState("listening");
+    setPlanComposerOpen(true);
   }, []);
 
-  const onLongPressEnd = useCallback(async () => {
-    const r = recognitionRef.current;
-    if (r) { try { r.stop(); } catch {} recognitionRef.current = null; }
-    setOrbState("idle");
-    const prompt = transcriptRef.current.trim();
-    transcriptRef.current = "";
-    if (!prompt || !activeDocId) return;
-
-    setOrbState("thinking");
-    try {
-      const { text } = await callAi({ data: { documentId: activeDocId, prompt } });
-      const newSentences = splitIntoSentences(text);
-      if (newSentences.length === 0) return;
-
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-
-      const insertAt = currentSentence ? currentIdx + 1 : 0;
-      const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
-        p_document_id: activeDocId,
-        p_contents: newSentences,
-        p_insert_at: insertAt,
-      });
-      if (rpcErr) throw rpcErr;
-      await setIndex(insertAt);
-      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
-      const token = claimSpeech();
-      speak(newSentences[0], token);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "AI failed");
-    } finally {
-      setOrbState("idle");
-    }
-  }, [activeDocId, callAi, sentences, currentIdx, currentSentence, setIndex, qc, speak, claimSpeech]);
+  const onLongPressEnd = useCallback(() => {
+    // no-op; the composer takes over from here
+  }, []);
 
   useOrbGestures(orbRef, {
     onTap: openNewIdea,
