@@ -1336,6 +1336,20 @@ function AppPage() {
             height: "min(55vw, 28svh, 220px)",
           }}
         >
+          {currentSentence?.linked_document_id && (() => {
+            const linkedDocTitle = docs?.find((d) => d.id === currentSentence.linked_document_id)?.title ?? null;
+            return (
+              <button
+                type="button"
+                onClick={() => void openLinkedDocument()}
+                className="absolute left-1/2 -top-10 z-10 flex max-w-[80vw] -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
+                style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+              >
+                <LinkIcon className="h-3 w-3 shrink-0" />
+                <span className="truncate">{linkedDocTitle ?? "Linked"}</span>
+              </button>
+            );
+          })()}
           <Orb
             ref={orbRef}
             state={orbState}
