@@ -917,6 +917,11 @@ function AppPage() {
       if (!activeDocId) { toast.error("Open a document first"); return; }
       setGenerateTextOpen(true);
     }},
+    { e: "👁️", t: "Analyze img", fn: () => {
+      if (!activeDocId) { toast.error("Open a document first"); return; }
+      setMenuOpen(false);
+      setAnalyzeImageOpen(true);
+    }},
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
