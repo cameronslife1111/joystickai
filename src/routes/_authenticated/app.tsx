@@ -1254,7 +1254,9 @@ function AppPage() {
             />
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
-              {currentSentence?.content ?? (
+              {currentSentence ? (
+                <SentenceText content={currentSentence.content} />
+              ) : (
                 <span className="text-muted-foreground italic text-2xl">
                   Hold the orb and speak, or double-tap to write.
                 </span>
