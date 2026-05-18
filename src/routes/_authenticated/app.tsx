@@ -1014,19 +1014,20 @@ function AppPage() {
   const slots = useMemo(() => {
     const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
-    filled[1] = grid[3];   // 2  Rename
-    filled[2] = grid[2];   // 3  New doc
+    filled[1] = grid[4];   // 2  Rename
+    filled[2] = grid[3];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
-    filled[4] = grid[4];   // 5  Delete doc
-    filled[5] = grid[7];   // 6  Move sentence
-    filled[6] = grid[9];   // 7  Copy sentence
-    filled[7] = grid[10];  // 8  Copy document
-    filled[8] = grid[12];  // 9  Import checklists
-    filled[9] = grid[13];  // 10 Media Gallery
-    filled[10] = grid[8];  // 11 Search docs
-    filled[11] = grid[6];  // 12 Jump to
-    filled[15] = grid[5];  // 16 Favorites
-    filled[23] = grid[11]; // 24 Sign out
+    filled[4] = grid[5];   // 5  Delete doc
+    filled[5] = grid[8];   // 6  Move sentence
+    filled[6] = grid[10];  // 7  Copy sentence
+    filled[7] = grid[11];  // 8  Copy document
+    filled[8] = grid[13];  // 9  Import checklists
+    filled[9] = grid[14];  // 10 Media Gallery
+    filled[10] = grid[9];  // 11 Search docs
+    filled[11] = grid[7];  // 12 Jump to
+    filled[12] = grid[2];  // 13 Gen text
+    filled[15] = grid[6];  // 16 Favorites
+    filled[23] = grid[12]; // 24 Sign out
     return filled;
   }, [grid]);
 
