@@ -62,7 +62,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, minimum-scale=1, user-scalable=no" },
-      { title: "🕹️ Joystick AI — Focus on one thing at a time" },
+      { title: "🟣 Orby — Focus on one thing at a time" },
       { name: "description", content: "Joystick AI: a focus tool that shows you one sentence at a time. Move through your checklists & documents with a single glowing orb." },
       { name: "theme-color", content: "#1a0f2e" },
       { property: "og:title", content: "🕹️ Joystick AI — Focus on one thing at a time" },
