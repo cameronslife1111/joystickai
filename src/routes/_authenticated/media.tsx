@@ -687,6 +687,81 @@ function MediaPage() {
           </div>
         </div>
       )}
+
+      {/* Floating Generate FAB — hidden when viewer is open */}
+      {viewerIdx === null && (
+        <button
+          onClick={() => setGenerateOpen(true)}
+          aria-label="Generate image"
+          className="fixed right-4 z-30 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-white shadow-lg transition active:scale-95"
+          style={{
+            bottom: "calc(1rem + env(safe-area-inset-bottom))",
+            background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
+          }}
+        >
+          <Sparkles className="h-4 w-4" />
+          Generate
+        </button>
+      )}
+
+      <GenerateImageDialog open={generateOpen} onOpenChange={setGenerateOpen} />
+
+      {regenerateAsset && (
+        <RegenerateImageDialog
+          open={!!regenerateAsset}
+          onOpenChange={(o) => { if (!o) setRegenerateAsset(null); }}
+          sourceAsset={{ id: regenerateAsset.id, url: regenerateAsset.url, title: regenerateAsset.title }}
+          onSubmitted={() => { setRegenerateAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {remixAsset && (
+        <RemixImagesDialog
+          open={!!remixAsset}
+          onOpenChange={(o) => { if (!o) setRemixAsset(null); }}
+          initialAsset={{ id: remixAsset.id, url: remixAsset.url, title: remixAsset.title }}
+          onSubmitted={() => { setRemixAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {/* Failed asset dialog */}
+      {failedAsset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setFailedAsset(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <p className="font-display text-base">Generation failed</p>
+            </div>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {failedAsset.error_message ?? "Something went wrong."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setFailedAsset(null)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+              <button
+                onClick={async () => {
+                  const a = failedAsset;
+                  setFailedAsset(null);
+                  await deleteAsset(a);
+                }}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
