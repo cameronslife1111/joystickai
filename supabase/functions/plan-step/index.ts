@@ -96,14 +96,21 @@ const TOOL_HANDLERS: Record<string, (args: any, ctx: ToolCtx) => Promise<any>> =
     return data ?? [];
   },
   async find_media_by_title(args, { user_id, admin }) {
+    const q = String(args.query ?? "").trim();
+    if (!q) return [];
     const { data } = await admin
       .from("media_assets")
-      .select("id, title, kind")
+      .select("id, title, kind, generation_params, created_at")
       .eq("user_id", user_id)
-      .ilike("title", `%${args.query}%`)
+      .or(`title.ilike.%${q}%,generation_params->>user_text.ilike.%${q}%`)
       .order("created_at", { ascending: false })
       .limit(5);
-    return data ?? [];
+    return (data ?? []).map((m: any) => ({
+      id: m.id,
+      title: m.title,
+      kind: m.kind,
+      source_text: m?.generation_params?.user_text ?? null,
+    }));
   },
   async create_document(args, { user_id, admin }) {
     const { count } = await admin
