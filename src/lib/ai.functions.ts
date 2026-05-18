@@ -295,7 +295,8 @@ export const webSearch = createServerFn({ method: "POST" })
           "Use web_search to find current, accurate information when relevant. " +
           "Respond in concise, useful prose. Plain text only — no markdown, no lists, no headings, no inline citation numbers like [1] or footnote markers. " +
           "Use clear, separable sentences each ending in . ! or ?. " +
-          "Keep total length under ~10 sentences unless the user explicitly asks for more.",
+          "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
+          "If you reference any URL, include the full http:// or https:// URL inline in the sentence; do not wrap it in markdown link syntax.",
       }),
     });
 
