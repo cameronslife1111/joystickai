@@ -1,36 +1,42 @@
-## 1. Fix duplicate "New doc" in menu slots 2 & 3
+## Goal
+Everywhere the app shows a list of documents (search pop-up, favorites slot picker, link-to-doc dialog, document picker sheet, destination picker), sort them consistently:
+- Titles starting with **emoji** first
+- Titles starting with **numbers** next
+- Titles starting with **letters** last (A–Z, case-insensitive)
 
-In `src/routes/_authenticated/app.tsx` (~line 1105), slot 2 (`filled[1]`) and slot 3 (`filled[2]`) both point to `grid[5]`, which is the "New doc" action — that's why two New doc buttons appear. The intent (per the comment) was Rename in slot 2 and New doc in slot 3.
+## Why
+Right now the lists use whatever order the database returns (`position` or `updated_at`), so with 300+ documents the user has to hunt through a scattered list.
 
-Change:
-```
-filled[1] = grid[6];   // 2  Rename
-filled[2] = grid[5];   // 3  New doc
-```
-(grid[6] is the `✏️ Rename` entry.) No other slot mapping changes.
+## Technical details
+1. **Add a shared sort helper** in `src/lib/utils.ts` (or a new `src/lib/sortDocs.ts`):
+   ```ts
+   function docSortRank(title: string): number {
+     const t = title.trim();
+     if (/^\p{Extended_Pictographic}/u.test(t)) return 0; // emoji
+     if (/^\d/.test(t)) return 1;                         // number
+     return 2;                                             // letter / other
+   }
+   export function sortDocsByTitle<T extends { title: string }>(docs: T[]): T[] {
+     return [...docs].sort((a, b) => {
+       const ra = docSortRank(a.title);
+       const rb = docSortRank(b.title);
+       if (ra !== rb) return ra - rb;
+       return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+     });
+   }
+   ```
 
-## 2. Add search to the favorites slot picker
+2. **Apply sorting in every document-list UI** — each location gets `.slice()` or `[...docs]` before mapping so the original array isn't mutated:
+   - `app.tsx` — favorites picker `filtered` list (line ~1469) and search pop-up `results` (line ~1578)
+   - `LinkDocumentDialog.tsx` — `filtered` list (line ~40)
+   - `DocumentPickerSheet.tsx` — the fetched `documents` before they are rendered
+   - `DestinationPicker.tsx` — the `documents` prop before rendering in the `Select`
 
-Currently when the user taps a Favorites slot, a sheet lists all 300+ docs unfiltered. Add a search input at the top of that picker (lines ~1467–1516 of `app.tsx`).
-
-- New local state `pickerQuery` (string), reset to `""` whenever `pickerSlot` opens or closes.
-- Render a sticky search `<input>` at the top of the sheet styled to match the existing dark-glass UI (rounded, border `border-foreground/10`, bg `bg-foreground/5`, autoFocus).
-- Filter `(docs ?? [])` by case-insensitive `title.includes(query)` before mapping to buttons.
-- "Clear slot" stays above the search (always visible when slot is filled), or moves to a small pinned row — keep it above the search so destructive action is never hidden by typed text. The filtered list scrolls beneath.
-- Empty filter result shows "No matches" in muted text.
-
-## 3. Add "Replace all matching slots" button
-
-Below the existing "Clear slot" button (only shown when `favorites[pickerSlot]` is set), add a second button:
-
-- Label: `Replace all matching slots`
-- Style: matches Clear slot's outlined look but neutral (e.g. `border-foreground/20 bg-foreground/5`, not destructive red).
-- Behavior: capture `targetId = favorites[pickerSlot]`. When the user then picks a doc `d` from the list, instead of writing only `next[pickerSlot] = d.id`, replace **every** slot whose current value equals `targetId` with `d.id`, then save.
-- Implement via a new state flag `replaceMatching: boolean` (default `false`). Tapping the button toggles it on and shows a small hint above the doc list ("Picking a doc will replace all N slots currently set to '<title>'"). Tapping a doc then performs the multi-slot replace and resets the flag.
-- Reset `replaceMatching` to `false` whenever `pickerSlot` changes or the picker closes.
-- If the target doc was deleted/missing, fall back to a single-slot replace.
-
-No backend changes (favorites are already stored as a JSON array on `user_preferences` via the existing `saveFavorites`). No new components, no schema changes — all edits are in `src/routes/_authenticated/app.tsx`.
+3. **No database changes** — purely client-side sort at render time.
 
 ## Files touched
-- `src/routes/_authenticated/app.tsx` (slots map fix, picker search input, replace-all button + flag)
+- `src/lib/utils.ts` (add helper) or `src/lib/sortDocs.ts` (new file)
+- `src/routes/_authenticated/app.tsx`
+- `src/components/LinkDocumentDialog.tsx`
+- `src/components/DocumentPickerSheet.tsx`
+- `src/components/DestinationPicker.tsx`
