@@ -734,6 +734,15 @@ function MediaPage() {
         />
       )}
 
+      {i2vAsset && (
+        <ImageToVideoDialog
+          open={!!i2vAsset}
+          onOpenChange={(o) => { if (!o) setI2vAsset(null); }}
+          sourceImage={{ id: i2vAsset.id, url: i2vAsset.url, title: i2vAsset.title }}
+          onSubmitted={() => setI2vAsset(null)}
+        />
+      )}
+
       {/* Failed asset dialog */}
       {failedAsset && (
         <div
