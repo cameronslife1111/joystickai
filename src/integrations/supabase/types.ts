@@ -48,6 +48,8 @@ export type Database = {
         Row: {
           created_at: string
           duration_seconds: number | null
+          error_message: string | null
+          generation_params: Json | null
           height: number | null
           id: string
           kind: string
@@ -55,16 +57,19 @@ export type Database = {
           seen_at: string | null
           size_bytes: number | null
           source_document_id: string | null
-          storage_path: string
+          status: string | null
+          storage_path: string | null
           title: string
           updated_at: string
-          url: string
+          url: string | null
           user_id: string
           width: number | null
         }
         Insert: {
           created_at?: string
           duration_seconds?: number | null
+          error_message?: string | null
+          generation_params?: Json | null
           height?: number | null
           id?: string
           kind: string
@@ -72,16 +77,19 @@ export type Database = {
           seen_at?: string | null
           size_bytes?: number | null
           source_document_id?: string | null
-          storage_path: string
+          status?: string | null
+          storage_path?: string | null
           title?: string
           updated_at?: string
-          url: string
+          url?: string | null
           user_id: string
           width?: number | null
         }
         Update: {
           created_at?: string
           duration_seconds?: number | null
+          error_message?: string | null
+          generation_params?: Json | null
           height?: number | null
           id?: string
           kind?: string
@@ -89,10 +97,11 @@ export type Database = {
           seen_at?: string | null
           size_bytes?: number | null
           source_document_id?: string | null
-          storage_path?: string
+          status?: string | null
+          storage_path?: string | null
           title?: string
           updated_at?: string
-          url?: string
+          url?: string | null
           user_id?: string
           width?: number | null
         }
