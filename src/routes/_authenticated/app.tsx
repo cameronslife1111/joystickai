@@ -1086,7 +1086,17 @@ function AppPage() {
       setMenuOpen(false);
       void handleExportAll();
     }},
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll]);
+    { e: "🔗", t: "Link to doc", fn: () => {
+      if (!currentSentence) { toast.error("No sentence selected"); return; }
+      setMenuOpen(false);
+      setLinkPickerOpen(true);
+    }},
+    { e: "↗️", t: "Open link", fn: () => {
+      if (!currentSentence?.linked_document_id) { toast.error("This sentence has no linked document"); return; }
+      setMenuOpen(false);
+      void openLinkedDocument();
+    }},
+  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
