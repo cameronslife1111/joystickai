@@ -4,12 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
-  RefreshCw, Film, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers,
+  RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers,
 } from "lucide-react";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
+import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
