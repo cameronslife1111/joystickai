@@ -138,8 +138,8 @@ Deno.serve(async (req) => {
     // ---- Inject lightweight USER CONTEXT so the planner can resolve references
     //      like "this doc", "the current sentence", "add to here", etc.
     let userContext = "";
-    const docId = plan.context_document_id as string | null | undefined;
-    const sentenceId = plan.context_sentence_id as string | null | undefined;
+    const docId = (plan as any).origin_document_id as string | null | undefined;
+    const sentenceIdx = (plan as any).origin_sentence_index as number | null | undefined;
     if (docId) {
       const { data: doc } = await admin
         .from("documents")
@@ -150,15 +150,17 @@ Deno.serve(async (req) => {
       if (doc) {
         userContext += `\nactive_document_id: ${doc.id}\nactive_document_title: ${JSON.stringify(doc.title ?? "")}`;
       }
-    }
-    if (sentenceId) {
-      const { data: sent } = await admin
-        .from("sentences")
-        .select("id, text, position")
-        .eq("id", sentenceId)
-        .maybeSingle();
-      if (sent) {
-        userContext += `\ncurrent_sentence_id: ${sent.id}\ncurrent_sentence_text: ${JSON.stringify(sent.text ?? "")}\ncurrent_sentence_position: ${sent.position}`;
+      if (typeof sentenceIdx === "number" && sentenceIdx >= 0) {
+        const { data: sents } = await admin
+          .from("sentences")
+          .select("id, text, position")
+          .eq("document_id", docId)
+          .order("position", { ascending: true })
+          .range(sentenceIdx, sentenceIdx);
+        const sent = sents?.[0];
+        if (sent) {
+          userContext += `\ncurrent_sentence_id: ${sent.id}\ncurrent_sentence_text: ${JSON.stringify(sent.text ?? "")}\ncurrent_sentence_position: ${sent.position}`;
+        }
       }
     }
     const effectiveSystemPrompt = userContext
