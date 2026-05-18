@@ -35,6 +35,7 @@ function AppPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
   const [generateTextOpen, setGenerateTextOpen] = useState(false);
+  const [analyzeImageOpen, setAnalyzeImageOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
