@@ -707,12 +707,67 @@ Deno.serve(async (req) => {
     await admin.from("plans").update({ status: "running" }).eq("id", plan.id).eq("status", "approved");
     plan.status = "running";
   }
-  if (plan.status !== "running") {
+  if (plan.status !== "running" && plan.status !== "awaiting_media") {
     return json({ status: plan.status });
   }
 
   const steps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
   const idx: number = plan.current_step ?? 0;
+
+  // ---- Resume path: a previous step kicked off a media generation; check on it. ----
+  if (plan.status === "awaiting_media") {
+    const step = steps[idx];
+    const mediaId: string | undefined = step?.pending_media_id;
+    if (!mediaId) {
+      // Defensive: drop back to running so we re-evaluate.
+      await admin.from("plans").update({ status: "running" }).eq("id", plan.id);
+      return json({ status: "running" });
+    }
+    const { data: media } = await admin
+      .from("media_assets")
+      .select("id, status, url, title, error_message")
+      .eq("id", mediaId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!media) {
+      step.status = "failed";
+      step.error = `Pending media ${mediaId} disappeared`;
+      const lovablePrompt = buildLovablePrompt(plan, step, step.error);
+      await admin.from("plans").update({
+        steps, status: "failed", error_message: step.error,
+        error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
+      }).eq("id", plan.id);
+      return json({ status: "failed", error: step.error });
+    }
+    if (media.status === "generating") {
+      return json({ status: "awaiting_media", media_id: mediaId });
+    }
+    if (media.status === "failed") {
+      step.status = "failed";
+      step.error = media.error_message || "Media generation failed";
+      const lovablePrompt = buildLovablePrompt(plan, step, step.error);
+      await admin.from("plans").update({
+        steps, status: "failed", error_message: step.error,
+        error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
+      }).eq("id", plan.id);
+      return json({ status: "failed", error: step.error });
+    }
+    // completed
+    step.status = "completed";
+    step.result = { id: media.id, title: media.title, url: media.url };
+    step.error = null;
+    step.pending_media_id = null;
+    const nextIdx = idx + 1;
+    const updates: any = { steps, current_step: nextIdx, status: "running" };
+    if (nextIdx >= steps.length) {
+      updates.status = "completed";
+      updates.result_summary = summarizeRun(steps);
+      updates.completed_at = new Date().toISOString();
+    }
+    await admin.from("plans").update(updates).eq("id", plan.id);
+    return json({ status: updates.status, advanced_to: nextIdx });
+  }
+
   if (idx >= steps.length) {
     await admin
       .from("plans")
@@ -728,9 +783,17 @@ Deno.serve(async (req) => {
   try {
     const resolvedArgs = resolveTemplates(step.args ?? {}, steps);
     const handler = TOOL_HANDLERS[step.tool];
-    if (!handler) throw new Error(`Unknown tool: ${step.tool}`);
-    void TOOL_CATALOG; // referenced to keep import; could validate further if needed
-    const result = await handler(resolvedArgs, { user_id: user.id, admin });
+    if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
+    void TOOL_CATALOG;
+    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient });
+
+    // Async media generation: pause the plan until the media asset finishes.
+    if (result && typeof result === "object" && "__pending_media" in result) {
+      step.status = "awaiting_media";
+      step.pending_media_id = result.__pending_media;
+      await admin.from("plans").update({ steps, status: "awaiting_media" }).eq("id", plan.id);
+      return json({ status: "awaiting_media", media_id: result.__pending_media });
+    }
 
     step.status = "completed";
     step.result = result;
