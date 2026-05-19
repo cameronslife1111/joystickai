@@ -126,6 +126,13 @@ function AppPage() {
     },
   );
 
+  // Watch composing plans → toast user when ready to review
+  useComposingPlansWatcher(currentUserId, (planId) => {
+    setPlanApprovalId(planId);
+    setPlanApprovalOpen(true);
+  });
+
+
   // Apply theme
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
