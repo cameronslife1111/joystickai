@@ -271,8 +271,11 @@ function AppPage() {
     // snap the cursor back to the first match and trap the cycle.
     if (favorites[favIdxRef.current] === activeDocId) return;
     const slot = favorites.findIndex((id) => id === activeDocId);
-    if (slot >= 0) favIdxRef.current = slot;
-  }, [favorites, activeDocId]);
+    if (slot >= 0) {
+      favIdxRef.current = slot;
+      void saveLastFavoriteSlot(slot);
+    }
+  }, [favorites, activeDocId, saveLastFavoriteSlot]);
 
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
