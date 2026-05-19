@@ -475,6 +475,7 @@ function AppPage() {
       const pos = filled.findIndex((s) => s.i > curIdx);
       const nextSlot = pos === -1 ? filled[0] : filled[pos];
       favIdxRef.current = nextSlot.i;
+      void saveLastFavoriteSlot(nextSlot.i);
       targetId = nextSlot.id;
     } else {
       if (docs.length < 2) return;
