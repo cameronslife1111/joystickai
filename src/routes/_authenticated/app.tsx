@@ -166,7 +166,7 @@ function AppPage() {
           user_id: u.user.id, title: "My first list", position: 0,
         });
         await supabase.from("user_preferences").upsert({
-          user_id: u.user.id, theme: "dark", grid_layout: [],
+          user_id: u.user.id, theme: "light", grid_layout: [],
         }, { onConflict: "user_id" });
         qc.invalidateQueries({ queryKey: ["documents"] });
       })();
