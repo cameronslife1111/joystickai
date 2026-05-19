@@ -155,7 +155,7 @@ export const TOOL_CATALOG: ToolDef[] = [
     description:
       "Create a NEW image that's a variation of an existing image, with a modification prompt. Use this when the user says 'make a version of X that...' or 'redo the image of Y with...'. " +
       "source_media_id must be the id of an existing image media asset. The new image is saved as a separate asset; the original is untouched. " +
-      "Optional overrides: image_size (allows 'auto' to match the input image; default 'portrait_16_9'), quality, output_format.",
+      "Optional overrides: image_size (one of 'portrait_16_9', 'portrait_4_3', 'square_hd', 'landscape_4_3', 'landscape_16_9'; default 'portrait_16_9' — do NOT pass 'auto'), quality, output_format.",
     args: {
       source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
       prompt: { type: "string", description: "What to change", required: true },
