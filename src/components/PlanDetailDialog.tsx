@@ -46,7 +46,7 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85vh] overflow-y-auto break-words">
         <DialogHeader>
           <DialogTitle>Plan detail</DialogTitle>
         </DialogHeader>
