@@ -141,6 +141,7 @@ function AppPage() {
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
     document.documentElement.classList.toggle("dark", theme === "dark");
+    if (typeof window !== "undefined") window.localStorage.setItem("orby_theme", theme);
   }, [theme]);
 
   // Load docs
