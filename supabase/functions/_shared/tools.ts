@@ -130,8 +130,15 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "web_search",
+    description: "Search the live web for a query. Returns { text: string }. Pipe with {{step_N.result.text}} (or {{step_N.result}} — both resolve to the prose).",
+    args: {
+      query: { type: "string", description: "What to research", required: true },
+    },
+  },
+  {
     name: "generate_text",
-    description: "Generate new prose with the AI, given a writing prompt. Returns the generated text. Useful when a step needs to produce content (a response, a summary, a list of ideas) that subsequent steps will insert.",
+    description: "Generate new prose with the AI, given a writing prompt. Returns { text: string }. Pipe with {{step_N.result.text}} (or {{step_N.result}}).",
     args: {
       prompt: { type: "string", description: "What to write", required: true },
     },
