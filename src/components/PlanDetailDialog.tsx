@@ -2,6 +2,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Copy, Check } from "lucide-react";
+import { useState } from "react";
 
 interface Props {
   open: boolean;
@@ -43,6 +45,18 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
   }
 
   const steps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyRequest = async () => {
+    try {
+      await navigator.clipboard.writeText(plan.user_request);
+      setCopied(true);
+      toast.success("Copied request");
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,7 +66,16 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
         </DialogHeader>
 
         <section className="space-y-1">
-          <div className="text-xs uppercase tracking-wider text-muted-foreground">Your request</div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Your request</div>
+            <button
+              onClick={handleCopyRequest}
+              className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              title="Copy request"
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
           <p className="text-sm whitespace-pre-wrap">{plan.user_request}</p>
         </section>
 

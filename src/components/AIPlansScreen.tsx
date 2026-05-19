@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlanDetailDialog } from "./PlanDetailDialog";
+import { Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   onClose: () => void;
@@ -38,6 +40,18 @@ function timeAgo(iso: string): string {
 export function AIPlansScreen({ onClose }: Props) {
   const qc = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      toast.success("Copied request");
+      window.setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1500);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
 
   const { data: plans } = useQuery({
     queryKey: ["plans"],
@@ -92,9 +106,12 @@ export function AIPlansScreen({ onClose }: Props) {
               <ul className="space-y-2">
                 {sec.items.map((p) => (
                   <li key={p.id}>
-                    <button
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setOpenId(p.id)}
-                      className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-muted/40"
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setOpenId(p.id); }}
+                      className="flex w-full items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-muted/40 cursor-pointer"
                     >
                       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${STATUS_COLOR[p.status] ?? "bg-muted"}`}>
                         {p.status}
@@ -105,8 +122,15 @@ export function AIPlansScreen({ onClose }: Props) {
                           {p.current_step}/{p.total_steps} · {timeAgo(p.created_at)}
                         </div>
                       </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void handleCopy(p.user_request, p.id); }}
+                        className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        title="Copy request"
+                      >
+                        {copiedId === p.id ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
                       <span className="text-muted-foreground">›</span>
-                    </button>
+                    </div>
                   </li>
                 ))}
               </ul>
