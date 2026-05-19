@@ -175,16 +175,52 @@ Deno.serve(async (req) => {
       .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(200);
     const docList = allDocs ?? [];
 
-    // Pick docs whose title appears (case-insensitive) as a substring of the
-    // user's request — those get their full sentences inlined.
+    // Token-based relevance scoring so we inline the docs the user plausibly
+    // referenced even when the wording doesn't match the title verbatim.
+    const STOP = new Set([
+      "the", "a", "an", "of", "to", "and", "or", "with", "for", "this", "that",
+      "these", "those", "my", "is", "it", "in", "on", "at", "by", "as", "be",
+      "doc", "docs", "document", "documents", "note", "notes", "file", "files",
+      "sentence", "sentences", "line", "lines", "row", "entry", "item",
+      "about", "regarding", "called", "named", "titled", "list", "any", "some",
+      "image", "images", "photo", "photos", "picture", "pic", "pics",
+      "reference", "ref", "video", "videos", "audio", "clip",
+    ]);
+    const tokenize = (s: string): string[] =>
+      String(s ?? "").toLowerCase().split(/[^a-z0-9]+/i)
+        .filter((t) => t.length >= 2 && !STOP.has(t));
+    const reqTokens = tokenize(plan.user_request ?? "");
     const reqLower = (plan.user_request ?? "").toLowerCase();
-    const referencedDocs = docList.filter((d: any) => {
-      const t = String(d.title ?? "").trim().toLowerCase();
-      return t.length >= 2 && reqLower.includes(t);
-    });
+    const scoreText = (text: string): number => {
+      const hay = String(text ?? "").toLowerCase();
+      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      let score = 0;
+      if (hay && reqLower.includes(hay)) score += 3;
+      for (const t of reqTokens) {
+        if (hay.includes(t)) score += 2;
+        if (hayTokens.has(t)) score += 1;
+      }
+      return score;
+    };
 
-    // Cap to first ~6 referenced docs to bound prompt size.
-    const docsToInline = referencedDocs.slice(0, 6);
+    const scoredDocs = docList.map((d: any) => ({
+      d,
+      score: scoreText(String(d.title ?? "")),
+    }));
+    // Always include the origin document if any.
+    const originId = docId ?? null;
+    scoredDocs.sort((a, b) => {
+      const aOrigin = a.d.id === originId ? 1 : 0;
+      const bOrigin = b.d.id === originId ? 1 : 0;
+      if (aOrigin !== bOrigin) return bOrigin - aOrigin;
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
+    });
+    const docsToInline = scoredDocs
+      .filter(({ d, score }) => d.id === originId || score > 0)
+      .slice(0, 6)
+      .map(({ d }) => d);
+
     const inlinedDocSections: string[] = [];
     for (const d of docsToInline) {
       const { data: sents } = await admin
@@ -206,11 +242,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Media assets
+    // Media assets — fetch then rank by token overlap with the request so the
+    // most plausible candidates surface first in the snapshot.
     const { data: allMedia } = await admin
       .from("media_assets").select("id, title, kind, generation_params, created_at")
       .eq("user_id", user.id).order("created_at", { ascending: false }).limit(200);
-    const mediaList = (allMedia ?? []).map((m: any) => ({
+    const mediaScored = (allMedia ?? []).map((m: any) => {
+      const src = String(m?.generation_params?.user_text ?? "");
+      const score = scoreText(`${String(m.title ?? "")} ${src}`);
+      return { m, score };
+    });
+    mediaScored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.m.created_at ?? "").localeCompare(String(a.m.created_at ?? ""));
+    });
+    const mediaList = mediaScored.map(({ m }) => ({
       id: m.id, title: m.title, kind: m.kind,
       source_text: m?.generation_params?.user_text ?? null,
     }));
@@ -224,8 +270,9 @@ Deno.serve(async (req) => {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
     }
     if (mediaList.length) {
-      userContext += `\n\nALL MEDIA (id — kind — title — source_text):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+      userContext += `\n\nALL MEDIA (id — kind — title — source_text, ranked by relevance to the request):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
+
 
     const effectiveSystemPrompt = userContext
       ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "this doc", "the Cameron inbox", "the reference image" using these values; if an id is present here, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document):${userContext}`
