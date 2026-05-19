@@ -527,8 +527,11 @@ const TOOL_HANDLERS: Record<string, any> = {
     }
     const sources = await Promise.all(ids.map((id) => TOOL_HANDLERS._load_media(admin, user_id, id, "image")));
 
-    const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9", "auto"];
-    const image_size = validSizes.includes(args.image_size) ? args.image_size : "portrait_16_9";
+    // "auto" is rejected by fal openai/gpt-image-2/edit (422 Unprocessable
+    // Entity) when multiple input images are supplied — coerce it to a real size.
+    const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
+    const requestedSize = args.image_size === "auto" ? "portrait_16_9" : args.image_size;
+    const image_size = validSizes.includes(requestedSize) ? requestedSize : "portrait_16_9";
     const validQuality = ["low", "medium", "high"];
     const quality = validQuality.includes(args.quality) ? args.quality : "high";
     const validFormat = ["png", "jpeg", "webp"];
