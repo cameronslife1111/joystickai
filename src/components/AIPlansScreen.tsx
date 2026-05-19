@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlanDetailDialog } from "./PlanDetailDialog";
+import { Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   onClose: () => void;
