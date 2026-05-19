@@ -38,6 +38,11 @@ function stringifyForTemplate(value: any, stepIdx: number, path: string): string
       return value.map((v: any) => v.content).join("\n");
     }
   }
+  // Common single-string shapes: { text } (web_search, generate_text) and { content } (sentence rows).
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (typeof (value as any).text === "string") return (value as any).text;
+    if (typeof (value as any).content === "string") return (value as any).content;
+  }
   throw new Error(
     `Template {{step_${stepIdx}.${path}}} resolved to a non-string ${
       Array.isArray(value) ? "array" : "object"
