@@ -120,16 +120,78 @@ function resolvePath(obj: any, path: string, stepIdx?: number, toolName?: string
 
 type ToolCtx = { user_id: string; admin: any; supabase: any };
 
+// Stopwords shared across fuzzy search handlers. Intentionally small — just the
+// connective tissue the user adds around a real reference ("the doc about X",
+// "find a sentence about Y"). Real content words pass through.
+const SEARCH_STOPWORDS = new Set([
+  "the", "a", "an", "of", "to", "and", "or", "with", "for", "this", "that",
+  "these", "those", "my", "is", "it", "in", "on", "at", "by", "as", "be",
+  "doc", "docs", "document", "documents", "note", "notes", "file", "files",
+  "sentence", "sentences", "line", "lines", "row", "entry", "item",
+  "about", "regarding", "called", "named", "titled", "list", "any", "some",
+  "image", "images", "photo", "photos", "picture", "pic", "pics",
+  "reference", "ref", "video", "videos", "audio", "clip",
+]);
+
+function tokenize(s: string): string[] {
+  return String(s ?? "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter((t) => t.length >= 2 && !SEARCH_STOPWORDS.has(t));
+}
+
+function scoreCandidate(haystack: string, query: string, qTokens: string[]): number {
+  const hay = haystack.toLowerCase();
+  const hayTokens = new Set(
+    hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2),
+  );
+  let score = 0;
+  const fullQ = query.trim().toLowerCase();
+  if (fullQ && hay.includes(fullQ)) score += 3;
+  for (const t of qTokens) {
+    if (hay.includes(t)) score += 2;
+    if (hayTokens.has(t)) score += 1;
+  }
+  return score;
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
-    const { data } = await admin
-      .from("documents")
-      .select("id, title")
-      .eq("user_id", user_id)
-      .ilike("title", `%${args.query}%`)
-      .order("updated_at", { ascending: false })
-      .limit(5);
-    return data ?? [];
+    const query = String(args.query ?? "").trim();
+    const qTokens = tokenize(query);
+    // Pull a bounded working set. Try a token-OR ilike first, fall back to
+    // recent docs so we always have candidates to rank.
+    let docs: any[] = [];
+    if (qTokens.length > 0) {
+      const orFilter = qTokens.map((t) => `title.ilike.%${t}%`).join(",");
+      const { data } = await admin
+        .from("documents")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .or(orFilter)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      docs = data ?? [];
+    }
+    if (docs.length === 0) {
+      const { data } = await admin
+        .from("documents")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      docs = data ?? [];
+    }
+    if (docs.length === 0) return [];
+    const scored = docs.map((d: any) => ({
+      d,
+      score: scoreCandidate(String(d.title ?? ""), query, qTokens),
+    }));
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
+    });
+    return scored.slice(0, 5).map(({ d }) => ({ id: d.id, title: d.title }));
   },
   async read_document(args, { user_id, admin }) {
     const { data: doc } = await admin
@@ -154,23 +216,51 @@ const TOOL_HANDLERS: Record<string, any> = {
     };
   },
   async find_sentence_by_content(args, { user_id, admin }) {
-    let q = admin
-      .from("sentences")
-      .select("id, document_id, content, order_index")
-      .eq("user_id", user_id)
-      .ilike("content", `%${args.query}%`)
-      .order("created_at", { ascending: false })
-      .limit(5);
-    if (args.document_id) q = q.eq("document_id", args.document_id);
-    const { data } = await q;
-    const rows = data ?? [];
-    if (rows.length === 0) {
-      throw new Error(
-        `No sentence matched "${args.query}"${args.document_id ? " in the specified document" : ""}.`,
-      );
+    const query = String(args.query ?? "").trim();
+    const qTokens = tokenize(query);
+    const baseSelect = "id, document_id, content, order_index, created_at";
+    let rows: any[] = [];
+    if (qTokens.length > 0) {
+      const orFilter = qTokens.map((t) => `content.ilike.%${t}%`).join(",");
+      let q = admin
+        .from("sentences")
+        .select(baseSelect)
+        .eq("user_id", user_id)
+        .or(orFilter)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (args.document_id) q = q.eq("document_id", args.document_id);
+      const { data } = await q;
+      rows = data ?? [];
     }
-    return rows;
+    if (rows.length === 0) {
+      let q = admin
+        .from("sentences")
+        .select(baseSelect)
+        .eq("user_id", user_id)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (args.document_id) q = q.eq("document_id", args.document_id);
+      const { data } = await q;
+      rows = data ?? [];
+    }
+    if (rows.length === 0) return [];
+    const scored = rows.map((r: any) => ({
+      r,
+      score: scoreCandidate(String(r.content ?? ""), query, qTokens),
+    }));
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.r.created_at ?? "").localeCompare(String(a.r.created_at ?? ""));
+    });
+    return scored.slice(0, 5).map(({ r }) => ({
+      id: r.id,
+      document_id: r.document_id,
+      content: r.content,
+      order_index: r.order_index,
+    }));
   },
+
 
   async find_media_by_title(args, { user_id, admin }) {
     const raw = String(args.query ?? "").trim();
