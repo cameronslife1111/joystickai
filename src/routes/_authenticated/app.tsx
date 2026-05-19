@@ -193,14 +193,14 @@ function AppPage() {
   // Load user preferences (favorites array + muted flag)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted")
+        .select("favorites, muted, last_favorite_slot")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites, muted: !!(data as any)?.muted };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
