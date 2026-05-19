@@ -51,10 +51,12 @@ ${toolCatalogForPrompt()}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
-- A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document the user named. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
+- A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document plausibly referenced by the request. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
+- The user will refer to documents, media, and sentences by ROUGH DESCRIPTION, not by exact title or exact wording. Examples: "the claude codex doc" might mean a document titled "Claude Code Tips" or "Codex notes"; "the cat photo" might mean a media asset titled "Whiskers portrait"; "the dinner plans sentence" might mean a sentence containing the word "reservation". Pick the closest matching id from the snapshot yourself using common-sense semantic matching. Do NOT echo the user's loose phrasing into a find_* call when a plausible candidate is already listed in the snapshot.
+- Only call find_document_by_title / find_media_by_title / find_sentence_by_content when the snapshot is empty OR none of the listed items is a plausible match for what the user described. These tools return FUZZY token-scored results — they tolerate loose wording but result[0] is a best guess, not a guarantee.
+- If the user's request doesn't clearly point at any document, media asset, or sentence in the snapshot, prefer returning an explanation (empty steps) over guessing. Never invent ids.
 - To USE the text inside a document in a later step (e.g. "use the prompt in the X doc as the image prompt"), inline the literal text from the snapshot directly into that step's args. Only call read_document when the doc was not inlined and you need its content at runtime. When piping a document into a media tool's prompt and you must use read_document, reference {{step_N.result.text}} — NEVER {{step_N.result.sentences}} (that's an array of objects, not a string, and will fail validation).
-- find_sentence_by_content is ONLY for locating a specific sentence ROW you intend to mutate (edit/move/mark/link). Never use it to fetch content for a later step's args, and never require the user to remember exact wording.
-- Match user intent loosely. Do not require exact wording.
+- find_sentence_by_content is ONLY for locating a specific sentence ROW you intend to mutate (edit/move/mark/link). Never use it to fetch content for a later step's args.
 - When a step needs the result of an earlier step, reference it with template syntax: {{step_<index>.result.<path>}}. Examples:
   - {{step_0.result[0].id}}  -> the id of the first item returned by step 0
   - {{step_1.result.id}}     -> the id field of step 1's result (when result is a single object)
@@ -83,6 +85,7 @@ If the user's request is impossible, ambiguous, or would require deletion, respo
 }
 
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
+
 
 function buildLovablePrompt(plan: any, failedStep: any | null, errorMessage: string): string {
   return [
