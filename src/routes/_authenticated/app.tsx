@@ -232,6 +232,35 @@ function AppPage() {
     );
   }, [qc, favorites]);
 
+  const saveLastFavoriteSlot = useCallback(async (slot: number) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), last_favorite_slot: slot,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, last_favorite_slot: slot, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
+  // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
+  useEffect(() => {
+    if (!docs || prefs === undefined || activeDocId) return;
+    const lastSlot = prefs?.last_favorite_slot ?? null;
+    const favs = prefs?.favorites ?? [];
+    const lastDocId = typeof lastSlot === "number" && lastSlot >= 0 && lastSlot < favs.length
+      ? favs[lastSlot]
+      : null;
+    const lastDocExists = lastDocId && docs.some((d) => d.id === lastDocId);
+    if (lastDocExists) {
+      setActiveDocId(lastDocId);
+      favIdxRef.current = lastSlot!;
+    } else {
+      setActiveDocId(docs[0].id);
+    }
+  }, [docs, prefs, activeDocId]);
+
   // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
   // the next swipe-right always advances to the NEXT filled slot — never
   // re-selects the slot the user is already on.
