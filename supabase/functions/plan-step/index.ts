@@ -123,7 +123,13 @@ const TOOL_HANDLERS: Record<string, any> = {
       .eq("document_id", args.document_id)
       .eq("user_id", user_id)
       .order("order_index", { ascending: true });
-    return { id: doc.id, title: doc.title, sentences: sents ?? [] };
+    const rows = sents ?? [];
+    return {
+      id: doc.id,
+      title: doc.title,
+      text: rows.map((s: any) => s.content).join("\n"),
+      sentences: rows,
+    };
   },
   async find_sentence_by_content(args, { user_id, admin }) {
     let q = admin

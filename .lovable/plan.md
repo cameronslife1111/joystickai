@@ -1,93 +1,71 @@
+## 1. Media Gallery can't scroll on mobile
 
-## Goals
+**Root cause:** `src/styles.css` sets `body { overflow: hidden; height: 100% }` globally — required for the swipe-driven app page, but it traps the Media Gallery, whose `<main>` is `min-h-[100svh]` (taller than the viewport once the grid grows) but can't scroll because the body clips it.
 
-1. **Speak naturally** — references like "the prompt in the Cameron inbox" should just work. The planner should already know what's in the documents and media the user mentions, instead of guessing fragile search terms like `find_sentence_by_content("prompt")`.
-2. **Don't block the UI while planning** — the composer dialog should close immediately on submit, the user can keep working, and a toast announces when the plan is ready to review (same pattern as the "completed" / "failed" toasts).
-3. **Pull content out of documents reliably** — when the user says "use the prompt from X", the planner should be able to read the document's contents and pass the actual text into the next step's args, not chain fragile string searches.
+**Fix (frontend only, `src/routes/_authenticated/media.tsx`):** make `<main>` itself the scroll container.
 
-## Design (first principles)
+- Change `min-h-[100svh] flex-col` → `h-[100svh] flex-col overflow-y-auto overscroll-contain`
+- Sticky top bar already uses `sticky top-0` and will continue to work inside a scrolling container.
+- Floating "Generate" FAB is `fixed`, unaffected.
+- Full-screen viewer overlay is `fixed inset-0`, unaffected.
 
-The current planner is reasoning blind. It sees a tool catalog but not the user's actual data, so its only move when a doc/media is mentioned is "find by title → find by content → hope". The remix failure is the predictable outcome — there is no sentence literally containing the word "prompt", so `find_sentence_by_content("prompt")` returns empty.
+No global CSS changes — the app page's no-scroll behavior stays intact.
 
-Fix it by giving the planner the data **before** it plans, plus a clean way to read a doc on demand.
+## 2. Planner fails on `remix_images` / `regenerate_image` when piping a document's text into the prompt
 
-### A. Context-aware planner (`plan-compose`)
+**What actually happened in the failing plan:**
+- Step 0: `read_document` on "Cameron Inbox" → returned `{ id, title, sentences: [{id, order_index, content}, ...] }`.
+- Step 1: `remix_images` with `prompt: "... {{step_0.result.sentences}}"`.
 
-Before calling the LLM, gather a structured **workspace snapshot** and inject it into the system prompt:
+The template resolver stringifies an array of sentence objects to `"[object Object],[object Object],..."` and forwards that as the prompt. fal's `gpt-image-2/edit` then rejects the request (422 Unprocessable Entity), and the user sees a generic "Unprocessable Entity" with no clue why. The picture is "the planner picked the wrong template path" — exactly the loose-pattern-matching gap the user described.
 
-1. List **all of the user's documents** (id + title) — small and cheap. The planner can resolve "Cameron inbox" to the right id by simple title matching in its head.
-2. For each document whose title appears as a case-insensitive substring of the user's request, fetch **all sentences** (id, content, order) and inline them. This is the key change — when the user says "the Cameron inbox", the full text of that doc is right there in the prompt.
-3. Fetch **all media assets** (id, title, kind, optional source prompt). Small per row, and lets the planner resolve "the Cameron reference image" + "the full body size reference image" to ids without needing `find_media_by_title` round-trips.
-4. Keep the existing `origin_document_id` / `origin_sentence_index` context (active doc + current sentence) for pronouns like "this", "here".
-5. Cap each injected doc at a sane size (e.g. first ~150 sentences / ~8KB) with a "…truncated" marker so very large docs don't blow the context window.
+This isn't about dimensions (already coerced away from `auto` in a prior fix) and isn't about the source images (manual remix works). It's about the **document → prompt** wiring.
 
-With this context the planner can:
+### Fixes (all in `supabase/functions/`):
 
-- Skip `find_document_by_title` entirely when the user named a doc and we already injected its id.
-- Inline the literal prompt text into `remix_images.prompt` instead of trying to "find a sentence".
-- Resolve media ids directly without `find_media_by_title` steps.
+**A. Make `read_document` directly usable as a string. (`plan-step/index.ts`)**
 
-### B. New `read_document` tool
+Return an extra `text` field: the sentences joined with `\n`. Existing `sentences` array stays for tools that genuinely need row ids.
 
-For cases where the planner *does* still need to pull content at runtime (e.g. the user referenced a doc whose title didn't match any substring, or a doc was too large to fully inject), add a single, predictable tool:
-
+```ts
+return {
+  id: doc.id,
+  title: doc.title,
+  text: (sents ?? []).map((s) => s.content).join("\n"),
+  sentences: sents ?? [],
+};
 ```
-read_document(document_id) → { id, title, sentences: [{ id, order_index, content }] }
-```
 
-This replaces the fragile "find a sentence containing the word X" pattern with a clean "give me the whole doc, I'll pick the right line." Subsequent steps reference its result with templates like `{{step_N.result.sentences[0].content}}`.
+Now `{{step_0.result.text}}` is a clean drop-in for any prompt arg.
 
-Update the system prompt so the planner prefers `read_document` over `find_sentence_by_content` whenever it needs the *content* of sentences (as opposed to locating a specific row to mutate). Keep `find_sentence_by_content` only for "find the row I want to edit/move/mark."
+**B. Harden the template resolver. (`plan-step/index.ts` → `resolveTemplates` / `resolvePath`)**
 
-### C. Background plan composition
+When a `{{ ... }}` placeholder appears inside a larger string and the resolved value is not a primitive:
 
-Stop showing the approval modal during composition. Flow becomes:
+- If it's an array of `{content: string}` objects → auto-join `content` values with `\n` (recovers older plans that referenced `.sentences`).
+- If it's an array of strings → join with `\n`.
+- Otherwise → throw a clear error: `Template {{step_N.path}} resolved to an object/array; pipe a string field (e.g. step_N.result.text) instead.`
 
-1. User submits the composer → row inserted as `status='composing'`, `plan-compose` invoked **fire-and-forget**.
-2. Composer dialog closes immediately. Toast: "Orby is planning… (you can keep working)".
-3. A new `useComposingPlansWatcher` hook (mirrors `useRunningPlansAdvancer` but watches `status='composing'` rows for the current user) polls / subscribes via realtime.
-4. When a watched plan transitions to:
-   - `proposed` → toast `"Plan ready — Review"` with an action button that opens `PlanApprovalDialog` for that id.
-   - `failed` (during compose) → toast error with a "Details" action that opens the approval dialog showing the failure message.
-5. The Approval dialog is now only ever opened on demand (from the toast action or from the AI Plans screen), never auto-opened on submit.
+This converts a silent garbage-prompt into a loud, debuggable failure and rescues the common "I referenced sentences" mistake.
 
-This matches the user's mental model: "fire and forget, ping me when it's ready" — same as the existing completed/failed toasts from `useRunningPlansAdvancer`.
+**C. Teach the planner the right pattern. (`plan-compose/index.ts` system prompt + `_shared/tools.ts` description)**
 
-### D. Tool catalog & prompt updates
+- Update `read_document`'s catalog description: explicitly document the new `text` field and tell the planner to use `{{step_N.result.text}}` when wiring a doc's content into a downstream string arg. Forbid `{{step_N.result.sentences}}` for prompts.
+- Add one sentence to the planner system prompt: "When piping a document into a media tool's prompt: prefer the inlined text from the WORKSPACE SNAPSHOT; if the doc isn't inlined, call `read_document` and reference `{{step_N.result.text}}` — never `.sentences`."
 
-- Add `read_document` to `_shared/tools.ts`.
-- Update the planner system prompt to:
-  - Describe the new workspace snapshot section.
-  - Tell it: "If a document/media id is already present in the workspace snapshot, use it directly — do NOT call find_* tools."
-  - Tell it: "To use the *content* of a document in a later step's args, either inline it directly from the snapshot or call `read_document`. Do NOT use `find_sentence_by_content` to fetch content."
-  - Keep the existing rules about template syntax and refusal.
+**D. Improve `find_media_by_title` fuzziness for the "this image / that image" case. (`plan-step/index.ts`)**
 
-## Files to change
+Today it matches `title ILIKE %q%` OR `generation_params.user_text ILIKE %q%`. Add tokenized matching: split the query on whitespace, drop stop-words (`the`, `a`, `an`, `image`, `photo`, `reference`, `pic`), and OR-match each remaining token against title + source_text. Sort by number of tokens matched, then recency. This makes phrases like "the cat image" or "full body size reference" land on the right asset without exact-title matches.
 
-**Backend**
-- `supabase/functions/plan-compose/index.ts` — build workspace snapshot (docs list, full sentences of referenced docs, media list), inject into system prompt, update prompt guidance.
-- `supabase/functions/_shared/tools.ts` — add `read_document` definition; minor wording updates on `find_sentence_by_content` to nudge correct usage.
-- `supabase/functions/plan-step/index.ts` — add `read_document` handler (returns id, title, sentences[]).
+### Out of scope (intentionally)
 
-**Frontend**
-- `src/components/PlanComposerDialog.tsx` — on submit: insert row, fire compose, close immediately, toast "Orby is planning…". Remove the `onPlanProposed` auto-open behavior.
-- `src/hooks/use-composing-plans-watcher.ts` *(new)* — polls + realtime-subscribes to the user's `composing` plans; fires toasts with "Review" / "Details" actions on transition to `proposed` / `failed`.
-- `src/routes/_authenticated/app.tsx` — mount the new watcher hook alongside `useRunningPlansAdvancer`; wire the toast action to open `PlanApprovalDialog` with the given plan id.
-- `src/components/PlanApprovalDialog.tsx` — no behavioral change needed (it already handles `composing` / `proposed` / `failed`), but it's now only opened on demand.
+- No DB migration.
+- No edits to `edit-image`, `generate-image`, fal model selection, or aspect-ratio handling — those work in manual flows.
+- No UI changes outside the Media Gallery scroll fix.
 
-## Out of scope
+## Files touched
 
-- No deletion tools (still forbidden).
-- No change to the runtime executor's template/error handling — those messages are already good.
-- No embeddings/semantic search yet; substring title match + full-doc injection covers the stated use case and avoids new infra. We can add embeddings later if doc counts grow large.
-
-## Acceptance check
-
-Replay the failing request: *"Use the prompt in the Cameron inbox, attach the Cameron reference image and the full body reference image from the gallery, and remix into a new image in the inbox."*
-
-Expected plan after the fix:
-1. `read_document(<Cameron inbox id from snapshot>)` — or planner inlines the prompt directly from the snapshot and skips this step.
-2. `remix_images(source_media_ids=[<Cameron ref id>, <full body ref id>], prompt=<literal prompt text>)` — ids resolved from the media snapshot, prompt taken from the doc.
-3. `add_sentence(document_id=<Cameron inbox id>, content="<media link or note for {{step_2.result.id}}>")` if the user wants the result recorded in the doc.
-
-No more `find_sentence_by_content("prompt")`.
+- `src/routes/_authenticated/media.tsx` — scroll container.
+- `supabase/functions/plan-step/index.ts` — `read_document.text`, resolver hardening, `find_media_by_title` tokenized search.
+- `supabase/functions/_shared/tools.ts` — `read_document` description update.
+- `supabase/functions/plan-compose/index.ts` — one-line planner prompt addition.

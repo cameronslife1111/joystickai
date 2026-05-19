@@ -338,7 +338,7 @@ function MediaPage() {
 
   return (
     <main
-      className="relative flex min-h-[100svh] flex-col bg-background text-foreground"
+      className="relative flex h-[100svh] flex-col overflow-y-auto overscroll-contain bg-background text-foreground"
       style={{
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
