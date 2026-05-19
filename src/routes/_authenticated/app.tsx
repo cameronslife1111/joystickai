@@ -20,6 +20,7 @@ import { PlanComposerDialog } from "@/components/PlanComposerDialog";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
+import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
