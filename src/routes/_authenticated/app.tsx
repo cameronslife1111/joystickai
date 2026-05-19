@@ -194,21 +194,39 @@ function AppPage() {
     },
   });
 
-  // Load user preferences (favorites array + muted flag)
+  // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot")
+        .select("favorites, muted, last_favorite_slot, theme")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null };
+      const t = (data as any)?.theme;
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
+
+  // Hydrate theme from saved preference once it loads.
+  useEffect(() => {
+    if (prefs?.theme && prefs.theme !== theme) setTheme(prefs.theme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.theme]);
+
+  const saveTheme = useCallback(async (next: "dark" | "light") => {
+    setTheme(next);
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), theme: next }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, theme: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
