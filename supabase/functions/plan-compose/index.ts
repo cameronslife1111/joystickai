@@ -51,7 +51,10 @@ ${toolCatalogForPrompt()}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
-- Match user intent loosely. "Find the sentence about pasta" means use find_sentence_by_content with query "pasta". Do not require the user to give you exact wording.
+- A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document the user named. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
+- To USE the text inside a document in a later step (e.g. "use the prompt in the X doc as the image prompt"), inline the literal text from the snapshot directly into that step's args. Only call read_document when the doc was not inlined and you need its content at runtime.
+- find_sentence_by_content is ONLY for locating a specific sentence ROW you intend to mutate (edit/move/mark/link). Never use it to fetch content for a later step's args, and never require the user to remember exact wording.
+- Match user intent loosely. Do not require exact wording.
 - When a step needs the result of an earlier step, reference it with template syntax: {{step_<index>.result.<path>}}. Examples:
   - {{step_0.result[0].id}}  -> the id of the first item returned by step 0
   - {{step_1.result.id}}     -> the id field of step 1's result (when result is a single object)
@@ -135,36 +138,94 @@ Deno.serve(async (req) => {
   if (plan.status !== "composing") return json({ error: `plan is ${plan.status}, not composing` }, 409);
 
   try {
-    // ---- Inject lightweight USER CONTEXT so the planner can resolve references
-    //      like "this doc", "the current sentence", "add to here", etc.
-    let userContext = "";
+    // ---- Build a WORKSPACE SNAPSHOT so the planner can resolve doc/media
+    //      references naturally without having to call find_* tools or guess
+    //      sentence wording.
+    const userContextLines: string[] = [];
     const docId = (plan as any).origin_document_id as string | null | undefined;
     const sentenceIdx = (plan as any).origin_sentence_index as number | null | undefined;
     if (docId) {
       const { data: doc } = await admin
-        .from("documents")
-        .select("id, title")
-        .eq("id", docId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+        .from("documents").select("id, title")
+        .eq("id", docId).eq("user_id", user.id).maybeSingle();
       if (doc) {
-        userContext += `\nactive_document_id: ${doc.id}\nactive_document_title: ${JSON.stringify(doc.title ?? "")}`;
+        userContextLines.push(`active_document_id: ${doc.id}`);
+        userContextLines.push(`active_document_title: ${JSON.stringify(doc.title ?? "")}`);
       }
       if (typeof sentenceIdx === "number" && sentenceIdx >= 0) {
         const { data: sents } = await admin
-          .from("sentences")
-          .select("id, text, position")
-          .eq("document_id", docId)
-          .order("position", { ascending: true })
+          .from("sentences").select("id, content, order_index")
+          .eq("document_id", docId).order("order_index", { ascending: true })
           .range(sentenceIdx, sentenceIdx);
         const sent = sents?.[0];
         if (sent) {
-          userContext += `\ncurrent_sentence_id: ${sent.id}\ncurrent_sentence_text: ${JSON.stringify(sent.text ?? "")}\ncurrent_sentence_position: ${sent.position}`;
+          userContextLines.push(`current_sentence_id: ${sent.id}`);
+          userContextLines.push(`current_sentence_text: ${JSON.stringify(sent.content ?? "")}`);
+          userContextLines.push(`current_sentence_position: ${sent.order_index}`);
         }
       }
     }
+
+    // Full list of documents (id + title)
+    const { data: allDocs } = await admin
+      .from("documents").select("id, title, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(200);
+    const docList = allDocs ?? [];
+
+    // Pick docs whose title appears (case-insensitive) as a substring of the
+    // user's request — those get their full sentences inlined.
+    const reqLower = (plan.user_request ?? "").toLowerCase();
+    const referencedDocs = docList.filter((d: any) => {
+      const t = String(d.title ?? "").trim().toLowerCase();
+      return t.length >= 2 && reqLower.includes(t);
+    });
+
+    // Cap to first ~6 referenced docs to bound prompt size.
+    const docsToInline = referencedDocs.slice(0, 6);
+    const inlinedDocSections: string[] = [];
+    for (const d of docsToInline) {
+      const { data: sents } = await admin
+        .from("sentences").select("id, order_index, content")
+        .eq("document_id", d.id).eq("user_id", user.id)
+        .order("order_index", { ascending: true }).limit(200);
+      const rows = sents ?? [];
+      let total = 0;
+      const lines: string[] = [];
+      let truncated = false;
+      for (const s of rows) {
+        const line = `    [${s.order_index}] id=${s.id}  ${JSON.stringify(s.content ?? "")}`;
+        if (total + line.length > 8000) { truncated = true; break; }
+        lines.push(line);
+        total += line.length;
+      }
+      inlinedDocSections.push(
+        `  document_id: ${d.id}\n  title: ${JSON.stringify(d.title ?? "")}\n  sentences (${rows.length}${truncated ? ", truncated" : ""}):\n${lines.join("\n")}`,
+      );
+    }
+
+    // Media assets
+    const { data: allMedia } = await admin
+      .from("media_assets").select("id, title, kind, generation_params, created_at")
+      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(200);
+    const mediaList = (allMedia ?? []).map((m: any) => ({
+      id: m.id, title: m.title, kind: m.kind,
+      source_text: m?.generation_params?.user_text ?? null,
+    }));
+
+    let userContext = "";
+    if (userContextLines.length) userContext += `\nORIGIN CONTEXT:\n  ${userContextLines.join("\n  ")}`;
+    if (docList.length) {
+      userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
+    }
+    if (inlinedDocSections.length) {
+      userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
+    }
+    if (mediaList.length) {
+      userContext += `\n\nALL MEDIA (id — kind — title — source_text):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+    }
+
     const effectiveSystemPrompt = userContext
-      ? `${systemPrompt}\n\nUSER CONTEXT (resolve pronouns like "this", "here", "the current doc" using these values; do NOT call find_doc_by_title if a relevant id is already provided here):${userContext}`
+      ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "this doc", "the Cameron inbox", "the reference image" using these values; if an id is present here, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document):${userContext}`
       : systemPrompt;
     const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
     let parsed: any;

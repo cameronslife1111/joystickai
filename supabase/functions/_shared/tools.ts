@@ -7,14 +7,27 @@ export type ToolDef = {
 export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_document_by_title",
-    description: "Find documents owned by the user whose title matches the query (fuzzy/substring). Returns up to 5 results, ranked by closeness.",
+    description: "Find documents owned by the user whose title matches the query (fuzzy/substring). Returns up to 5 results, ranked by closeness. PREFER using ids already provided in the WORKSPACE SNAPSHOT over calling this tool.",
     args: {
       query: { type: "string", description: "Search text", required: true },
     },
   },
   {
+    name: "read_document",
+    description:
+      "Read the full contents of a document: returns { id, title, sentences: [{ id, order_index, content }] }. " +
+      "Use this when you need to USE the text of a document's sentences in a later step (e.g. pass a prompt stored in the doc into an image-generation step). " +
+      "The full text of documents the user named is usually ALREADY inlined in the WORKSPACE SNAPSHOT — in that case, inline the text directly into the next step's args instead of calling this tool.",
+    args: {
+      document_id: { type: "string", description: "UUID of the document to read", required: true },
+    },
+  },
+  {
     name: "find_sentence_by_content",
-    description: "Find sentences whose content matches the query (fuzzy). If document_id is omitted, searches across ALL the user's documents. Returns up to 5 results.",
+    description:
+      "Locate a SPECIFIC sentence row to mutate (edit/move/mark/link). Returns up to 5 matches by case-insensitive substring. " +
+      "Do NOT use this to retrieve content for use in a later step — use read_document or inline from the WORKSPACE SNAPSHOT instead. " +
+      "If document_id is omitted, searches across all the user's documents.",
     args: {
       query: { type: "string", description: "Search text", required: true },
       document_id: { type: "string", description: "Optional UUID to restrict the search to one document", required: false },

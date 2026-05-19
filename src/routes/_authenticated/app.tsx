@@ -20,6 +20,7 @@ import { PlanComposerDialog } from "@/components/PlanComposerDialog";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
+import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
@@ -124,6 +125,13 @@ function AppPage() {
       qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
     },
   );
+
+  // Watch composing plans → toast user when ready to review
+  useComposingPlansWatcher(currentUserId, (planId) => {
+    setPlanApprovalId(planId);
+    setPlanApprovalOpen(true);
+  });
+
 
   // Apply theme
   useEffect(() => {
@@ -1971,11 +1979,8 @@ function AppPage() {
         onOpenChange={setPlanComposerOpen}
         originDocumentId={activeDocId}
         originSentenceIndex={currentIdx}
-        onPlanProposed={(id) => {
-          setPlanApprovalId(id);
-          setPlanApprovalOpen(true);
-        }}
       />
+
       <PlanApprovalDialog
         open={planApprovalOpen}
         onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
