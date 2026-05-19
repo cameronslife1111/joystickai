@@ -64,7 +64,11 @@ function AppPage() {
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "light";
+    const cached = window.localStorage.getItem("orby_theme");
+    return cached === "dark" ? "dark" : "light";
+  });
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
@@ -137,6 +141,7 @@ function AppPage() {
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
     document.documentElement.classList.toggle("dark", theme === "dark");
+    if (typeof window !== "undefined") window.localStorage.setItem("orby_theme", theme);
   }, [theme]);
 
   // Load docs
@@ -161,7 +166,7 @@ function AppPage() {
           user_id: u.user.id, title: "My first list", position: 0,
         });
         await supabase.from("user_preferences").upsert({
-          user_id: u.user.id, theme: "dark", grid_layout: [],
+          user_id: u.user.id, theme: "light", grid_layout: [],
         }, { onConflict: "user_id" });
         qc.invalidateQueries({ queryKey: ["documents"] });
       })();
@@ -189,21 +194,39 @@ function AppPage() {
     },
   });
 
-  // Load user preferences (favorites array + muted flag)
+  // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot")
+        .select("favorites, muted, last_favorite_slot, theme")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null };
+      const t = (data as any)?.theme;
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
+
+  // Hydrate theme from saved preference once it loads.
+  useEffect(() => {
+    if (prefs?.theme && prefs.theme !== theme) setTheme(prefs.theme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.theme]);
+
+  const saveTheme = useCallback(async (next: "dark" | "light") => {
+    setTheme(next);
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), theme: next }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, theme: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
@@ -1019,7 +1042,7 @@ function AppPage() {
 
   // Menu actions
   const grid = useMemo(() => [
-    { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
+    { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
@@ -1185,7 +1208,7 @@ function AppPage() {
       setMenuOpen(false);
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
-  ], [theme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
