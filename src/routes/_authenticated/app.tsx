@@ -165,10 +165,25 @@ function AppPage() {
         }, { onConflict: "user_id" });
         qc.invalidateQueries({ queryKey: ["documents"] });
       })();
-    } else if (!activeDocId) {
+    }
+  }, [docs, qc]);
+
+  // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
+  useEffect(() => {
+    if (!docs || prefs === undefined || activeDocId) return;
+    const lastSlot = prefs?.last_favorite_slot ?? null;
+    const favs = prefs?.favorites ?? [];
+    const lastDocId = typeof lastSlot === "number" && lastSlot >= 0 && lastSlot < favs.length
+      ? favs[lastSlot]
+      : null;
+    const lastDocExists = lastDocId && docs.some((d) => d.id === lastDocId);
+    if (lastDocExists) {
+      setActiveDocId(lastDocId);
+      favIdxRef.current = lastSlot;
+    } else {
       setActiveDocId(docs[0].id);
     }
-  }, [docs, activeDocId, qc]);
+  }, [docs, prefs, activeDocId]);
 
   const activeDoc = useMemo(
     () => docs?.find((d) => d.id === activeDocId) ?? null,
