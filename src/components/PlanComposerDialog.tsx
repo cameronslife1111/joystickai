@@ -9,7 +9,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   originDocumentId: string | null;
   originSentenceIndex: number | null;
-  onPlanProposed: (planId: string) => void;
+  onPlanProposed?: (planId: string) => void;
 }
 
 const SUGGESTIONS = [
@@ -44,9 +44,11 @@ export function PlanComposerDialog({ open, onOpenChange, originDocumentId, origi
       if (error || !row) throw new Error(error?.message || "Failed to create plan");
       setText("");
       onOpenChange(false);
-      onPlanProposed(row.id);
-      // Fire compose without awaiting so the approval modal shows its spinner immediately
+      // Fire compose in the background — the composing-plans watcher will toast
+      // when the plan is ready to review (or if composition fails).
       void supabase.functions.invoke("plan-compose", { body: { plan_id: row.id } });
+      toast("Orby is planning… you can keep working", { duration: 3000 });
+      onPlanProposed?.(row.id);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to start plan");
     } finally {
