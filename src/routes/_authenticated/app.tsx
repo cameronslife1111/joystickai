@@ -1284,7 +1284,12 @@ function AppPage() {
         <div className="w-full max-w-2xl max-h-full overflow-y-auto text-center">
           {composing ? (
             <textarea
-              ref={(el) => { if (el) el.focus(); }}
+              ref={(el) => {
+                if (!el) return;
+                if ((el as any).__joystickInit) return;
+                (el as any).__joystickInit = true;
+                el.focus();
+              }}
               value={composeText}
               onChange={(e) => setComposeText(e.target.value)}
               onKeyDown={(e) => {
