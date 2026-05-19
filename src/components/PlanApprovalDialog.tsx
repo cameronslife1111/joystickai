@@ -65,7 +65,7 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onOpenChange(false); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85vh] overflow-y-auto break-words">
         <DialogHeader>
           <DialogTitle>Review the plan</DialogTitle>
         </DialogHeader>

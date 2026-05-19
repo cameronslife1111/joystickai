@@ -1,0 +1,1 @@
+CREATE POLICY "own plans delete" ON public.plans FOR DELETE USING (auth.uid() = user_id);
