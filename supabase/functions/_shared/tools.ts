@@ -7,9 +7,9 @@ export type ToolDef = {
 export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_document_by_title",
-    description: "Find documents owned by the user whose title matches the query (fuzzy/substring). Returns up to 5 results, ranked by closeness. PREFER using ids already provided in the WORKSPACE SNAPSHOT over calling this tool.",
+    description: "Find documents owned by the user whose title fuzzily matches the query. Tokenized and scored — tolerates loose/approximate wording, never requires exact title. Returns up to 5 results, best match first. PREFER picking the id directly from the WORKSPACE SNAPSHOT over calling this tool.",
     args: {
-      query: { type: "string", description: "Search text", required: true },
+      query: { type: "string", description: "Rough description of the document — title fragments, keywords, or topic", required: true },
     },
   },
   {
