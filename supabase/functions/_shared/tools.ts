@@ -26,11 +26,11 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_sentence_by_content",
     description:
-      "Locate a SPECIFIC sentence row to mutate (edit/move/mark/link). Returns up to 5 matches by case-insensitive substring. " +
+      "Locate a SPECIFIC sentence row to mutate (edit/move/mark/link). Fuzzy token-scored match — tolerates loose wording, never requires the user to remember exact phrasing. Returns up to 5 candidates, best match first. " +
       "Do NOT use this to retrieve content for use in a later step — use read_document or inline from the WORKSPACE SNAPSHOT instead. " +
       "If document_id is omitted, searches across all the user's documents.",
     args: {
-      query: { type: "string", description: "Search text", required: true },
+      query: { type: "string", description: "Rough description of the sentence — keywords or topic", required: true },
       document_id: { type: "string", description: "Optional UUID to restrict the search to one document", required: false },
     },
   },
