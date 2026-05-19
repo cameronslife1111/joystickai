@@ -249,6 +249,7 @@ export type Database = {
           favorites: Json
           grid_layout: Json
           id: string
+          last_favorite_slot: number | null
           muted: boolean
           theme: string
           updated_at: string
@@ -259,6 +260,7 @@ export type Database = {
           favorites?: Json
           grid_layout?: Json
           id?: string
+          last_favorite_slot?: number | null
           muted?: boolean
           theme?: string
           updated_at?: string
@@ -269,6 +271,7 @@ export type Database = {
           favorites?: Json
           grid_layout?: Json
           id?: string
+          last_favorite_slot?: number | null
           muted?: boolean
           theme?: string
           updated_at?: string

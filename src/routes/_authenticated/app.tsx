@@ -165,10 +165,9 @@ function AppPage() {
         }, { onConflict: "user_id" });
         qc.invalidateQueries({ queryKey: ["documents"] });
       })();
-    } else if (!activeDocId) {
-      setActiveDocId(docs[0].id);
     }
-  }, [docs, activeDocId, qc]);
+  }, [docs, qc]);
+
 
   const activeDoc = useMemo(
     () => docs?.find((d) => d.id === activeDocId) ?? null,
@@ -193,14 +192,14 @@ function AppPage() {
   // Load user preferences (favorites array + muted flag)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted")
+        .select("favorites, muted, last_favorite_slot")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
-      return { favorites, muted: !!(data as any)?.muted };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
@@ -233,6 +232,35 @@ function AppPage() {
     );
   }, [qc, favorites]);
 
+  const saveLastFavoriteSlot = useCallback(async (slot: number) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), last_favorite_slot: slot,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, last_favorite_slot: slot, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
+  // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
+  useEffect(() => {
+    if (!docs || prefs === undefined || activeDocId) return;
+    const lastSlot = prefs?.last_favorite_slot ?? null;
+    const favs = prefs?.favorites ?? [];
+    const lastDocId = typeof lastSlot === "number" && lastSlot >= 0 && lastSlot < favs.length
+      ? favs[lastSlot]
+      : null;
+    const lastDocExists = lastDocId && docs.some((d) => d.id === lastDocId);
+    if (lastDocExists) {
+      setActiveDocId(lastDocId);
+      favIdxRef.current = lastSlot!;
+    } else {
+      setActiveDocId(docs[0].id);
+    }
+  }, [docs, prefs, activeDocId]);
+
   // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
   // the next swipe-right always advances to the NEXT filled slot — never
   // re-selects the slot the user is already on.
@@ -243,8 +271,11 @@ function AppPage() {
     // snap the cursor back to the first match and trap the cycle.
     if (favorites[favIdxRef.current] === activeDocId) return;
     const slot = favorites.findIndex((id) => id === activeDocId);
-    if (slot >= 0) favIdxRef.current = slot;
-  }, [favorites, activeDocId]);
+    if (slot >= 0) {
+      favIdxRef.current = slot;
+      void saveLastFavoriteSlot(slot);
+    }
+  }, [favorites, activeDocId, saveLastFavoriteSlot]);
 
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
@@ -447,6 +478,7 @@ function AppPage() {
       const pos = filled.findIndex((s) => s.i > curIdx);
       const nextSlot = pos === -1 ? filled[0] : filled[pos];
       favIdxRef.current = nextSlot.i;
+      void saveLastFavoriteSlot(nextSlot.i);
       targetId = nextSlot.id;
     } else {
       if (docs.length < 2) return;
@@ -501,7 +533,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, favorites, speak, claimSpeech, qc]);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
