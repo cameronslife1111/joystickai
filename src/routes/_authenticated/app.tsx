@@ -64,7 +64,11 @@ function AppPage() {
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "light";
+    const cached = window.localStorage.getItem("orby_theme");
+    return cached === "dark" ? "dark" : "light";
+  });
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>("");
   const favIdxRef = useRef<number>(-1);
