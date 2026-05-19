@@ -1979,11 +1979,8 @@ function AppPage() {
         onOpenChange={setPlanComposerOpen}
         originDocumentId={activeDocId}
         originSentenceIndex={currentIdx}
-        onPlanProposed={(id) => {
-          setPlanApprovalId(id);
-          setPlanApprovalOpen(true);
-        }}
       />
+
       <PlanApprovalDialog
         open={planApprovalOpen}
         onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
