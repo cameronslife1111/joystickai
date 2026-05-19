@@ -159,7 +159,7 @@ export const TOOL_CATALOG: ToolDef[] = [
     args: {
       source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
       prompt: { type: "string", description: "What to change", required: true },
-      image_size: { type: "string", description: "Optional aspect preset (may be 'auto')", required: false },
+      image_size: { type: "string", description: "Optional aspect preset: portrait_16_9 | portrait_4_3 | square_hd | landscape_4_3 | landscape_16_9", required: false },
       quality: { type: "string", description: "Optional quality", required: false },
       output_format: { type: "string", description: "Optional output format", required: false },
     },
