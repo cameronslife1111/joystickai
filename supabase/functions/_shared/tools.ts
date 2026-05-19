@@ -124,13 +124,6 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "web_search",
-    description: "Search the live web for a query. Returns concise prose summarizing the findings.",
-    args: {
-      query: { type: "string", description: "What to research", required: true },
-    },
-  },
-  {
-    name: "web_search",
     description: "Search the live web for a query. Returns { text: string }. Pipe with {{step_N.result.text}} (or {{step_N.result}} — both resolve to the prose).",
     args: {
       query: { type: "string", description: "What to research", required: true },
