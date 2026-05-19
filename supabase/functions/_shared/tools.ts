@@ -15,8 +15,9 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "read_document",
     description:
-      "Read the full contents of a document: returns { id, title, sentences: [{ id, order_index, content }] }. " +
-      "Use this when you need to USE the text of a document's sentences in a later step (e.g. pass a prompt stored in the doc into an image-generation step). " +
+      "Read the full contents of a document. Returns { id, title, text, sentences: [{ id, order_index, content }] } where `text` is all sentences joined with newlines. " +
+      "Use this when you need to USE the text of a document in a later step (e.g. pass a prompt stored in the doc into an image-generation step). " +
+      "When piping into another step's string arg (like a prompt), ALWAYS reference `{{step_N.result.text}}` — NEVER `{{step_N.result.sentences}}` (that's an array of objects and will fail). " +
       "The full text of documents the user named is usually ALREADY inlined in the WORKSPACE SNAPSHOT — in that case, inline the text directly into the next step's args instead of calling this tool.",
     args: {
       document_id: { type: "string", description: "UUID of the document to read", required: true },

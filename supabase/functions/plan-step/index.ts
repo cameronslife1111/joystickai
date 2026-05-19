@@ -24,6 +24,27 @@ async function invokeEdgeFunction(supabase: any, functionName: string, body: any
   }
 }
 
+function stringifyForTemplate(value: any, stepIdx: number, path: string): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    if (value.every((v) => typeof v === "string")) return value.join("\n");
+    if (
+      value.every(
+        (v) => v && typeof v === "object" && typeof (v as any).content === "string",
+      )
+    ) {
+      return value.map((v: any) => v.content).join("\n");
+    }
+  }
+  throw new Error(
+    `Template {{step_${stepIdx}.${path}}} resolved to a non-string ${
+      Array.isArray(value) ? "array" : "object"
+    }. Pipe a string field instead (e.g. {{step_${stepIdx}.result.text}} for read_document).`,
+  );
+}
+
 function resolveTemplates(value: any, steps: any[]): any {
   if (typeof value === "string") {
     return value.replace(/\{\{step_(\d+)\.([^}]+)\}\}/g, (_, idxStr, path) => {
@@ -35,7 +56,8 @@ function resolveTemplates(value: any, steps: any[]): any {
           `Template {{step_${idx}.${path}}} cannot resolve: step_${idx} (${tool}) has no result yet.`,
         );
       }
-      return String(resolvePath(src, path, idx, steps[idx]?.tool));
+      const resolved = resolvePath(src, path, idx, steps[idx]?.tool);
+      return stringifyForTemplate(resolved, idx, path);
     });
   }
   if (Array.isArray(value)) return value.map((v) => resolveTemplates(v, steps));
@@ -123,7 +145,13 @@ const TOOL_HANDLERS: Record<string, any> = {
       .eq("document_id", args.document_id)
       .eq("user_id", user_id)
       .order("order_index", { ascending: true });
-    return { id: doc.id, title: doc.title, sentences: sents ?? [] };
+    const rows = sents ?? [];
+    return {
+      id: doc.id,
+      title: doc.title,
+      text: rows.map((s: any) => s.content).join("\n"),
+      sentences: rows,
+    };
   },
   async find_sentence_by_content(args, { user_id, admin }) {
     let q = admin
@@ -145,16 +173,43 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   async find_media_by_title(args, { user_id, admin }) {
-    const q = String(args.query ?? "").trim();
-    if (!q) return [];
+    const raw = String(args.query ?? "").trim();
+    if (!raw) return [];
+    const STOP = new Set([
+      "the", "a", "an", "of", "to", "and", "or", "with", "for", "this", "that",
+      "these", "those", "my", "image", "images", "photo", "photos", "picture",
+      "pic", "pics", "reference", "ref", "video", "videos", "audio", "clip",
+    ]);
+    const tokens = raw
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((t) => t && !STOP.has(t));
+    const searchTerms = tokens.length > 0 ? tokens : [raw.toLowerCase()];
+
+    // Build OR filter across title and generation_params->user_text for every token.
+    const orFilter = searchTerms
+      .flatMap((t) => [
+        `title.ilike.%${t}%`,
+        `generation_params->>user_text.ilike.%${t}%`,
+      ])
+      .join(",");
+
     const { data } = await admin
       .from("media_assets")
       .select("id, title, kind, generation_params, created_at")
       .eq("user_id", user_id)
-      .or(`title.ilike.%${q}%,generation_params->>user_text.ilike.%${q}%`)
+      .or(orFilter)
       .order("created_at", { ascending: false })
-      .limit(5);
-    return (data ?? []).map((m: any) => ({
+      .limit(25);
+
+    // Score by number of tokens matched (in title or source_text), break ties by recency.
+    const scored = (data ?? []).map((m: any) => {
+      const hay = `${String(m.title ?? "").toLowerCase()} ${String(m?.generation_params?.user_text ?? "").toLowerCase()}`;
+      const score = searchTerms.reduce((n, t) => (hay.includes(t) ? n + 1 : n), 0);
+      return { m, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 5).map(({ m }) => ({
       id: m.id,
       title: m.title,
       kind: m.kind,
