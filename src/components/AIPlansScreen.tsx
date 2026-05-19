@@ -40,6 +40,18 @@ function timeAgo(iso: string): string {
 export function AIPlansScreen({ onClose }: Props) {
   const qc = useQueryClient();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      toast.success("Copied request");
+      window.setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1500);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
 
   const { data: plans } = useQuery({
     queryKey: ["plans"],
