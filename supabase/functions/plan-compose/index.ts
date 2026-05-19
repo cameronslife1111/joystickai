@@ -51,7 +51,10 @@ ${toolCatalogForPrompt()}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
-- Match user intent loosely. "Find the sentence about pasta" means use find_sentence_by_content with query "pasta". Do not require the user to give you exact wording.
+- A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document the user named. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
+- To USE the text inside a document in a later step (e.g. "use the prompt in the X doc as the image prompt"), inline the literal text from the snapshot directly into that step's args. Only call read_document when the doc was not inlined and you need its content at runtime.
+- find_sentence_by_content is ONLY for locating a specific sentence ROW you intend to mutate (edit/move/mark/link). Never use it to fetch content for a later step's args, and never require the user to remember exact wording.
+- Match user intent loosely. Do not require exact wording.
 - When a step needs the result of an earlier step, reference it with template syntax: {{step_<index>.result.<path>}}. Examples:
   - {{step_0.result[0].id}}  -> the id of the first item returned by step 0
   - {{step_1.result.id}}     -> the id field of step 1's result (when result is a single object)
