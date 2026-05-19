@@ -109,6 +109,22 @@ const TOOL_HANDLERS: Record<string, any> = {
       .limit(5);
     return data ?? [];
   },
+  async read_document(args, { user_id, admin }) {
+    const { data: doc } = await admin
+      .from("documents")
+      .select("id, title")
+      .eq("id", args.document_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!doc) throw new Error(`Document ${args.document_id} not found`);
+    const { data: sents } = await admin
+      .from("sentences")
+      .select("id, order_index, content")
+      .eq("document_id", args.document_id)
+      .eq("user_id", user_id)
+      .order("order_index", { ascending: true });
+    return { id: doc.id, title: doc.title, sentences: sents ?? [] };
+  },
   async find_sentence_by_content(args, { user_id, admin }) {
     let q = admin
       .from("sentences")
