@@ -169,7 +169,7 @@ export const TOOL_CATALOG: ToolDef[] = [
     description:
       "Create a NEW image by combining 2-16 existing images with a prompt describing how to combine them. " +
       "source_media_ids is an array of image asset UUIDs (length 2-16). The new image is saved as a separate asset. " +
-      "Optional overrides: image_size (allows 'auto'), quality, output_format.",
+      "Optional overrides: image_size (one of 'portrait_16_9', 'portrait_4_3', 'square_hd', 'landscape_4_3', 'landscape_16_9'; default 'portrait_16_9' — do NOT pass 'auto', fal rejects it with multiple input images), quality, output_format.",
     args: {
       source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs", required: true },
       prompt: { type: "string", description: "How to combine them", required: true },
