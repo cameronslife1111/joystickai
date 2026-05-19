@@ -1042,7 +1042,7 @@ function AppPage() {
 
   // Menu actions
   const grid = useMemo(() => [
-    { e: "🌓", t: "Theme", fn: () => setTheme(theme === "dark" ? "light" : "dark") },
+    { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
