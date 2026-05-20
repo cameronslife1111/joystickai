@@ -81,6 +81,17 @@ function AppPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
+  // Call mode (live voice conversation with Orby)
+  const { inCall, overlayMinimized, setOverlayMinimized, endCall } = useCallMode();
+  const inCallRef = useRef(false);
+  useEffect(() => { inCallRef.current = inCall; }, [inCall]);
+  useEffect(() => {
+    // When entering a call, silence any in-flight sentence speech immediately.
+    if (inCall && typeof window !== "undefined" && "speechSynthesis" in window) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+  }, [inCall]);
+
   // Unseen media count (for menu badge). Invalidated whenever this page mounts
   // (i.e. after returning from /media) and whenever media is seen/changed.
   const { data: unseenCount = 0 } = useQuery({
@@ -1615,7 +1626,7 @@ function AppPage() {
             ref={orbRef}
             state={orbState}
             size={0}
-            className="!w-full !h-full"
+            className={`!w-full !h-full${inCall ? " orb-call" : ""}`}
           />
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
