@@ -544,6 +544,8 @@ function AppPage() {
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
+    if (lockFavorites) return; // List cycling locked by user
+
 
     // Claim TTS BEFORE the network round-trip so any in-flight utterance
     // from a previous tap is killed immediately (not 100ms from now).
