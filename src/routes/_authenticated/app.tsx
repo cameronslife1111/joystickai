@@ -2244,6 +2244,32 @@ function AppPage() {
       {plansScreenOpen && (
         <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
       )}
+
+      {/* Minimized call indicator — tap to bring the call overlay back. */}
+      {inCall && overlayMinimized && (
+        <div
+          className="pointer-events-none fixed inset-x-0 z-[55] flex justify-center px-3"
+          style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
+        >
+          <button
+            type="button"
+            onClick={() => setOverlayMinimized(false)}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-yellow-400 px-4 py-2 text-xs font-semibold text-black shadow-lg transition active:scale-95"
+            aria-label="Return to call"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            On a call with Orby · Tap to return
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); void endCall("user"); }}
+              className="ml-1 rounded-full bg-black/15 px-2 py-0.5 text-[10px] uppercase tracking-wide"
+            >
+              End
+            </span>
+          </button>
+        </div>
+      )}
     </main>
   );
 }
