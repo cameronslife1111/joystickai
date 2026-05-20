@@ -19,7 +19,7 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
   ref,
 ) {
   const innerRef = useRef<HTMLButtonElement | null>(null);
-  const { mood, boost, blinking, gaze } = useOrbMood({ interactive });
+  const { mood, boost, blinking, gaze, talking, mouthOpen } = useOrbMood({ interactive });
 
   // Expose boostMood on the DOM node so callers using a plain HTMLButtonElement
   // ref (e.g. app.tsx) can trigger it without a separate API.
