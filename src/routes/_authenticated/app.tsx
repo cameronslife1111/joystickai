@@ -1296,15 +1296,6 @@ function AppPage() {
 
       {/* Top: doc title */}
       <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
-        {/* Invisible repeat-speech button (top-right corner) */}
-        <button
-          onClick={() => {
-            const text = currentSentence?.content;
-            if (text) speak(text, claimSpeech());
-          }}
-          className="absolute right-0 top-0 h-12 w-12 opacity-0"
-          aria-label="Repeat sentence"
-        />
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
           {composing ? (
             <span className="text-primary">New idea · {activeDoc?.title ?? "—"}</span>
