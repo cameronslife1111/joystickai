@@ -416,7 +416,6 @@ function AppPage() {
     const token = claimSpeech();
     const next = currentIdx + 1;
     if (next >= sentences.length) {
-      toast("End of document");
       if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
@@ -435,7 +434,6 @@ function AppPage() {
   const onSwipeUp = useCallback(async () => {
     const token = claimSpeech();
     if (currentIdx === 0) {
-      toast("Start of document");
       if (sentences?.[0]) speak(sentences[0].content, token);
       return;
     }

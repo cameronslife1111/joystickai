@@ -49,7 +49,11 @@ export function useComposingPlansWatcher(
           const isFail = row.status === "failed";
           (isFail ? toast.error : toast)(
             isFail ? "Planning failed — tap for details" : "Plan ready — tap to review",
-            { action: { label: isFail ? "Details" : "Review", onClick: () => cbRef.current(row.id) } },
+            {
+              // Persist until the user dismisses or acts — they shouldn't miss it.
+              duration: Infinity,
+              action: { label: isFail ? "Details" : "Review", onClick: () => cbRef.current(row.id) },
+            },
           );
           qc.invalidateQueries({ queryKey: ["plans"] });
         }
