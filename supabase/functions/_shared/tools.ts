@@ -61,11 +61,11 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "add_sentence",
-    description: "Add a new sentence to a document. Position can be 'top', 'bottom', or 'after_current'. Default is 'bottom'.",
+    description: "Add a new sentence to a document. Position can be 'top' or 'bottom'. Default is 'bottom'. Do NOT use 'after_current' — plans have no notion of a 'current' sentence.",
     args: {
       document_id: { type: "string", description: "Target document UUID", required: true },
       content: { type: "string", description: "Sentence text", required: true },
-      position: { type: "string", description: "'top' | 'bottom' | 'after_current' (default 'bottom')", required: false },
+      position: { type: "string", description: "'top' | 'bottom' (default 'bottom')", required: false },
     },
   },
   {
@@ -78,11 +78,11 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "move_sentence",
-    description: "Move a sentence to a different document or position. Position is the same as add_sentence.",
+    description: "Move a sentence to a different document. Position is 'top' or 'bottom' (default 'bottom'). Do NOT use 'after_current' — plans have no notion of a 'current' sentence.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence to move", required: true },
       target_document_id: { type: "string", description: "UUID of the destination document", required: true },
-      position: { type: "string", description: "'top' | 'bottom' | 'after_current' (default 'bottom')", required: false },
+      position: { type: "string", description: "'top' | 'bottom' (default 'bottom')", required: false },
     },
   },
   {
