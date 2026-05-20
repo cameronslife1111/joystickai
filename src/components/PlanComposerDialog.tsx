@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toast } from "sonner";
+import { useCallMode } from "@/contexts/CallModeContext";
+import { Phone } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -33,6 +35,7 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
+  const { startCall } = useCallMode();
 
   const { data: docs = [], isLoading: docsLoading } = useQuery({
     queryKey: ["plan_composer_docs"],
@@ -249,7 +252,7 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
 
         {/* Pinned footer */}
         <div
-          className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6"
+          className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6"
           style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         >
           <button
@@ -258,6 +261,21 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
             className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
           >
             Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              // Must call startCall synchronously inside the user gesture so
+              // iOS unlocks both mic and speechSynthesis.
+              reset();
+              onOpenChange(false);
+              void startCall();
+            }}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md bg-yellow-400 px-4 py-2 text-sm font-semibold text-black shadow-sm transition active:scale-95 disabled:opacity-50"
+          >
+            <Phone className="h-4 w-4" />
+            Call Orby
           </button>
           <button
             onClick={submit}
