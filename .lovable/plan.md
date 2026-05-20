@@ -1,38 +1,45 @@
-# Lip-sync Orby's mouth to speech
+## The bug
 
-Goal: when the Web Speech `speak()` function is talking, Orby's mouth opens and closes in rough sync with the audio. Not phoneme-accurate — just an "alive" jaw-flap that starts/stops with the utterance.
+The link is stored on the sentence row itself (`sentences.linked_document_id`), so the link is supposed to follow the row no matter where it moves. That part works correctly for drag-reorder (`move_sentence` RPC) and for the "add sentence" RPC (`insert_sentences_at`) — both preserve row IDs.
 
-## Approach
+The breakage is in **`commitFullEdit`** in `src/routes/_authenticated/app.tsx` (lines ~636–745), which runs when the user opens the bulk text editor and saves. It rewrites sentences **positionally**:
 
-Keep it lightweight by listening to the **global** `window.speechSynthesis` state instead of wiring every `speak()` call site (there are 15+ in `app.tsx`). One small polling loop drives a shared `talking` flag, and the orb's mouth geometry interpolates open/close from that flag.
+- `existing[0]` (row id A, maybe linked) → gets new content from `parts[0]`
+- `existing[1]` (row id B, linked to docX) → gets new content from `parts[1]`
+- …etc.
 
-No changes to any `speak()` call site, no new dependencies, no per-utterance plumbing.
+So if the user inserts two new lines above a linked sentence and saves, row `B`'s id (and its `linked_document_id`) stays at index 1 while the linked text "Walk dog" moves down to a brand-new row at index 3 with no link. The link is now glued to the wrong sentence.
 
-## Changes
+## The fix
 
-### 1. `src/hooks/use-orb-mood.ts`
-- Add a `talking` boolean to the returned state.
-- Start a low-cost interval (~80ms) that reads `window.speechSynthesis.speaking`. The interval only runs while the page is visible; otherwise idle.
-- Also expose a `mouthOpen` number (0–1) generated while `talking` is true: a fast sine + small random jitter so the mouth flaps naturally rather than ticking on/off. When not talking, `mouthOpen` decays to 0 quickly.
+Rewrite `commitFullEdit` to do an **identity-preserving diff** instead of a positional overwrite:
 
-### 2. `src/components/Orb.tsx`
-- Consume `talking` and `mouthOpen` from `useOrbMood`.
-- Replace the mouth `path` with a geometry that interpolates between:
-  - **Closed/expression line** (current frown↔smile curve driven by mood) when `mouthOpen ≈ 0`
-  - **Open oval** (a small filled ellipse, height scaled by `mouthOpen * ~6px`) when talking
-- Keep the smile curvature from mood — when talking + happy, the mouth opens upward like a grin; when talking + sad, it stays flatter. Implementation: render an ellipse with `ry = baseLineThickness + mouthOpen * openAmount`, vertically centered on the existing mouth Y, and keep the curved path underneath as the "lip line" so the resting expression still shows through.
-- Asleep state overrides: no mouth movement even if `speechSynthesis.speaking` is true (Orby's not awake to talk).
+```text
+Inputs:  existing rows (id, content, order_index, linked_document_id)
+         parts[] from the editor textarea
 
-### 3. No changes to `app.tsx`, `__root.tsx`, or any `speak()` callers
-The global polling approach means every existing and future `speak()` call automatically animates the mouth.
+1. Build a content-based pool of existing rows (multimap: content → [ids…]).
+2. For each part in order:
+     - If an existing row has exact matching content, claim it (preferring the
+       closest order_index to the part's new index). Reuse its id, just set
+       order_index = i. linked_document_id stays put automatically.
+     - Otherwise mark this slot as "new" (insert later).
+3. Any existing rows not claimed → deleted.
+4. Use the same park-then-place trick already in the file to avoid colliding
+   with the unique (document_id, order_index) index while updating.
+5. Insert the brand-new parts at their target order_index with no link.
+```
 
-## Technical notes
+The only behavior change is: **unchanged sentence text keeps its row identity**, so its `linked_document_id` rides along to wherever the user moved it in the editor. New text becomes a fresh row (no link, as expected). Edited text (content changed) is treated as new, which also matches user intent — if you rewrite the sentence, the old link to "the recipe for the old sentence" shouldn't silently transfer.
 
-- Polling at 80ms = 12.5 reads/sec of a synchronous boolean — negligible cost, far cheaper than wiring `onstart`/`onend` to every utterance and dealing with the iOS Safari quirks already documented in `app.tsx`.
-- `mouthOpen` is computed inside the same interval (no extra rAF loop). Sine driver: `0.5 + 0.5 * Math.sin(t * 18)` plus `Math.random() * 0.15`, clamped 0–1.
-- Respects `prefers-reduced-motion`: when set, mouth just toggles between closed and a single fixed open height instead of oscillating.
-- Stops cleanly when `speechSynthesis.speaking` flips false — `mouthOpen` snaps to 0 within one tick.
+If we later want to also preserve links across rewording (e.g. light edits to a linked sentence), we can add a similarity-match fallback, but that's out of scope here.
 
-## Out of scope
-- Phoneme/viseme matching (would need an audio-analysis lib or per-utterance `onboundary` events, much heavier).
-- Lip-sync for media-gallery video playback (separate concern).
+## Files touched
+
+- `src/routes/_authenticated/app.tsx` — rewrite the body of `commitFullEdit` (the bulk-edit save path). No DB schema changes, no other call sites affected.
+
+## Out of scope (already correct)
+
+- Drag reorder (`move_sentence` RPC) — preserves row IDs.
+- Inserting via the Send-to flow / Plan Mode (`insert_sentences_at` RPC) — shifts other rows' `order_index` without touching their IDs.
+- Deleting a sentence — removes one row, links on others untouched.
