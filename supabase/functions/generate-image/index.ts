@@ -65,15 +65,16 @@ Deno.serve(async (req) => {
   EdgeRuntime.waitUntil(
     (async () => {
       try {
-        const result = await fal.subscribe("openai/gpt-image-2", {
-          input: {
-            prompt,
-            image_size: finalSize,
-            quality: finalQuality,
-            num_images: 1,
-            output_format: finalFormat,
-          },
-          logs: false,
+        // fal's openai/gpt-image-2 occasionally returns a transient 5xx
+        // ("Internal Server Error") on otherwise valid prompts. A single
+        // upstream blip used to kill the whole plan step, so we retry a few
+        // times with exponential backoff before giving up.
+        const result = await subscribeWithRetry({
+          prompt,
+          image_size: finalSize,
+          quality: finalQuality,
+          num_images: 1,
+          output_format: finalFormat,
         });
 
         const img = result.data?.images?.[0];
@@ -111,7 +112,7 @@ Deno.serve(async (req) => {
           .from("media_assets")
           .update({
             status: "failed",
-            error_message: String(err?.message ?? err ?? "Generation failed"),
+            error_message: extractFalError(err),
           })
           .eq("id", row_id)
           .eq("user_id", user.id);
