@@ -903,7 +903,15 @@ function AppPage() {
     qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
     toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
     cancelCompose();
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx]);
+    // Re-speak the current sentence the user was on so they can resume
+    // their place without tapping the orb. Called synchronously within the
+    // user-gesture handler so iOS Safari honors the utterance.
+    const resume = sentences?.[currentIdx]?.content;
+    if (resume) {
+      const token = claimSpeech();
+      speak(resume, token);
+    }
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak]);
 
 
   // Parse a .txt file of checklists into [{ title, sentences[] }, ...]
