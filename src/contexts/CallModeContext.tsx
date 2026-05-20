@@ -397,6 +397,12 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
     setMicMuted((m) => !m);
   }, []);
 
+  // Wire forward refs now that endCall / generatePlan are defined.
+  useEffect(() => { endCallRef.current = endCall; }, [endCall]);
+  useEffect(() => {
+    generatePlanRef.current = generatePlanFromConversationInternal;
+  }, [generatePlanFromConversationInternal]);
+
   // Cleanup on unmount.
   useEffect(() => {
     return () => {
