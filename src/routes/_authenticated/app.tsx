@@ -1344,7 +1344,17 @@ function AppPage() {
       setMenuOpen(false);
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
+    {
+      e: lockFavorites ? "🔒" : "🔓",
+      t: lockFavorites ? "List locked" : "List unlocked",
+      fn: () => {
+        const next = !lockFavorites;
+        setMenuOpen(false);
+        void saveLockFavorites(next);
+        toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
+      },
+    },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1370,7 +1380,9 @@ function AppPage() {
     filled[18] = grid[19]; // 19 Open link
     filled[19] = grid[20]; // 20 Plan mode
     filled[20] = grid[21]; // 21 AI Plans
+    filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[23] = grid[14]; // 24 Sign out
+
     return filled;
   }, [grid]);
 
