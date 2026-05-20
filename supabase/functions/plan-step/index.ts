@@ -387,7 +387,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async move_sentence(args, { user_id, admin }) {
+  async move_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";
     let insertAt = 0;
     if (pos === "top") {
@@ -412,11 +412,15 @@ const TOOL_HANDLERS: Record<string, any> = {
       .select("content")
       .eq("id", args.sentence_id)
       .eq("user_id", user_id)
-      .single();
-    if (!s) throw new Error("Sentence not found");
+      .maybeSingle();
+    // Idempotency: if a prior (partial) run of this step already moved+deleted
+    // the source, treat it as a no-op success instead of failing the plan.
+    if (!s) {
+      return { skipped: true, reason: "source sentence already moved or deleted" };
+    }
     const inserted = await TOOL_HANDLERS.add_sentence(
       { document_id: args.target_document_id, content: s.content, position: pos === "top" ? "top" : (pos === "after_current" ? "after_current" : "bottom") },
-      { user_id, admin },
+      { user_id, admin, supabase },
     );
     const { error: delErr } = await admin
       .from("sentences")
