@@ -205,16 +205,35 @@ Deno.serve(async (req) => {
       if (b.score !== a.score) return b.score - a.score;
       return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
     });
-    const docsToInline = scoredDocs
+    const forcedDocIds: string[] = Array.isArray((plan as any).attached_document_ids)
+      ? (plan as any).attached_document_ids.filter((x: unknown): x is string => typeof x === "string")
+      : [];
+    const forcedSet = new Set(forcedDocIds);
+
+    const scoreInlineIds = scoredDocs
       .filter(({ score }) => score > 0)
       .slice(0, 6)
-      .map(({ d }) => d);
+      .map(({ d }) => d.id)
+      .filter((id) => !forcedSet.has(id));
 
-    const inlinedDocSections: string[] = [];
-    for (const d of docsToInline) {
+    // Final inline order: forced attachments first, then score-derived matches.
+    const inlineIds = [...forcedDocIds, ...scoreInlineIds];
+    const docById = new Map(docList.map((d: any) => [d.id, d]));
+
+    const inlineDoc = async (id: string): Promise<string | null> => {
+      // For forced ids the doc may not be in docList if it's outside the
+      // 200-most-recent window — fetch the title directly in that case.
+      let d: any = docById.get(id);
+      if (!d) {
+        const { data } = await admin
+          .from("documents").select("id, title")
+          .eq("id", id).eq("user_id", user.id).maybeSingle();
+        if (!data) return null;
+        d = data;
+      }
       const { data: sents } = await admin
         .from("sentences").select("id, order_index, content")
-        .eq("document_id", d.id).eq("user_id", user.id)
+        .eq("document_id", id).eq("user_id", user.id)
         .order("order_index", { ascending: true }).limit(200);
       const rows = sents ?? [];
       let total = 0;
@@ -226,10 +245,25 @@ Deno.serve(async (req) => {
         lines.push(line);
         total += line.length;
       }
-      inlinedDocSections.push(
-        `  document_id: ${d.id}\n  title: ${JSON.stringify(d.title ?? "")}\n  sentences (${rows.length}${truncated ? ", truncated" : ""}):\n${lines.join("\n")}`,
-      );
+      return `  document_id: ${id}\n  title: ${JSON.stringify(d.title ?? "")}\n  sentences (${rows.length}${truncated ? ", truncated" : ""}):\n${lines.join("\n")}`;
+    };
+
+    const inlinedDocSections: string[] = [];
+    for (const id of inlineIds) {
+      const section = await inlineDoc(id);
+      if (section) inlinedDocSections.push(section);
     }
+
+    // Build a short attachments header (id — title) for the planner. Titles
+    // come from docById when available, otherwise from a direct fetch above
+    // (already loaded into the section text).
+    const attachmentsHeader = forcedDocIds.length
+      ? forcedDocIds.map((id) => {
+          const d: any = docById.get(id);
+          const title = d?.title ?? "(attached document)";
+          return `  ${id} — ${JSON.stringify(title)}`;
+        }).join("\n")
+      : "";
 
     // Media assets — fetch then rank by token overlap with the request so the
     // most plausible candidates surface first in the snapshot.
