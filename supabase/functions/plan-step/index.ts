@@ -892,21 +892,43 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: plan, error: planErr } = await admin
+  // ---- Concurrency guard ----
+  // Atomically claim this plan for execution. If another invocation (other tab,
+  // duplicate poll tick, manual approval racing the advancer) already holds the
+  // claim, bail out — they will advance the plan and the next tick will retry.
+  // A 90s ceiling auto-expires zombie claims from edge functions that died mid-step.
+  const STALE_CLAIM_CUTOFF = new Date(Date.now() - 90_000).toISOString();
+  const { data: claimed } = await admin
     .from("plans")
-    .select("*")
+    .update({ step_claim_at: new Date().toISOString() })
     .eq("id", plan_id)
     .eq("user_id", user.id)
-    .single();
-  if (planErr || !plan) return json({ error: "plan not found" }, 404);
+    .or(`step_claim_at.is.null,step_claim_at.lt.${STALE_CLAIM_CUTOFF}`)
+    .select("*")
+    .maybeSingle();
+  if (!claimed) {
+    return json({ status: "running", note: "already_running" });
+  }
+  // From here on, the `claimed` row is the source of truth — never trust an
+  // earlier in-memory snapshot.
+  const plan = claimed;
+
+  const releaseClaim = async (extraUpdates: Record<string, unknown> = {}) => {
+    await admin
+      .from("plans")
+      .update({ step_claim_at: null, ...extraUpdates })
+      .eq("id", plan_id);
+  };
 
   if (plan.status === "approved") {
-    await admin.from("plans").update({ status: "running" }).eq("id", plan.id).eq("status", "approved");
     plan.status = "running";
+    // Persisted on first downstream update; no separate write needed.
   }
   if (plan.status !== "running" && plan.status !== "awaiting_media") {
+    await releaseClaim();
     return json({ status: plan.status });
   }
+
 
   const steps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
   const idx: number = plan.current_step ?? 0;
