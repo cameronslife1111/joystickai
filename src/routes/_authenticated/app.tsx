@@ -416,7 +416,6 @@ function AppPage() {
     const token = claimSpeech();
     const next = currentIdx + 1;
     if (next >= sentences.length) {
-      toast("End of document");
       if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
