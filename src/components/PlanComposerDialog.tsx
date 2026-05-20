@@ -128,11 +128,11 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) { if (!v) reset(); onOpenChange(v); } }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-lg max-h-[90svh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>Ask Orby to do something</DialogTitle>
-          <DialogDescription>
-            Type a request and/or attach documents to give Orby context.
+          <DialogTitle className="pr-8">Ask Orby to do something</DialogTitle>
+          <DialogDescription className="break-words">
+            Type a request and/or attach documents. With attachments only, Orby will plan based on the documents.
           </DialogDescription>
         </DialogHeader>
         <Textarea
