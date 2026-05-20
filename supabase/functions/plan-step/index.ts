@@ -939,7 +939,7 @@ Deno.serve(async (req) => {
     const mediaId: string | undefined = step?.pending_media_id;
     if (!mediaId) {
       // Defensive: drop back to running so we re-evaluate.
-      await admin.from("plans").update({ status: "running" }).eq("id", plan.id);
+      await releaseClaim({ status: "running" });
       return json({ status: "running" });
     }
     const { data: media } = await admin
@@ -952,23 +952,24 @@ Deno.serve(async (req) => {
       step.status = "failed";
       step.error = `Pending media ${mediaId} disappeared`;
       const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-      await admin.from("plans").update({
+      await releaseClaim({
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
-      }).eq("id", plan.id);
+      });
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
+      await releaseClaim();
       return json({ status: "awaiting_media", media_id: mediaId });
     }
     if (media.status === "failed") {
       step.status = "failed";
       step.error = media.error_message || "Media generation failed";
       const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-      await admin.from("plans").update({
+      await releaseClaim({
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
-      }).eq("id", plan.id);
+      });
       return json({ status: "failed", error: step.error });
     }
     // completed
@@ -983,21 +984,19 @@ Deno.serve(async (req) => {
       updates.result_summary = summarizeRun(steps);
       updates.completed_at = new Date().toISOString();
     }
-    await admin.from("plans").update(updates).eq("id", plan.id);
+    await releaseClaim(updates);
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
   if (idx >= steps.length) {
-    await admin
-      .from("plans")
-      .update({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() })
-      .eq("id", plan.id);
+    await releaseClaim({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() });
     return json({ status: "completed" });
   }
 
   const step = steps[idx];
   step.status = "running";
-  await admin.from("plans").update({ steps }).eq("id", plan.id);
+  // Note: claim is already held; this is just persisting the running flag on the step.
+  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id);
 
   try {
     const resolvedArgs = resolveTemplates(step.args ?? {}, steps);
@@ -1010,7 +1009,7 @@ Deno.serve(async (req) => {
     if (result && typeof result === "object" && "__pending_media" in result) {
       step.status = "awaiting_media";
       step.pending_media_id = result.__pending_media;
-      await admin.from("plans").update({ steps, status: "awaiting_media" }).eq("id", plan.id);
+      await releaseClaim({ steps, status: "awaiting_media" });
       return json({ status: "awaiting_media", media_id: result.__pending_media });
     }
 
@@ -1025,22 +1024,19 @@ Deno.serve(async (req) => {
       updates.result_summary = summarizeRun(steps);
       updates.completed_at = new Date().toISOString();
     }
-    await admin.from("plans").update(updates).eq("id", plan.id);
+    await releaseClaim(updates);
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
     step.status = "failed";
     step.error = String(err?.message ?? err);
     const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-    await admin
-      .from("plans")
-      .update({
-        steps,
-        status: "failed",
-        error_message: step.error,
-        error_lovable_prompt: lovablePrompt,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", plan.id);
+    await releaseClaim({
+      steps,
+      status: "failed",
+      error_message: step.error,
+      error_lovable_prompt: lovablePrompt,
+      completed_at: new Date().toISOString(),
+    });
     return json({ status: "failed", error: step.error });
   }
 });
