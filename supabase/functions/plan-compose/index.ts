@@ -285,6 +285,9 @@ Deno.serve(async (req) => {
     }));
 
     let userContext = "";
+    if (attachmentsHeader) {
+      userContext += `\n\nATTACHED DOCUMENTS (the user explicitly attached these to the request — treat their contents as primary input even if the request text is short. Their full text is inlined under REFERENCED DOCUMENTS below):\n${attachmentsHeader}`;
+    }
     if (docList.length) {
       userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
