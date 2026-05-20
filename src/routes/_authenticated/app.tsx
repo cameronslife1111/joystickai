@@ -21,6 +21,8 @@ import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
+import { useCallMode } from "@/contexts/CallModeContext";
+import { Phone } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
@@ -365,6 +367,7 @@ function AppPage() {
   // async hop here causes iOS to silently drop the utterance.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
+    if (inCallRef.current) return; // on a call — only the conversation is audible
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     if (token != null && token !== speechTokenRef.current) return;
