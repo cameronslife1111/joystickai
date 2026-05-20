@@ -269,6 +269,19 @@ function AppPage() {
     );
   }, [qc, favorites, muted]);
 
+  const saveLockFavorites = useCallback(async (next: boolean) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), lock_favorites: next,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, lock_favorites: next, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
+
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
   useEffect(() => {
     if (!docs || prefs === undefined || activeDocId) return;
