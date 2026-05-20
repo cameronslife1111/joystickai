@@ -131,6 +131,7 @@ export type Database = {
         Row: {
           acknowledged: boolean
           approved_at: string | null
+          attached_document_ids: string[]
           completed_at: string | null
           created_at: string
           current_step: number
@@ -152,6 +153,7 @@ export type Database = {
         Insert: {
           acknowledged?: boolean
           approved_at?: string | null
+          attached_document_ids?: string[]
           completed_at?: string | null
           created_at?: string
           current_step?: number
@@ -173,6 +175,7 @@ export type Database = {
         Update: {
           acknowledged?: boolean
           approved_at?: string | null
+          attached_document_ids?: string[]
           completed_at?: string | null
           created_at?: string
           current_step?: number
