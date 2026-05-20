@@ -249,7 +249,6 @@ Deno.serve(async (req) => {
     }));
 
     let userContext = "";
-    if (userContextLines.length) userContext += `\nORIGIN CONTEXT:\n  ${userContextLines.join("\n  ")}`;
     if (docList.length) {
       userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
