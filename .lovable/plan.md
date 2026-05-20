@@ -1,50 +1,77 @@
-## Auto-repeat current sentence after 2 minutes of inactivity
+## Attach documents to a Plan
 
-Add a passive timer that re-speaks the user's current sentence every 2 minutes if they haven't navigated. The repeat must not affect Orby's mood (no color/emotion change), but the mouth will still animate because the existing lip-sync hook polls `window.speechSynthesis.speaking` independently.
+Add a doc picker below the textarea in the Plan composer so the user can attach up to 10 documents that get sent to the planner alongside (or instead of) their typed request. The planner force-inlines those docs into its workspace snapshot, so the plan is grounded in their real content rather than relying on token-overlap guesses.
 
-### Behavior
+### Behavior (UI)
 
-- After the user lands on a sentence (any navigation: swipe, jump, favorite slot change, doc switch, send-to resume, link follow, etc.), start a 2-minute timer.
-- When the timer fires:
-  - If muted, the app is hidden (`document.hidden`), the user is currently editing, or any modal/compose flow is active, skip this tick and reschedule another 2 minutes.
-  - Otherwise call `speak(currentSentence.content, claimSpeech())` and reschedule another 2 minutes.
-- Any change to the "active sentence identity" — `activeDocId` or `currentIdx` — cancels the pending timer and starts a fresh 2-minute countdown for the new sentence. This guarantees a stale sentence can never be spoken: by the time the timer fires, the effect for the previous (docId, idx) pair has already been torn down.
-- The repeat must NOT call `orbRef.current.boostMood()` and must NOT touch `useOrbMood` state. Mouth movement happens automatically via the existing `speechSynthesis.speaking` poll in `use-orb-mood.ts`.
+`PlanComposerDialog.tsx`:
 
-### Implementation
+- Below the textarea, add a collapsible "Attach documents" section:
+  - Trigger row: button labeled `+ Attach documents` showing a count chip when any are selected (e.g. `Attached (3)`).
+  - When opened, render a search `Input` and a scrollable list (max-height ~14rem) of the user's documents, sorted via `sortDocsByTitle`, each row a checkbox + title + sentence count.
+  - Live-filter the list by case-insensitive substring against title.
+  - Hard cap: **10 attachments**. Once 10 are selected, unchecked rows are disabled and a hint reads "Maximum 10 documents".
+  - Selected docs also render as removable chips directly under the section header so the user sees their picks without scrolling.
+- Submit button (`Generate Plan`):
+  - Enabled when `text.trim()` is non-empty **OR** `attachedDocIds.length > 0` (user no longer has to type if they've attached docs).
+  - Disabled state otherwise.
+- Suggestion chips: keep as-is.
+- Data fetch: reuse the `documents_with_counts` query pattern from `DocumentPickerSheet` (one query inside the dialog, `enabled: open`). No new shared helper — copy the small fetch inline to avoid coupling the picker UI changes to the sheet's layout.
 
-Single file touched: `src/routes/_authenticated/app.tsx`.
+### Behavior (data flow)
 
-Add one `useEffect` keyed on `[activeDocId, currentIdx, sentences, speak, claimSpeech, /* mute ref via mutedRef */]`:
+When the user submits with attachments:
 
-```ts
-useEffect(() => {
-  const text = sentences?.[currentIdx]?.content;
-  if (!text) return;
-  const id = window.setTimeout(function tick() {
-    // Guard: don't interrupt user activity / silent modes.
-    if (mutedRef.current || document.hidden || editing || composeOpen /* etc */) {
-      // Reschedule and bail.
-      // (handled by restarting the timer below)
-    } else {
-      const token = claimSpeech();
-      speak(text, token);
-    }
-  }, 2 * 60 * 1000);
-  return () => window.clearTimeout(id);
-}, [activeDocId, currentIdx, sentences, speak, claimSpeech, editing]);
+1. Insert the `plans` row with the new field `attached_document_ids: string[]` populated alongside `user_request`.
+2. Invoke `plan-compose` exactly as today (`{ body: { plan_id } }`). The function reads the attached ids off the row.
+3. If `user_request` is empty but attachments are present, store a placeholder request like `"(no instructions — see attached documents)"` so the planner still sees a coherent prompt. The user-visible "user_request" copy in `AIPlansScreen` / `PlanApprovalDialog` will then list attachment titles, see below.
+
+Optional UX touch in `AIPlansScreen` row subtitle: when `attached_document_ids` is non-empty and `user_request` is the placeholder, show `Attached: <Title A>, <Title B>` instead of the placeholder text. Out of scope if it adds churn — leave the placeholder visible.
+
+### Server change (`supabase/functions/plan-compose/index.ts`)
+
+- After loading the `plan` row, read `plan.attached_document_ids` (uuid[]).
+- Build a `forcedDocIds` Set from that list.
+- In the existing snapshot logic:
+  - Union `forcedDocIds` into the `docsToInline` list so they ALWAYS get full-text inlined regardless of token score (token-relevance still chooses the rest, capped at 6; forced docs are inlined in addition to that cap or replace the cap entirely — pick "in addition, but never duplicate", so up to 6 + N_attached docs are inlined).
+  - Re-fetch sentences for any forced id not already in the score-derived inline set.
+- Augment the snapshot intro so the planner is told these are explicit attachments:
+  - Add an extra section `ATTACHED DOCUMENTS (the user explicitly attached these to the request — treat their content as primary input even if the request text is short):` listing `id — title` for each attachment, before the `REFERENCED DOCUMENTS` block.
+- Update the planner system prompt with one bullet:
+  - "If ATTACHED DOCUMENTS are present, treat their contents as primary context for resolving the request. Prefer using their text and ids directly over calling find_* tools."
+
+No change to `plan-step` — attachments only affect composition.
+
+### Schema change
+
+Add nullable `uuid[]` column to `plans`:
+
+```sql
+ALTER TABLE public.plans
+  ADD COLUMN attached_document_ids uuid[] NOT NULL DEFAULT '{}';
 ```
 
-Notes on the guard set: include `editing`, any "compose/menu/dialog open" booleans already in scope (e.g. `composeOpen`, `menuOpen`, `jumpOpen`, plan/media dialogs). If a guard trips, restart a fresh 2-minute timer rather than firing — easiest pattern: use `setInterval(2*60*1000)` and check guards inside, or recursive `setTimeout`. Either is fine as long as cleanup cancels both the timer and any speech this effect started (it won't, because re-reads only run when no other activity is happening, and any new navigation increments `speechTokenRef` via the next `claimSpeech()` call).
+No RLS change needed (existing `own plans *` policies cover all columns). No index needed — the column is read only when fetching the single plan row by id.
 
-### Safety against stuck loops
+### First-principles edges considered
 
-- Effect cleanup (`clearTimeout`) runs synchronously whenever `activeDocId` or `currentIdx` changes, so a queued repeat for the old sentence is cancelled before it can fire.
-- The fired repeat itself calls `claimSpeech()` which cancels any in-flight utterance and bumps the token, so even an in-flight stale utterance from a previous tick gets cut off the moment the user navigates and triggers a new `claimSpeech()`.
-- Modal/edit/mute guards prevent repeating over the user's voice or in the background.
+- **Empty request + attachments**: allowed; planner gets the placeholder string and the attached docs in the snapshot. Without attachments AND without text, submit stays disabled.
+- **Attached doc deleted between attach and compose**: snapshot fetch returns no sentences; forced section simply omits that id. Planner still sees the rest. No crash.
+- **User attaches the same doc the planner would have inlined anyway**: dedupe by id; the doc appears once under ATTACHED DOCUMENTS (preferred) and is removed from the score-derived inline set.
+- **Token budget**: existing per-doc 8KB cap stays. With up to 10 forced docs that's ~80KB in worst case — large but within OpenAI context. If this becomes a problem later, drop the per-doc cap to ~4KB when attachments > 5. Out of scope for this change.
+- **Privacy / isolation**: attached_document_ids must belong to the requesting user. Enforced by the existing user-scoped fetch in plan-compose (`.eq("user_id", user.id)` on `sentences`); ids that don't belong to the user return zero sentences.
+- **Re-running compose**: if a plan ever re-composes (currently it doesn't), the attached list persists with the row so the same context is rebuilt.
+- **`origin_document_id` prop**: still passed but unused server-side per the "plan independence" rule. Leave the prop signature alone to avoid churn in `app.tsx`.
+
+### Files touched
+
+- `src/components/PlanComposerDialog.tsx` — UI for picker + chips + submit gating + insert row with `attached_document_ids`.
+- `supabase/functions/plan-compose/index.ts` — read column, force-inline, extend system prompt.
+- Migration adding `attached_document_ids uuid[]` to `plans`.
 
 ### Out of scope
 
-- No change to `useOrbMood`, `Orb.tsx`, or any mood/color logic.
-- No change to swipe gesture handling itself — the existing handlers already mutate `currentIdx`, which is what resets the timer.
-- No persistence across reloads; on reload the 2-minute window simply restarts from the moment the user reaches a sentence.
+- Attaching media assets (could be a follow-up — would need its own picker).
+- Showing attachment titles on the AIPlansScreen row.
+- Letting the user attach a doc range or specific sentences.
+- Changing the planner model or tool catalog.

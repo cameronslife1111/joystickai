@@ -53,6 +53,7 @@ Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
 - PLAN INDEPENDENCE — there is NO "current document" and NO "current sentence". You are NOT told which doc the user has open or where their cursor is, and you must not assume one. Every target doc/sentence must come from the user's request itself, resolved fuzzily against the WORKSPACE SNAPSHOT below.
 - Because you have no cursor, DO NOT use position: "after_current" for add_sentence or move_sentence unless the user's request explicitly says to place content after a specific sentence that you have already located by id. Default to "bottom" (or "top" if the user said "at the top"/"first").
+- If the WORKSPACE SNAPSHOT contains an ATTACHED DOCUMENTS section, the user explicitly attached those documents to this request. Treat their contents as PRIMARY context for resolving the request, even if the request text is short or generic. Prefer using their text and ids directly over calling find_* tools.
 - A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document plausibly referenced by the request. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
 - The user will refer to documents, media, and sentences by ROUGH DESCRIPTION, not by exact title or exact wording. Examples: "the claude codex doc" might mean a document titled "Claude Code Tips" or "Codex notes"; "the cat photo" might mean a media asset titled "Whiskers portrait"; "the dinner plans sentence" might mean a sentence containing the word "reservation". Pick the closest matching id from the snapshot yourself using common-sense semantic matching. Do NOT echo the user's loose phrasing into a find_* call when a plausible candidate is already listed in the snapshot.
 - Only call find_document_by_title / find_media_by_title / find_sentence_by_content when the snapshot is empty OR none of the listed items is a plausible match for what the user described. These tools return FUZZY token-scored results — they tolerate loose wording but result[0] is a best guess, not a guarantee.
@@ -204,16 +205,35 @@ Deno.serve(async (req) => {
       if (b.score !== a.score) return b.score - a.score;
       return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
     });
-    const docsToInline = scoredDocs
+    const forcedDocIds: string[] = Array.isArray((plan as any).attached_document_ids)
+      ? (plan as any).attached_document_ids.filter((x: unknown): x is string => typeof x === "string")
+      : [];
+    const forcedSet = new Set(forcedDocIds);
+
+    const scoreInlineIds = scoredDocs
       .filter(({ score }) => score > 0)
       .slice(0, 6)
-      .map(({ d }) => d);
+      .map(({ d }) => d.id)
+      .filter((id) => !forcedSet.has(id));
 
-    const inlinedDocSections: string[] = [];
-    for (const d of docsToInline) {
+    // Final inline order: forced attachments first, then score-derived matches.
+    const inlineIds = [...forcedDocIds, ...scoreInlineIds];
+    const docById = new Map(docList.map((d: any) => [d.id, d]));
+
+    const inlineDoc = async (id: string): Promise<string | null> => {
+      // For forced ids the doc may not be in docList if it's outside the
+      // 200-most-recent window — fetch the title directly in that case.
+      let d: any = docById.get(id);
+      if (!d) {
+        const { data } = await admin
+          .from("documents").select("id, title")
+          .eq("id", id).eq("user_id", user.id).maybeSingle();
+        if (!data) return null;
+        d = data;
+      }
       const { data: sents } = await admin
         .from("sentences").select("id, order_index, content")
-        .eq("document_id", d.id).eq("user_id", user.id)
+        .eq("document_id", id).eq("user_id", user.id)
         .order("order_index", { ascending: true }).limit(200);
       const rows = sents ?? [];
       let total = 0;
@@ -225,10 +245,25 @@ Deno.serve(async (req) => {
         lines.push(line);
         total += line.length;
       }
-      inlinedDocSections.push(
-        `  document_id: ${d.id}\n  title: ${JSON.stringify(d.title ?? "")}\n  sentences (${rows.length}${truncated ? ", truncated" : ""}):\n${lines.join("\n")}`,
-      );
+      return `  document_id: ${id}\n  title: ${JSON.stringify(d.title ?? "")}\n  sentences (${rows.length}${truncated ? ", truncated" : ""}):\n${lines.join("\n")}`;
+    };
+
+    const inlinedDocSections: string[] = [];
+    for (const id of inlineIds) {
+      const section = await inlineDoc(id);
+      if (section) inlinedDocSections.push(section);
     }
+
+    // Build a short attachments header (id — title) for the planner. Titles
+    // come from docById when available, otherwise from a direct fetch above
+    // (already loaded into the section text).
+    const attachmentsHeader = forcedDocIds.length
+      ? forcedDocIds.map((id) => {
+          const d: any = docById.get(id);
+          const title = d?.title ?? "(attached document)";
+          return `  ${id} — ${JSON.stringify(title)}`;
+        }).join("\n")
+      : "";
 
     // Media assets — fetch then rank by token overlap with the request so the
     // most plausible candidates surface first in the snapshot.
@@ -250,6 +285,9 @@ Deno.serve(async (req) => {
     }));
 
     let userContext = "";
+    if (attachmentsHeader) {
+      userContext += `\n\nATTACHED DOCUMENTS (the user explicitly attached these to the request — treat their contents as primary input even if the request text is short. Their full text is inlined under REFERENCED DOCUMENTS below):\n${attachmentsHeader}`;
+    }
     if (docList.length) {
       userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
