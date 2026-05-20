@@ -2042,7 +2042,7 @@ function AppPage() {
                         <button
                           key={d.id}
                           onClick={() => pickSendDoc(d.id)}
-                          className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                          className="w-full shrink-0 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
                         >
                           {d.title}
                         </button>
