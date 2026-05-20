@@ -144,6 +144,15 @@ Deno.serve(async (req) => {
     // ---- Build a WORKSPACE SNAPSHOT so the planner can resolve doc/media
     //      references naturally without having to call find_* tools or guess
     //      sentence wording.
+    //
+    // SECURITY / ISOLATION NOTE: the planner prompt is rebuilt from scratch on
+    // every call. The only cross-request inputs are (1) the user's current
+    // request and (2) this snapshot, which is read live from the user's own
+    // rows in `documents`, `sentences`, and `media_assets` (filtered by
+    // `user_id`). We deliberately do NOT inject prior plan rows, prior LLM
+    // outputs, or any other plan's `steps` JSON. If a new plan looks like it
+    // "remembered" an old plan, the cause is content the previous plan WROTE
+    // into the user's docs (legitimately surfaced here), never planner state.
     const userContextLines: string[] = [];
     const docId = (plan as any).origin_document_id as string | null | undefined;
     const sentenceIdx = (plan as any).origin_sentence_index as number | null | undefined;
