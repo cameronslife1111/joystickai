@@ -145,38 +145,21 @@ Deno.serve(async (req) => {
     //      references naturally without having to call find_* tools or guess
     //      sentence wording.
     //
+    // INDEPENDENCE RULE: We deliberately do NOT inject the user's currently
+    // open document or current sentence position into the planner. Plans must
+    // be independent of editor state — if the user wants to act on a specific
+    // doc/sentence, they will describe it in their request (fuzzy-matched
+    // against the snapshot below). This avoids the planner silently mutating
+    // whatever happened to be open when the prompt was sent.
+    //
     // SECURITY / ISOLATION NOTE: the planner prompt is rebuilt from scratch on
     // every call. The only cross-request inputs are (1) the user's current
     // request and (2) this snapshot, which is read live from the user's own
     // rows in `documents`, `sentences`, and `media_assets` (filtered by
     // `user_id`). We deliberately do NOT inject prior plan rows, prior LLM
-    // outputs, or any other plan's `steps` JSON. If a new plan looks like it
-    // "remembered" an old plan, the cause is content the previous plan WROTE
-    // into the user's docs (legitimately surfaced here), never planner state.
+    // outputs, or any other plan's `steps` JSON.
     const userContextLines: string[] = [];
-    const docId = (plan as any).origin_document_id as string | null | undefined;
-    const sentenceIdx = (plan as any).origin_sentence_index as number | null | undefined;
-    if (docId) {
-      const { data: doc } = await admin
-        .from("documents").select("id, title")
-        .eq("id", docId).eq("user_id", user.id).maybeSingle();
-      if (doc) {
-        userContextLines.push(`active_document_id: ${doc.id}`);
-        userContextLines.push(`active_document_title: ${JSON.stringify(doc.title ?? "")}`);
-      }
-      if (typeof sentenceIdx === "number" && sentenceIdx >= 0) {
-        const { data: sents } = await admin
-          .from("sentences").select("id, content, order_index")
-          .eq("document_id", docId).order("order_index", { ascending: true })
-          .range(sentenceIdx, sentenceIdx);
-        const sent = sents?.[0];
-        if (sent) {
-          userContextLines.push(`current_sentence_id: ${sent.id}`);
-          userContextLines.push(`current_sentence_text: ${JSON.stringify(sent.content ?? "")}`);
-          userContextLines.push(`current_sentence_position: ${sent.order_index}`);
-        }
-      }
-    }
+
 
     // Full list of documents (id + title)
     const { data: allDocs } = await admin
