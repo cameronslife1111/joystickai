@@ -913,6 +913,27 @@ function AppPage() {
     }
   }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak]);
 
+  // Swap the user's most-recent favorite slot to point at the currently-viewed
+  // document. Useful when navigating into a linked doc that isn't favorited.
+  const replaceCurrentSlot = useCallback(async () => {
+    const slot = favIdxRef.current;
+    if (slot < 0 || !activeDocId) return;
+    if (favorites[slot] === activeDocId) return;
+    const next = [...favorites];
+    while (next.length <= slot) next.push(null);
+    next[slot] = activeDocId;
+    await saveFavorites(next);
+    await saveLastFavoriteSlot(slot);
+    const docB = docs?.find((d) => d.id === activeDocId);
+    toast(`Slot ${slot + 1} now holds "${docB?.title ?? "this document"}"`);
+    cancelCompose();
+    const resume = sentences?.[currentIdx]?.content;
+    if (resume) {
+      const token = claimSpeech();
+      speak(resume, token);
+    }
+  }, [favorites, activeDocId, docs, sentences, currentIdx, saveFavorites, saveLastFavoriteSlot, cancelCompose, claimSpeech, speak]);
+
 
   // Parse a .txt file of checklists into [{ title, sentences[] }, ...]
   // Format: titles on their own line wrapped in ===...===, items below as
@@ -1934,6 +1955,25 @@ function AppPage() {
 
             {sendStage === "doc" && (
               <div className="flex min-h-0 flex-col gap-2">
+                {(() => {
+                  const slot = favIdxRef.current;
+                  if (slot < 0) return null;
+                  const currentSlotDocId = favorites[slot];
+                  if (currentSlotDocId === activeDocId) return null;
+                  const docA = docs?.find((d) => d.id === currentSlotDocId);
+                  const docB = docs?.find((d) => d.id === activeDocId);
+                  return (
+                    <button
+                      onClick={replaceCurrentSlot}
+                      className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-left text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20"
+                    >
+                      <div className="font-medium">↺ Replace current slot</div>
+                      <div className="mt-0.5 text-xs opacity-80">
+                        Slot {slot + 1}: "{docA?.title ?? "empty"}" → "{docB?.title ?? "this doc"}"
+                      </div>
+                    </button>
+                  );
+                })()}
                 <Input
                   placeholder="Search lists…"
                   value={sendSearchQuery}
