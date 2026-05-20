@@ -199,17 +199,12 @@ Deno.serve(async (req) => {
       d,
       score: scoreText(String(d.title ?? "")),
     }));
-    // Always include the origin document if any.
-    const originId = docId ?? null;
     scoredDocs.sort((a, b) => {
-      const aOrigin = a.d.id === originId ? 1 : 0;
-      const bOrigin = b.d.id === originId ? 1 : 0;
-      if (aOrigin !== bOrigin) return bOrigin - aOrigin;
       if (b.score !== a.score) return b.score - a.score;
       return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
     });
     const docsToInline = scoredDocs
-      .filter(({ d, score }) => d.id === originId || score > 0)
+      .filter(({ score }) => score > 0)
       .slice(0, 6)
       .map(({ d }) => d);
 
