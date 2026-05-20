@@ -141,5 +141,36 @@ export function useOrbMood(options?: { interactive?: boolean }) {
     return () => clearTimeout(timeout);
   }, []);
 
-  return { mood, boost, blinking, gaze };
+  // Talking / lip-sync — polls window.speechSynthesis.speaking
+  const [talking, setTalking] = useState(false);
+  const [mouthOpen, setMouthOpen] = useState(0);
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const start = performance.now();
+    let lastOpen = 0;
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      const isSpeaking = !!window.speechSynthesis.speaking && moodRef.current > 0.02;
+      setTalking((prev) => (prev !== isSpeaking ? isSpeaking : prev));
+      if (isSpeaking) {
+        let next: number;
+        if (reduce) {
+          next = 0.6;
+        } else {
+          const t = (performance.now() - start) / 1000;
+          const base = 0.5 + 0.5 * Math.sin(t * 18);
+          next = Math.max(0, Math.min(1, base * 0.85 + Math.random() * 0.15));
+        }
+        lastOpen = next;
+        setMouthOpen(next);
+      } else if (lastOpen > 0) {
+        lastOpen = 0;
+        setMouthOpen(0);
+      }
+    }, 80);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return { mood, boost, blinking, gaze, talking, mouthOpen };
 }
