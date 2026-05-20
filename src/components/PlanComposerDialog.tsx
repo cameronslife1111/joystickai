@@ -30,14 +30,16 @@ export function PlanComposerDialog({ open, onOpenChange, originDocumentId, origi
     try {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) { toast.error("Sign in first"); return; }
+      // Intentionally do NOT send origin_document_id / origin_sentence_index.
+      // Plans must be independent of whatever doc/sentence the user is currently
+      // viewing — the planner should resolve targets only from the user's request
+      // (fuzzy-matched against their workspace).
       const { data: row, error } = await supabase
         .from("plans")
         .insert({
           user_id: u.user.id,
           status: "composing",
           user_request: value,
-          origin_document_id: originDocumentId,
-          origin_sentence_index: originSentenceIndex,
         })
         .select()
         .single();

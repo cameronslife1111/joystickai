@@ -51,10 +51,12 @@ ${toolCatalogForPrompt()}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
+- PLAN INDEPENDENCE — there is NO "current document" and NO "current sentence". You are NOT told which doc the user has open or where their cursor is, and you must not assume one. Every target doc/sentence must come from the user's request itself, resolved fuzzily against the WORKSPACE SNAPSHOT below.
+- Because you have no cursor, DO NOT use position: "after_current" for add_sentence or move_sentence unless the user's request explicitly says to place content after a specific sentence that you have already located by id. Default to "bottom" (or "top" if the user said "at the top"/"first").
 - A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document plausibly referenced by the request. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
 - The user will refer to documents, media, and sentences by ROUGH DESCRIPTION, not by exact title or exact wording. Examples: "the claude codex doc" might mean a document titled "Claude Code Tips" or "Codex notes"; "the cat photo" might mean a media asset titled "Whiskers portrait"; "the dinner plans sentence" might mean a sentence containing the word "reservation". Pick the closest matching id from the snapshot yourself using common-sense semantic matching. Do NOT echo the user's loose phrasing into a find_* call when a plausible candidate is already listed in the snapshot.
 - Only call find_document_by_title / find_media_by_title / find_sentence_by_content when the snapshot is empty OR none of the listed items is a plausible match for what the user described. These tools return FUZZY token-scored results — they tolerate loose wording but result[0] is a best guess, not a guarantee.
-- If the user's request doesn't clearly point at any document, media asset, or sentence in the snapshot, prefer returning an explanation (empty steps) over guessing. Never invent ids.
+- If the user's request doesn't clearly point at any document, media asset, or sentence in the snapshot, prefer returning an explanation (empty steps) over guessing. Never invent ids, and never fall back to "whatever doc the user is probably on" — that information is not available to you.
 - To USE the text inside a document in a later step (e.g. "use the prompt in the X doc as the image prompt"), inline the literal text from the snapshot directly into that step's args. Only call read_document when the doc was not inlined and you need its content at runtime. When piping a document into a media tool's prompt and you must use read_document, reference {{step_N.result.text}} — NEVER {{step_N.result.sentences}} (that's an array of objects, not a string, and will fail validation).
 - find_sentence_by_content is ONLY for locating a specific sentence ROW you intend to mutate (edit/move/mark/link). Never use it to fetch content for a later step's args.
 - When a step needs the result of an earlier step, reference it with template syntax: {{step_<index>.result.<path>}}. Examples:
@@ -145,38 +147,20 @@ Deno.serve(async (req) => {
     //      references naturally without having to call find_* tools or guess
     //      sentence wording.
     //
+    // INDEPENDENCE RULE: We deliberately do NOT inject the user's currently
+    // open document or current sentence position into the planner. Plans must
+    // be independent of editor state — if the user wants to act on a specific
+    // doc/sentence, they will describe it in their request (fuzzy-matched
+    // against the snapshot below). This avoids the planner silently mutating
+    // whatever happened to be open when the prompt was sent.
+    //
     // SECURITY / ISOLATION NOTE: the planner prompt is rebuilt from scratch on
     // every call. The only cross-request inputs are (1) the user's current
     // request and (2) this snapshot, which is read live from the user's own
     // rows in `documents`, `sentences`, and `media_assets` (filtered by
     // `user_id`). We deliberately do NOT inject prior plan rows, prior LLM
-    // outputs, or any other plan's `steps` JSON. If a new plan looks like it
-    // "remembered" an old plan, the cause is content the previous plan WROTE
-    // into the user's docs (legitimately surfaced here), never planner state.
-    const userContextLines: string[] = [];
-    const docId = (plan as any).origin_document_id as string | null | undefined;
-    const sentenceIdx = (plan as any).origin_sentence_index as number | null | undefined;
-    if (docId) {
-      const { data: doc } = await admin
-        .from("documents").select("id, title")
-        .eq("id", docId).eq("user_id", user.id).maybeSingle();
-      if (doc) {
-        userContextLines.push(`active_document_id: ${doc.id}`);
-        userContextLines.push(`active_document_title: ${JSON.stringify(doc.title ?? "")}`);
-      }
-      if (typeof sentenceIdx === "number" && sentenceIdx >= 0) {
-        const { data: sents } = await admin
-          .from("sentences").select("id, content, order_index")
-          .eq("document_id", docId).order("order_index", { ascending: true })
-          .range(sentenceIdx, sentenceIdx);
-        const sent = sents?.[0];
-        if (sent) {
-          userContextLines.push(`current_sentence_id: ${sent.id}`);
-          userContextLines.push(`current_sentence_text: ${JSON.stringify(sent.content ?? "")}`);
-          userContextLines.push(`current_sentence_position: ${sent.order_index}`);
-        }
-      }
-    }
+    // outputs, or any other plan's `steps` JSON.
+
 
     // Full list of documents (id + title)
     const { data: allDocs } = await admin
@@ -216,17 +200,12 @@ Deno.serve(async (req) => {
       d,
       score: scoreText(String(d.title ?? "")),
     }));
-    // Always include the origin document if any.
-    const originId = docId ?? null;
     scoredDocs.sort((a, b) => {
-      const aOrigin = a.d.id === originId ? 1 : 0;
-      const bOrigin = b.d.id === originId ? 1 : 0;
-      if (aOrigin !== bOrigin) return bOrigin - aOrigin;
       if (b.score !== a.score) return b.score - a.score;
       return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
     });
     const docsToInline = scoredDocs
-      .filter(({ d, score }) => d.id === originId || score > 0)
+      .filter(({ score }) => score > 0)
       .slice(0, 6)
       .map(({ d }) => d);
 
@@ -271,7 +250,6 @@ Deno.serve(async (req) => {
     }));
 
     let userContext = "";
-    if (userContextLines.length) userContext += `\nORIGIN CONTEXT:\n  ${userContextLines.join("\n  ")}`;
     if (docList.length) {
       userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
@@ -284,7 +262,7 @@ Deno.serve(async (req) => {
 
 
     const effectiveSystemPrompt = userContext
-      ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "this doc", "the Cameron inbox", "the reference image" using these values; if an id is present here, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document):${userContext}`
+      ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
       : systemPrompt;
     const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
     let parsed: any;
