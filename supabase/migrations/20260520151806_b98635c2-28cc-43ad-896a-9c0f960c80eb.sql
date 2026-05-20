@@ -1,0 +1,1 @@
+ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS lock_favorites boolean NOT NULL DEFAULT false;
