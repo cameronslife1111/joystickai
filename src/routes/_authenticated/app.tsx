@@ -674,13 +674,52 @@ function AppPage() {
       return true;
     }
 
-    // Step A: park all existing rows in a high range to free 0..N-1 for clean rewrite.
-    // Use negative offsets that mirror original index so we never collide with the
-    // unique (document_id, order_index) constraint and so we can recover positions if needed.
+    // Identity-preserving diff: for each new part, try to match an existing row
+    // by exact content (preferring the existing row whose order_index is
+    // closest to the part's new position). Reusing the row id preserves
+    // linked_document_id and any other per-row metadata so links travel with
+    // the sentence text instead of being stuck to a position.
+    //
+    // Build a content -> [{ id, order_index }] multimap of unclaimed rows.
+    const pool = new Map<string, { id: string; order_index: number }[]>();
+    for (const row of existing) {
+      const list = pool.get(row.content);
+      const entry = { id: row.id, order_index: row.order_index };
+      if (list) list.push(entry);
+      else pool.set(row.content, [entry]);
+    }
+
+    type Plan =
+      | { kind: "reuse"; id: string; newIdx: number; content: string }
+      | { kind: "insert"; newIdx: number; content: string };
+    const plans: Plan[] = [];
+    const claimedIds = new Set<string>();
+
+    parts.forEach((content, newIdx) => {
+      const candidates = pool.get(content);
+      if (candidates && candidates.length > 0) {
+        // Pick the candidate whose original order_index is closest to newIdx.
+        let bestI = 0;
+        let bestDist = Math.abs(candidates[0].order_index - newIdx);
+        for (let i = 1; i < candidates.length; i++) {
+          const d = Math.abs(candidates[i].order_index - newIdx);
+          if (d < bestDist) { bestDist = d; bestI = i; }
+        }
+        const chosen = candidates.splice(bestI, 1)[0];
+        if (candidates.length === 0) pool.delete(content);
+        claimedIds.add(chosen.id);
+        plans.push({ kind: "reuse", id: chosen.id, newIdx, content });
+      } else {
+        plans.push({ kind: "insert", newIdx, content });
+      }
+    });
+
+    // Step A: park ALL existing rows in a high range to free 0..N-1.
+    // Even rows we plan to reuse need to be parked first, because their new
+    // order_index may collide with another existing row's current order_index
+    // under the unique (document_id, order_index) constraint.
     if (existing.length > 0) {
       const PARK_BASE = 1_000_000;
-      // Park sequentially in descending original index order to avoid any transient
-      // collisions if some rows already sit above PARK_BASE.
       const parkUpdates = await Promise.all(
         existing.map((s, i) =>
           supabase.from("sentences")
@@ -697,14 +736,16 @@ function AppPage() {
       }
     }
 
-    // Step B: update overlapping rows (always set order_index = i, plus content if changed).
-    const overlap = Math.min(parts.length, existing.length);
-    if (overlap > 0) {
+    // Step B: place each reused row at its new order_index. Content is
+    // unchanged by definition (we matched on exact content), but we still set
+    // it to be explicit. linked_document_id is left untouched.
+    const reuseSteps = plans.filter((p): p is Extract<Plan, { kind: "reuse" }> => p.kind === "reuse");
+    if (reuseSteps.length > 0) {
       const updateResults = await Promise.all(
-        existing.slice(0, overlap).map((s, i) =>
+        reuseSteps.map((p) =>
           supabase.from("sentences")
-            .update({ content: parts[i], order_index: i })
-            .eq("id", s.id)
+            .update({ order_index: p.newIdx, content: p.content })
+            .eq("id", p.id)
             .then((res) => res),
         ),
       );
@@ -716,13 +757,15 @@ function AppPage() {
       }
     }
 
-    // Step C: insert any new tail rows at clean indexes [existing.length .. parts.length - 1].
-    if (parts.length > existing.length) {
-      const newRows = parts.slice(existing.length).map((content, i) => ({
+    // Step C: insert brand-new rows at their target order_index. No link
+    // (linked_document_id defaults to null) — new text gets a fresh identity.
+    const insertSteps = plans.filter((p): p is Extract<Plan, { kind: "insert" }> => p.kind === "insert");
+    if (insertSteps.length > 0) {
+      const newRows = insertSteps.map((p) => ({
         user_id: u.user!.id,
         document_id: activeDocId,
-        content,
-        order_index: existing.length + i,
+        content: p.content,
+        order_index: p.newIdx,
       }));
       const { error: insErr } = await supabase.from("sentences").insert(newRows);
       if (insErr) {
@@ -732,9 +775,9 @@ function AppPage() {
       }
     }
 
-    // Step D: delete any surplus rows (still parked above PARK_BASE).
-    if (parts.length < existing.length) {
-      const surplus = existing.slice(parts.length).map((s) => s.id);
+    // Step D: delete any existing rows that weren't claimed (still parked).
+    const surplus = existing.filter((s) => !claimedIds.has(s.id)).map((s) => s.id);
+    if (surplus.length > 0) {
       const { error: delErr } = await supabase.from("sentences").delete().in("id", surplus);
       if (delErr) {
         console.error("[edit] delete-surplus step failed", delErr);
