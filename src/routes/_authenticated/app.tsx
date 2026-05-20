@@ -590,6 +590,7 @@ function AppPage() {
     onLongPressStart,
     onLongPressEnd,
     onSwipe: (d) => {
+      (orbRef.current as any)?.boostMood?.();
       if (d === "up") advanceSentence();
       else if (d === "down") onSwipeUp();
       else if (d === "right") onSwipeRight();

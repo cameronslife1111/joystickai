@@ -187,3 +187,53 @@
   0%, 100% { opacity: 0.7; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.08); }
 }
+
+/* ============ Orb mood (face + color) ============ */
+.orb {
+  --orb-saturation: 1;
+  --orb-hue-shift: 0deg;
+  --orb-brightness: 1;
+}
+.orb-core,
+.orb-aurora,
+.orb-halo {
+  transition: filter 1200ms ease;
+  filter:
+    saturate(var(--orb-saturation))
+    hue-rotate(var(--orb-hue-shift))
+    brightness(var(--orb-brightness));
+}
+.orb-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+  /* Slight inset so the face sits on the orb's "front" */
+  padding: 0;
+}
+.orb-face ellipse {
+  fill: rgba(20, 12, 30, 0.85);
+}
+.orb-face path {
+  stroke: rgba(20, 12, 30, 0.85);
+}
+.light .orb-face ellipse {
+  fill: rgba(15, 10, 25, 0.9);
+}
+.light .orb-face path {
+  stroke: rgba(15, 10, 25, 0.9);
+}
+.orb-asleep .orb-halo {
+  animation: orb-snore 4s ease-in-out infinite;
+}
+@keyframes orb-snore {
+  0%, 100% { opacity: 0.35; transform: scale(0.96); }
+  50% { opacity: 0.5; transform: scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-core, .orb-aurora, .orb-halo {
+    transition: filter 400ms ease;
+  }
+}
