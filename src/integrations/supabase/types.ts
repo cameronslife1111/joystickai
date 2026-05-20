@@ -256,6 +256,7 @@ export type Database = {
           grid_layout: Json
           id: string
           last_favorite_slot: number | null
+          lock_favorites: boolean
           muted: boolean
           theme: string
           updated_at: string
@@ -267,6 +268,7 @@ export type Database = {
           grid_layout?: Json
           id?: string
           last_favorite_slot?: number | null
+          lock_favorites?: boolean
           muted?: boolean
           theme?: string
           updated_at?: string
@@ -278,6 +280,7 @@ export type Database = {
           grid_layout?: Json
           id?: string
           last_favorite_slot?: number | null
+          lock_favorites?: boolean
           muted?: boolean
           theme?: string
           updated_at?: string

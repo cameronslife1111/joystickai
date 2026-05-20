@@ -197,19 +197,21 @@ function AppPage() {
   // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
+  const lockFavorites = prefs?.lock_favorites ?? false;
+
 
   // Hydrate theme from saved preference once it loads.
   useEffect(() => {
@@ -266,6 +268,19 @@ function AppPage() {
       { onConflict: "user_id" },
     );
   }, [qc, favorites, muted]);
+
+  const saveLockFavorites = useCallback(async (next: boolean) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), lock_favorites: next,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, lock_favorites: next, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
 
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
   useEffect(() => {
@@ -529,6 +544,8 @@ function AppPage() {
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
+    if (lockFavorites) return; // List cycling locked by user
+
 
     // Claim TTS BEFORE the network round-trip so any in-flight utterance
     // from a previous tap is killed immediately (not 100ms from now).
@@ -602,7 +619,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot]);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
@@ -1327,7 +1344,17 @@ function AppPage() {
       setMenuOpen(false);
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount]);
+    {
+      e: lockFavorites ? "🔒" : "🔓",
+      t: lockFavorites ? "List locked" : "List unlocked",
+      fn: () => {
+        const next = !lockFavorites;
+        setMenuOpen(false);
+        void saveLockFavorites(next);
+        toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
+      },
+    },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites]);
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1353,7 +1380,9 @@ function AppPage() {
     filled[18] = grid[19]; // 19 Open link
     filled[19] = grid[20]; // 20 Plan mode
     filled[20] = grid[21]; // 21 AI Plans
+    filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[23] = grid[14]; // 24 Sign out
+
     return filled;
   }, [grid]);
 
