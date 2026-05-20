@@ -142,6 +142,7 @@ export type Database = {
           plan_summary: string | null
           result_summary: string | null
           status: string
+          step_claim_at: string | null
           steps: Json | null
           total_steps: number
           updated_at: string
@@ -162,6 +163,7 @@ export type Database = {
           plan_summary?: string | null
           result_summary?: string | null
           status: string
+          step_claim_at?: string | null
           steps?: Json | null
           total_steps?: number
           updated_at?: string
@@ -182,6 +184,7 @@ export type Database = {
           plan_summary?: string | null
           result_summary?: string | null
           status?: string
+          step_claim_at?: string | null
           steps?: Json | null
           total_steps?: number
           updated_at?: string

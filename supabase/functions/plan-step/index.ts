@@ -335,19 +335,21 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async add_sentence(args, { user_id, admin }) {
+  async add_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";
+    // Verify ownership of the target doc first so the error message is friendly.
+    const { data: docRow } = await admin
+      .from("documents")
+      .select("id, current_sentence_index")
+      .eq("id", args.document_id)
+      .eq("user_id", user_id)
+      .single();
+    if (!docRow) throw new Error("Document not found");
     let insertAt = 0;
     if (pos === "top") {
       insertAt = 0;
     } else if (pos === "after_current") {
-      const { data: doc } = await admin
-        .from("documents")
-        .select("current_sentence_index, user_id")
-        .eq("id", args.document_id)
-        .eq("user_id", user_id)
-        .single();
-      insertAt = (doc?.current_sentence_index ?? -1) + 1;
+      insertAt = (docRow.current_sentence_index ?? -1) + 1;
     } else {
       const { count } = await admin
         .from("sentences")
@@ -355,37 +357,23 @@ const TOOL_HANDLERS: Record<string, any> = {
         .eq("document_id", args.document_id);
       insertAt = count ?? 0;
     }
-    // Verify ownership of the doc before inserting via service role
-    const { data: docRow } = await admin
-      .from("documents")
-      .select("id")
-      .eq("id", args.document_id)
-      .eq("user_id", user_id)
-      .single();
-    if (!docRow) throw new Error("Document not found");
-    // Direct insert (service role bypasses the auth.uid() check inside the RPC)
-    // Shift existing rows then insert.
-    const { data: existing } = await admin
+    // Atomic shift + insert via the proven public.insert_sentences_at RPC,
+    // run as the authenticated user so its auth.uid() ownership check passes.
+    // This eliminates the half-shifted intermediate state the previous hand-
+    // rolled two-pass had, which could collide with concurrent shifts.
+    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: args.document_id,
+      p_contents: [args.content],
+      p_insert_at: insertAt,
+    });
+    if (rpcErr) throw new Error(rpcErr.message);
+    const { data: ins, error: selErr } = await admin
       .from("sentences")
-      .select("id, order_index")
-      .eq("document_id", args.document_id)
-      .gte("order_index", insertAt)
-      .order("order_index", { ascending: false });
-    if (existing && existing.length > 0) {
-      // Park in negative range first, then restore
-      for (const row of existing) {
-        await admin.from("sentences").update({ order_index: -(row.order_index + 1000) }).eq("id", row.id);
-      }
-      for (const row of existing) {
-        await admin.from("sentences").update({ order_index: row.order_index + 1 }).eq("id", row.id);
-      }
-    }
-    const { data: ins, error: insErr } = await admin
-      .from("sentences")
-      .insert({ user_id, document_id: args.document_id, content: args.content, order_index: insertAt })
       .select("id, content, order_index")
-      .single();
-    if (insErr) throw new Error(insErr.message);
+      .eq("document_id", args.document_id)
+      .eq("order_index", insertAt)
+      .maybeSingle();
+    if (selErr) throw new Error(selErr.message);
     return ins;
   },
   async update_sentence_content(args, { user_id, admin }) {
@@ -399,7 +387,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async move_sentence(args, { user_id, admin }) {
+  async move_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";
     let insertAt = 0;
     if (pos === "top") {
@@ -424,11 +412,15 @@ const TOOL_HANDLERS: Record<string, any> = {
       .select("content")
       .eq("id", args.sentence_id)
       .eq("user_id", user_id)
-      .single();
-    if (!s) throw new Error("Sentence not found");
+      .maybeSingle();
+    // Idempotency: if a prior (partial) run of this step already moved+deleted
+    // the source, treat it as a no-op success instead of failing the plan.
+    if (!s) {
+      return { skipped: true, reason: "source sentence already moved or deleted" };
+    }
     const inserted = await TOOL_HANDLERS.add_sentence(
       { document_id: args.target_document_id, content: s.content, position: pos === "top" ? "top" : (pos === "after_current" ? "after_current" : "bottom") },
-      { user_id, admin },
+      { user_id, admin, supabase },
     );
     const { error: delErr } = await admin
       .from("sentences")
@@ -900,21 +892,43 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: plan, error: planErr } = await admin
+  // ---- Concurrency guard ----
+  // Atomically claim this plan for execution. If another invocation (other tab,
+  // duplicate poll tick, manual approval racing the advancer) already holds the
+  // claim, bail out — they will advance the plan and the next tick will retry.
+  // A 90s ceiling auto-expires zombie claims from edge functions that died mid-step.
+  const STALE_CLAIM_CUTOFF = new Date(Date.now() - 90_000).toISOString();
+  const { data: claimed } = await admin
     .from("plans")
-    .select("*")
+    .update({ step_claim_at: new Date().toISOString() })
     .eq("id", plan_id)
     .eq("user_id", user.id)
-    .single();
-  if (planErr || !plan) return json({ error: "plan not found" }, 404);
+    .or(`step_claim_at.is.null,step_claim_at.lt.${STALE_CLAIM_CUTOFF}`)
+    .select("*")
+    .maybeSingle();
+  if (!claimed) {
+    return json({ status: "running", note: "already_running" });
+  }
+  // From here on, the `claimed` row is the source of truth — never trust an
+  // earlier in-memory snapshot.
+  const plan = claimed;
+
+  const releaseClaim = async (extraUpdates: Record<string, unknown> = {}) => {
+    await admin
+      .from("plans")
+      .update({ step_claim_at: null, ...extraUpdates })
+      .eq("id", plan_id);
+  };
 
   if (plan.status === "approved") {
-    await admin.from("plans").update({ status: "running" }).eq("id", plan.id).eq("status", "approved");
     plan.status = "running";
+    // Persisted on first downstream update; no separate write needed.
   }
   if (plan.status !== "running" && plan.status !== "awaiting_media") {
+    await releaseClaim();
     return json({ status: plan.status });
   }
+
 
   const steps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
   const idx: number = plan.current_step ?? 0;
@@ -925,7 +939,7 @@ Deno.serve(async (req) => {
     const mediaId: string | undefined = step?.pending_media_id;
     if (!mediaId) {
       // Defensive: drop back to running so we re-evaluate.
-      await admin.from("plans").update({ status: "running" }).eq("id", plan.id);
+      await releaseClaim({ status: "running" });
       return json({ status: "running" });
     }
     const { data: media } = await admin
@@ -938,23 +952,24 @@ Deno.serve(async (req) => {
       step.status = "failed";
       step.error = `Pending media ${mediaId} disappeared`;
       const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-      await admin.from("plans").update({
+      await releaseClaim({
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
-      }).eq("id", plan.id);
+      });
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
+      await releaseClaim();
       return json({ status: "awaiting_media", media_id: mediaId });
     }
     if (media.status === "failed") {
       step.status = "failed";
       step.error = media.error_message || "Media generation failed";
       const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-      await admin.from("plans").update({
+      await releaseClaim({
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
-      }).eq("id", plan.id);
+      });
       return json({ status: "failed", error: step.error });
     }
     // completed
@@ -969,21 +984,19 @@ Deno.serve(async (req) => {
       updates.result_summary = summarizeRun(steps);
       updates.completed_at = new Date().toISOString();
     }
-    await admin.from("plans").update(updates).eq("id", plan.id);
+    await releaseClaim(updates);
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
   if (idx >= steps.length) {
-    await admin
-      .from("plans")
-      .update({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() })
-      .eq("id", plan.id);
+    await releaseClaim({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() });
     return json({ status: "completed" });
   }
 
   const step = steps[idx];
   step.status = "running";
-  await admin.from("plans").update({ steps }).eq("id", plan.id);
+  // Note: claim is already held; this is just persisting the running flag on the step.
+  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id);
 
   try {
     const resolvedArgs = resolveTemplates(step.args ?? {}, steps);
@@ -996,7 +1009,7 @@ Deno.serve(async (req) => {
     if (result && typeof result === "object" && "__pending_media" in result) {
       step.status = "awaiting_media";
       step.pending_media_id = result.__pending_media;
-      await admin.from("plans").update({ steps, status: "awaiting_media" }).eq("id", plan.id);
+      await releaseClaim({ steps, status: "awaiting_media" });
       return json({ status: "awaiting_media", media_id: result.__pending_media });
     }
 
@@ -1011,22 +1024,19 @@ Deno.serve(async (req) => {
       updates.result_summary = summarizeRun(steps);
       updates.completed_at = new Date().toISOString();
     }
-    await admin.from("plans").update(updates).eq("id", plan.id);
+    await releaseClaim(updates);
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
     step.status = "failed";
     step.error = String(err?.message ?? err);
     const lovablePrompt = buildLovablePrompt(plan, step, step.error);
-    await admin
-      .from("plans")
-      .update({
-        steps,
-        status: "failed",
-        error_message: step.error,
-        error_lovable_prompt: lovablePrompt,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", plan.id);
+    await releaseClaim({
+      steps,
+      status: "failed",
+      error_message: step.error,
+      error_lovable_prompt: lovablePrompt,
+      completed_at: new Date().toISOString(),
+    });
     return json({ status: "failed", error: step.error });
   }
 });
