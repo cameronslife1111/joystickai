@@ -158,7 +158,6 @@ Deno.serve(async (req) => {
     // rows in `documents`, `sentences`, and `media_assets` (filtered by
     // `user_id`). We deliberately do NOT inject prior plan rows, prior LLM
     // outputs, or any other plan's `steps` JSON.
-    const userContextLines: string[] = [];
 
 
     // Full list of documents (id + title)
