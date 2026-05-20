@@ -128,118 +128,130 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) { if (!v) reset(); onOpenChange(v); } }}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-lg max-h-[90svh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle className="pr-8">Ask Orby to do something</DialogTitle>
-          <DialogDescription className="break-words">
+      <DialogContent
+        className="w-[calc(100vw-1rem)] max-w-lg h-[85svh] sm:h-auto sm:max-h-[85vh] p-0 gap-0 flex flex-col overflow-hidden"
+      >
+        {/* Header */}
+        <DialogHeader className="shrink-0 min-w-0 border-b border-border px-4 pt-5 pb-3 sm:px-6 sm:pt-6 sm:pb-4 text-left">
+          <DialogTitle className="pr-8 min-w-0 break-words">Ask Orby to do something</DialogTitle>
+          <DialogDescription className="min-w-0 break-words">
             Type a request and/or attach documents. With attachments only, Orby will plan based on the documents.
           </DialogDescription>
         </DialogHeader>
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          autoFocus
-          placeholder="e.g. Summarize the attached docs into a single overview…"
-          className="min-h-[6rem] max-h-[14rem]"
-        />
 
-        {/* Attached doc chips */}
-        {attachedIds.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {attachedIds.map((id) => (
-              <span
-                key={id}
-                className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs"
-              >
-                <span className="max-w-[14rem] truncate">{titleById.get(id) ?? "Untitled"}</span>
-                <button
-                  type="button"
-                  onClick={() => toggleAttach(id)}
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label="Remove attachment"
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-4 py-3 sm:px-6 sm:py-4 space-y-3">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={5}
+            autoFocus
+            placeholder="e.g. Summarize the attached docs into a single overview…"
+            className="min-h-[5rem] max-h-[12rem] w-full min-w-0 resize-y"
+          />
+
+          {/* Attached doc chips */}
+          {attachedIds.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 min-w-0">
+              {attachedIds.map((id) => (
+                <span
+                  key={id}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs"
                 >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Attach docs picker */}
-        <div className="rounded-md border border-border">
-          <button
-            type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted/40"
-          >
-            <span>
-              {attachedIds.length > 0
-                ? `Attached documents (${attachedIds.length}/${MAX_ATTACHMENTS})`
-                : "+ Attach documents"}
-            </span>
-            <span className="text-muted-foreground">{pickerOpen ? "▴" : "▾"}</span>
-          </button>
-          {pickerOpen && (
-            <div className="border-t border-border p-2 space-y-2">
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search documents…"
-                className="h-8 text-sm"
-              />
-              <div className="max-h-56 overflow-y-auto rounded-md border border-border/50 bg-background/40">
-                {docsLoading ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">Loading…</p>
-                ) : filteredDocs.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">
-                    {docs.length === 0 ? "No documents yet." : "No matches."}
-                  </p>
-                ) : (
-                  <ul className="flex flex-col">
-                    {filteredDocs.map((d) => {
-                      const checked = attachedIds.includes(d.id);
-                      const disabled = !checked && atCap;
-                      return (
-                        <li key={d.id}>
-                          <button
-                            type="button"
-                            onClick={() => toggleAttach(d.id)}
-                            disabled={disabled}
-                            className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Checkbox checked={checked} disabled={disabled} onCheckedChange={() => toggleAttach(d.id)} />
-                            <span className="min-w-0 flex-1 truncate">{d.title || "Untitled"}</span>
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {d.sentence_count}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-              {atCap && (
-                <p className="text-[11px] text-muted-foreground">Maximum {MAX_ATTACHMENTS} documents.</p>
-              )}
+                  <span className="min-w-0 max-w-[12rem] truncate">{titleById.get(id) ?? "Untitled"}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleAttach(id)}
+                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    aria-label="Remove attachment"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
           )}
+
+          {/* Attach docs picker */}
+          <div className="rounded-md border border-border min-w-0">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((v) => !v)}
+              className="flex w-full min-w-0 items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40"
+            >
+              <span className="min-w-0 truncate">
+                {attachedIds.length > 0
+                  ? `Attached documents (${attachedIds.length}/${MAX_ATTACHMENTS})`
+                  : "+ Attach documents"}
+              </span>
+              <span className="shrink-0 text-muted-foreground">{pickerOpen ? "▴" : "▾"}</span>
+            </button>
+            {pickerOpen && (
+              <div className="border-t border-border p-2 space-y-2 min-w-0">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search documents…"
+                  className="h-8 w-full min-w-0 text-sm"
+                />
+                <div className="max-h-56 min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border/50 bg-background/40">
+                  {docsLoading ? (
+                    <p className="py-6 text-center text-xs text-muted-foreground">Loading…</p>
+                  ) : filteredDocs.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-muted-foreground">
+                      {docs.length === 0 ? "No documents yet." : "No matches."}
+                    </p>
+                  ) : (
+                    <ul className="flex flex-col min-w-0">
+                      {filteredDocs.map((d) => {
+                        const checked = attachedIds.includes(d.id);
+                        const disabled = !checked && atCap;
+                        return (
+                          <li key={d.id} className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleAttach(d.id)}
+                              disabled={disabled}
+                              className="flex w-full min-w-0 items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <Checkbox checked={checked} disabled={disabled} onCheckedChange={() => toggleAttach(d.id)} />
+                              <span className="min-w-0 flex-1 truncate">{d.title || "Untitled"}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {d.sentence_count}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                {atCap && (
+                  <p className="text-[11px] text-muted-foreground">Maximum {MAX_ATTACHMENTS} documents.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 min-w-0">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setText(s)}
+                className="max-w-full truncate rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setText(s)}
-              className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
+        {/* Pinned footer */}
+        <div
+          className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-border bg-background px-4 py-3 sm:px-6"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
           <button
             onClick={() => { reset(); onOpenChange(false); }}
             disabled={busy}
