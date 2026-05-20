@@ -335,19 +335,21 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async add_sentence(args, { user_id, admin }) {
+  async add_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";
+    // Verify ownership of the target doc first so the error message is friendly.
+    const { data: docRow } = await admin
+      .from("documents")
+      .select("id, current_sentence_index")
+      .eq("id", args.document_id)
+      .eq("user_id", user_id)
+      .single();
+    if (!docRow) throw new Error("Document not found");
     let insertAt = 0;
     if (pos === "top") {
       insertAt = 0;
     } else if (pos === "after_current") {
-      const { data: doc } = await admin
-        .from("documents")
-        .select("current_sentence_index, user_id")
-        .eq("id", args.document_id)
-        .eq("user_id", user_id)
-        .single();
-      insertAt = (doc?.current_sentence_index ?? -1) + 1;
+      insertAt = (docRow.current_sentence_index ?? -1) + 1;
     } else {
       const { count } = await admin
         .from("sentences")
@@ -355,37 +357,23 @@ const TOOL_HANDLERS: Record<string, any> = {
         .eq("document_id", args.document_id);
       insertAt = count ?? 0;
     }
-    // Verify ownership of the doc before inserting via service role
-    const { data: docRow } = await admin
-      .from("documents")
-      .select("id")
-      .eq("id", args.document_id)
-      .eq("user_id", user_id)
-      .single();
-    if (!docRow) throw new Error("Document not found");
-    // Direct insert (service role bypasses the auth.uid() check inside the RPC)
-    // Shift existing rows then insert.
-    const { data: existing } = await admin
+    // Atomic shift + insert via the proven public.insert_sentences_at RPC,
+    // run as the authenticated user so its auth.uid() ownership check passes.
+    // This eliminates the half-shifted intermediate state the previous hand-
+    // rolled two-pass had, which could collide with concurrent shifts.
+    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+      p_document_id: args.document_id,
+      p_contents: [args.content],
+      p_insert_at: insertAt,
+    });
+    if (rpcErr) throw new Error(rpcErr.message);
+    const { data: ins, error: selErr } = await admin
       .from("sentences")
-      .select("id, order_index")
-      .eq("document_id", args.document_id)
-      .gte("order_index", insertAt)
-      .order("order_index", { ascending: false });
-    if (existing && existing.length > 0) {
-      // Park in negative range first, then restore
-      for (const row of existing) {
-        await admin.from("sentences").update({ order_index: -(row.order_index + 1000) }).eq("id", row.id);
-      }
-      for (const row of existing) {
-        await admin.from("sentences").update({ order_index: row.order_index + 1 }).eq("id", row.id);
-      }
-    }
-    const { data: ins, error: insErr } = await admin
-      .from("sentences")
-      .insert({ user_id, document_id: args.document_id, content: args.content, order_index: insertAt })
       .select("id, content, order_index")
-      .single();
-    if (insErr) throw new Error(insErr.message);
+      .eq("document_id", args.document_id)
+      .eq("order_index", insertAt)
+      .maybeSingle();
+    if (selErr) throw new Error(selErr.message);
     return ins;
   },
   async update_sentence_content(args, { user_id, admin }) {
