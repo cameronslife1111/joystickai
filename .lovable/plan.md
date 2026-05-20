@@ -1,58 +1,77 @@
-# Make the planner tolerant of loose wording
+## What actually happened
 
-## Why this keeps failing
+The failing plan (4 steps, all `move_sentence` into doc `45A` with `position: "after_current"`) tripped `sentences_doc_order_uidx`. Tracing the data:
 
-`find_document_by_title({query: "Claude codex"})` runs `ilike '%Claude codex%'` in Postgres. That's a single contiguous substring — if the doc is titled "Claude Code Tips" or "Codex notes — Claude", zero rows come back, then `{{step_0.result[0].id}}` throws. Three layers are too literal:
+- The target doc (45A) has rows at order_index 0–21, 23, 24, 25 (no duplicates, one natural gap).
+- The source sentence `040bfe07…` no longer exists — it was already moved by a prior run of this same step.
+- The plan's row shows step 1 status=`failed`, but it succeeded ENOUGH to delete the source — meaning the step ran more than once.
 
-1. **DB search tools** (`find_document_by_title`, `find_sentence_by_content`) — raw `ilike '%query%'`, no tokenization, no fallback. (`find_media_by_title` was already upgraded; copy that pattern.)
-2. **Snapshot inlining** in `plan-compose` — picks which docs to inline using `reqLower.includes(title.toLowerCase())`. Same strict-substring trap. The doc shows up in the id list but its contents stay hidden, so the planner can't tell it's the right one.
-3. **System prompt** — says "prefer ids from snapshot" but never forbids `find_*`, and doesn't tell the model "the user's wording will not match the title verbatim; pick the closest one yourself."
+That's the smoking gun: **`plan-step` has no concurrency guard**, so the same step can execute twice in parallel.
 
-## What we'll change
+```text
+poll tick A (tab 1)            poll tick B (tab 2 / second invoke)
+─────────────────              ─────────────────
+load plan, idx=0               load plan, idx=0
+shift rows >=19 in 45A         shift rows >=19 in 45A     ← collides
+insert content at 19           insert content at 19       ← duplicate (doc, order_index)
+delete source sentence         throws "duplicate key…"
+update current_step=1          step marked failed, plan failed
+```
 
-### 1. `supabase/functions/plan-step/index.ts` — fuzzy search handlers
+The client-side `inFlight` Set in `useRunningPlansAdvancer` only prevents same-tab re-entry. Two tabs, or a manual "approve" + the auto-poller, race freely. Once a step half-succeeds, the source sentence is gone, so the next replay also can't recover.
 
-Replace `find_document_by_title` and `find_sentence_by_content` with the same token-scored approach `find_media_by_title` already uses:
+## Verified: no real "old plan leak"
 
-- Tokenize the query, drop a small stopword set (`the`, `a`, `doc`, `document`, `note`, `sentence`, `about`, etc.).
-- Pull a reasonable working set from Postgres using an `OR` of token-level `ilike` filters (over title for docs, content for sentences). If that returns nothing, fall back to fetching the user's most-recent N rows (200 docs / 500 sentences) so we still have candidates to score.
-- Score each candidate by:
-  - +2 per query token appearing as a substring of the haystack
-  - +3 if the full normalized query appears as a substring (exact-ish bonus)
-  - +1 for each shared *word* (whole-token match on a word boundary)
-  - tiebreak by recency
-- Return the top 5. **Never throw on "no matches"** — return `[]` only when the user genuinely has zero documents/sentences. The planner can still detect emptiness if needed, but the common case ("user phrased it loosely") now succeeds.
-- Keep the existing `document_id` filter for `find_sentence_by_content`.
+I read `plan-compose` end to end. The planner prompt is rebuilt from scratch every call from:
+- The user's current request
+- A fresh workspace snapshot (docs + media + sentences from the DB right now)
 
-Side benefit: the friendlier "returned 0 results" template error in `resolvePath` stops triggering in normal use.
+There is no path that injects prior plan steps, prior LLM outputs, or another plan's `steps` JSON into a new plan. What feels like "remembering old plans" is actually:
+1. The planner sees content the user previously wrote into their docs (legitimate snapshot), and
+2. The same step gets executed twice because of the race above, which makes the run look like it's repeating itself.
 
-### 2. `supabase/functions/plan-compose/index.ts` — smarter snapshot
+I'll add a brief comment in `plan-compose` documenting that the snapshot is the only cross-request input, so future readers don't have to re-verify.
 
-- **Inlining selection**: replace the `reqLower.includes(title)` filter with token-overlap scoring. Tokenize the user's request (same stopword set), and inline up to 6 docs ranked by (a) token overlap with the title, (b) token overlap with the title's words, (c) the origin document if any, (d) recency as tiebreaker. Always inline the origin document's full text when present.
-- **Media ranking**: also rank `mediaList` by token overlap with the request before printing, so the most relevant assets appear at the top of the snapshot section (helps the LLM pick the right id when there are 100+ assets).
-- **Stronger system-prompt guidance** (append, don't rewrite the existing rules):
-  - "The user will refer to docs and media by rough description, not exact title. Pick the closest id from the WORKSPACE SNAPSHOT yourself using common-sense semantic matching — do NOT echo the user's phrasing into a `find_*` call when a plausible candidate is already listed."
-  - "Only call `find_document_by_title` / `find_media_by_title` / `find_sentence_by_content` if the snapshot is empty OR none of the listed items is a plausible match. These tools now return fuzzy/scored results, so even when you do call them, treat result[0] as a best guess, not a guarantee."
-  - "If the user's request doesn't clearly point at any document in the snapshot, prefer asking via `generate_text` or returning an `explanation` over guessing — never invent ids."
+## Fix
 
-### 3. `supabase/functions/_shared/tools.ts` — refresh tool descriptions
+### 1. Atomic claim on `plans` (the actual bug)
 
-Update the descriptions for `find_document_by_title` and `find_sentence_by_content` to say "fuzzy token-scored match — tolerates loose wording" so the planner trusts looser queries. Keep arg schemas unchanged.
+Add a `step_claim_at timestamptz` column. In `plan-step`, before doing anything mutating:
 
-## Out of scope
+```sql
+UPDATE plans
+SET step_claim_at = now()
+WHERE id = $1
+  AND user_id = $2
+  AND (step_claim_at IS NULL OR step_claim_at < now() - interval '90 seconds')
+RETURNING id, status, steps, current_step, total_steps;
+```
 
-- No DB schema changes, no new tables, no `pg_trgm` extension (keeps it self-contained and avoids a migration).
-- No UI changes — purely planner-side intelligence.
-- Not changing the LLM model.
+If the update returns 0 rows, another worker holds the claim — return `{ status: "running", note: "already_running" }` and let the next tick try again. On success, the returned row is the source of truth for `steps` / `current_step` (so we never act on a stale in-memory snapshot). Clear the claim (`step_claim_at = NULL`) in both the success and error branches; the 90 s ceiling auto-expires zombie claims if an edge function dies mid-step.
 
-## Technical notes
+This eliminates the race across tabs, across the orb advancer + the AIPlansScreen advancer, and across any future invocation path.
 
-- Token regex: `/[^a-z0-9]+/i`, lowercase, length ≥ 2.
-- Stopwords shared between tools and the composer — extract a small helper near the top of `plan-step/index.ts` and duplicate the constant in `plan-compose` (these are isolated edge functions; a `_shared` constant file is fine if cleaner).
-- Working-set cap: 200 docs, 500 sentences, 200 media — bounded so the scoring loop stays O(n) on small numbers.
-- All existing `{{step_N.result[0].id}}` template references continue to work because tools still return arrays in the same shape.
+### 2. Harden `move_sentence` / `add_sentence`
 
-## Verification
+Two small belt-and-braces fixes in `supabase/functions/plan-step/index.ts`:
 
-- Manually invoke `plan-compose` via `stack_modern--invoke-server-function` with a request whose wording doesn't match any title verbatim (e.g. "Read the claude codex doc and add a summary at the top"), confirm the resulting plan uses the right doc id directly (no `find_*` step), or that the `find_*` step it does emit now returns a non-empty array.
-- Check `supabase--edge_function_logs` for both functions after the test run.
+- `move_sentence`: if the source sentence is missing, return a clear `{ skipped: true, reason: "source already moved" }` instead of throwing. This makes idempotent retries safe.
+- `add_sentence`: replace the hand-rolled "park to negative then restore" two-pass with a call to the existing `insert_sentences_at` Postgres RPC (already in the DB and proven correct). One atomic statement, no intermediate visible state, no chance of conflicting with concurrent shifts on the same doc.
+
+### 3. Drop the duplicate planner watchers
+
+`useRunningPlansAdvancer` runs from the root layout. Confirm it is only mounted once (search for usages) and remove any second mount point if found. This doesn't fix the race on its own, but it removes the easiest way to trigger it from one tab.
+
+## Files to change
+
+- New migration: add `plans.step_claim_at timestamptz` column.
+- `supabase/functions/plan-step/index.ts`:
+  - Wrap the entry with the atomic claim UPDATE + release.
+  - Use the RPC-backed insert in `add_sentence`.
+  - Make `move_sentence` idempotent when the source is gone.
+- `supabase/functions/plan-compose/index.ts`: short comment documenting that the snapshot is the only cross-request input.
+- `src/hooks/use-running-plans-advancer.ts`: verify single mount; no behavior change otherwise.
+
+## Why this resolves the duplicate-key error
+
+The duplicate row could only appear because two executions of the same step both tried to insert at the same `(document_id, order_index)`. With the claim, only one execution can be inside the mutating section at a time, and it always reads `steps` / `current_step` fresh under that claim. The `add_sentence` RPC swap means even a single execution never leaves the table in a half-shifted state, so any pathological future caller can't observe and act on a transient inconsistency.
