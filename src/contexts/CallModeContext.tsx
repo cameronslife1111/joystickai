@@ -206,6 +206,13 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const partialUserRef = useRef("");
   useEffect(() => { partialUserRef.current = partialUser; }, [partialUser]);
 
+  // Forward-references to endCall / generatePlan, populated after their
+  // useCallback declarations below. Using refs avoids TDZ issues.
+  const endCallRef = useRef<(reason?: "user" | "phrase" | "error" | "plan") => Promise<void>>(
+    async () => {},
+  );
+  const generatePlanRef = useRef<(msgs: CallMessage[]) => Promise<void>>(async () => {});
+
   // ---- Turn-taking ----
   const commitUtterance = useCallback(
     async (text: string) => {
@@ -223,7 +230,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
           stopRecognition();
           setStatus("speaking");
           await speakAsync("Okay, talk to you later.");
-          await endCall("phrase");
+          await endCallRef.current("phrase");
           return;
         }
 
@@ -231,8 +238,8 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
           stopRecognition();
           setStatus("speaking");
           await speakAsync("Got it, I'll generate that plan now.");
-          await generatePlanFromConversationInternal([...messagesRef.current, userMsg]);
-          await endCall("plan");
+          await generatePlanRef.current([...messagesRef.current, userMsg]);
+          await endCallRef.current("plan");
           return;
         }
 
