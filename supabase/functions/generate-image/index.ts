@@ -20,6 +20,53 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// Pull whatever signal we can out of a fal client error. The SDK sometimes
+// attaches `.body` / `.status` / a nested response; bare `err.message` like
+// "Internal Server Error" is useless to the planner.
+function extractFalError(err: any): string {
+  const base = String(err?.message ?? err ?? "Generation failed");
+  const body = err?.body ?? err?.response?.body ?? err?.responseBody;
+  if (!body) return base;
+  try {
+    const detail = typeof body === "string" ? body : JSON.stringify(body);
+    if (detail && !base.includes(detail)) return `${base}: ${detail.slice(0, 500)}`;
+  } catch { /* fall through */ }
+  return base;
+}
+
+function isTransientFalError(err: any): boolean {
+  const status = err?.status ?? err?.response?.status;
+  if (typeof status === "number") return status >= 500 || status === 408 || status === 429;
+  const msg = String(err?.message ?? "").toLowerCase();
+  return (
+    msg.includes("internal server error") ||
+    msg.includes("bad gateway") ||
+    msg.includes("gateway timeout") ||
+    msg.includes("service unavailable") ||
+    msg.includes("timeout") ||
+    msg.includes("econnreset") ||
+    msg.includes("fetch failed")
+  );
+}
+
+async function subscribeWithRetry(input: Record<string, unknown>) {
+  const maxAttempts = 3;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fal.subscribe("openai/gpt-image-2", { input, logs: false });
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxAttempts || !isTransientFalError(err)) throw err;
+      const backoffMs = 800 * 2 ** (attempt - 1) + Math.floor(Math.random() * 400);
+      console.warn(`fal transient error on attempt ${attempt}: ${String((err as any)?.message ?? err)}; retrying in ${backoffMs}ms`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
+  }
+  throw lastErr;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
