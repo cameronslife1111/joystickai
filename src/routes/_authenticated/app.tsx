@@ -619,7 +619,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot]);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
