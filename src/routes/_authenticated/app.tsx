@@ -372,6 +372,54 @@ function AppPage() {
     return ++speechTokenRef.current;
   }, []);
 
+  // Track "busy" UI state via a ref so the auto-repeat timer can check it at
+  // fire time without re-subscribing every time a dialog toggles.
+  const busyRef = useRef(false);
+  busyRef.current =
+    editing ||
+    menuOpen ||
+    favoritesOpen ||
+    jumpOpen ||
+    moveOpen ||
+    searchOpen ||
+    composing ||
+    sendOpen ||
+    linkPickerOpen ||
+    generateTextOpen ||
+    analyzeImageOpen ||
+    webSearchOpen ||
+    planComposerOpen ||
+    planApprovalOpen ||
+    plansScreenOpen;
+
+  // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
+  // Any change to activeDocId / currentIdx / sentence text tears this effect
+  // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
+  // Does NOT touch Orb mood — only the existing speechSynthesis lip-sync
+  // poll in useOrbMood will animate the mouth.
+  const repeatText = sentences?.[currentIdx]?.content;
+  useEffect(() => {
+    if (!repeatText) return;
+    let id: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      id = setTimeout(() => {
+        if (
+          mutedRef.current ||
+          busyRef.current ||
+          (typeof document !== "undefined" && document.hidden)
+        ) {
+          schedule();
+          return;
+        }
+        const token = claimSpeech();
+        speak(repeatText, token);
+        schedule();
+      }, 2 * 60 * 1000);
+    };
+    schedule();
+    return () => clearTimeout(id);
+  }, [activeDocId, currentIdx, repeatText, speak, claimSpeech]);
+
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
     const clamped = Math.max(0, newIdx);
