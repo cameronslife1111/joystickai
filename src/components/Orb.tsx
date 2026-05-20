@@ -19,7 +19,7 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
   ref,
 ) {
   const innerRef = useRef<HTMLButtonElement | null>(null);
-  const { mood, boost, blinking, gaze } = useOrbMood({ interactive });
+  const { mood, boost, blinking, gaze, talking, mouthOpen } = useOrbMood({ interactive });
 
   // Expose boostMood on the DOM node so callers using a plain HTMLButtonElement
   // ref (e.g. app.tsx) can trigger it without a separate API.
@@ -141,6 +141,18 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
           strokeLinecap="round"
           style={{ transition: "d 500ms ease" }}
         />
+        {!asleep && (
+          <ellipse
+            cx={50}
+            cy={mouthY + curveOffset * 0.4}
+            rx={Math.max(3, mouthWidth * 0.35)}
+            ry={talking ? 0.6 + mouthOpen * 5.2 : 0}
+            style={{
+              transition: "ry 80ms ease-out",
+              opacity: talking ? 1 : 0,
+            }}
+          />
+        )}
       </svg>
     </button>
   );

@@ -1,61 +1,38 @@
+# Lip-sync Orby's mouth to speech
 
-# Bring Orby to life with a face & mood
+Goal: when the Web Speech `speak()` function is talking, Orby's mouth opens and closes in rough sync with the audio. Not phoneme-accurate — just an "alive" jaw-flap that starts/stops with the utterance.
 
-Give Orby a simple SVG face (two eyes + mouth) layered on top of the existing orb, plus a mood system that brightens with use and slowly fades to gray sleep after 5 minutes of inactivity. Purely visual — no audio, no behavior changes, all existing gestures and functions keep working unchanged.
+## Approach
 
-## Visual design
+Keep it lightweight by listening to the **global** `window.speechSynthesis` state instead of wiring every `speak()` call site (there are 15+ in `app.tsx`). One small polling loop drives a shared `talking` flag, and the orb's mouth geometry interpolates open/close from that flag.
 
-- Two small circular eyes + a single mouth path, rendered as an inline SVG overlay inside `Orb` (above `.orb-highlight`). Pointer-events: none so taps still hit the orb button.
-- Eyes blink occasionally (every 4–7s, randomized) via a quick scaleY animation.
-- Subtle eye drift (look around) every few seconds for "alive" feel.
-- Mouth shape is a single SVG `path` whose `d` is interpolated by mood (frown → neutral → smile → big smile).
+No changes to any `speak()` call site, no new dependencies, no per-utterance plumbing.
 
-## Mood model
+## Changes
 
-Mood is a single number `mood` in `[0, 1]` (0 = asleep/sad, 1 = happiest), held in state inside `Orb` via a new `useOrbMood` hook.
+### 1. `src/hooks/use-orb-mood.ts`
+- Add a `talking` boolean to the returned state.
+- Start a low-cost interval (~80ms) that reads `window.speechSynthesis.speaking`. The interval only runs while the page is visible; otherwise idle.
+- Also expose a `mouthOpen` number (0–1) generated while `talking` is true: a fast sine + small random jitter so the mouth flaps naturally rather than ticking on/off. When not talking, `mouthOpen` decays to 0 quickly.
 
-- **Boosts (instant):** each swipe gesture (up/down/left/right) adds `+0.15`, clamped to `1.0`. Taps do not boost (user said "any swipe gesture").
-- **Decay:** linear decay from `1 → 0` over 5 minutes of no swipes. Implemented with a `lastInteractionAt` timestamp + `requestAnimationFrame` loop (throttled to ~4fps) computing `mood = max(0, 1 - elapsedMs / 300_000)`.
-- **Sleep state:** when `mood === 0`, eyes close (mouth small flat line), face desaturates fully, "Zzz" is NOT added (keep it simple — just closed eyes + gray).
+### 2. `src/components/Orb.tsx`
+- Consume `talking` and `mouthOpen` from `useOrbMood`.
+- Replace the mouth `path` with a geometry that interpolates between:
+  - **Closed/expression line** (current frown↔smile curve driven by mood) when `mouthOpen ≈ 0`
+  - **Open oval** (a small filled ellipse, height scaled by `mouthOpen * ~6px`) when talking
+- Keep the smile curvature from mood — when talking + happy, the mouth opens upward like a grin; when talking + sad, it stays flatter. Implementation: render an ellipse with `ry = baseLineThickness + mouthOpen * openAmount`, vertically centered on the existing mouth Y, and keep the curved path underneath as the "lip line" so the resting expression still shows through.
+- Asleep state overrides: no mouth movement even if `speechSynthesis.speaking` is true (Orby's not awake to talk).
 
-## Color & expression mapping
-
-Driven by `mood` via CSS custom properties set on the orb root:
-
-```text
-mood 1.0  →  vibrant aurora (current colors), big smile, wide eyes
-mood 0.7  →  current colors, smile
-mood 0.5  →  neutral mouth, slight desaturation
-mood 0.3  →  frown, hue shifts toward red/brown (mix aurora with #8B4513)
-mood 0.1  →  deep red-brown, sad frown, droopy eyes
-mood 0.0  →  full gray (saturate(0)), closed eyes, asleep
-```
-
-Implementation: set `--orb-mood: <0..1>` and `--orb-tint` (interpolated color) on the orb element. Use `filter: saturate() hue-rotate()` on `.orb-core` / `.orb-aurora` driven by `--orb-mood`. Mouth `d` and eye `ry` are computed in React from `mood`.
-
-## Interaction wiring
-
-In `src/hooks/use-orb-gestures.ts`: no signature change. In `Orb.tsx`: accept an optional `onActivity?: () => void` prop OR (simpler) expose a `boostMood(amount)` via a forwarded imperative handle. Cleanest: lift mood into a small `useOrbMood()` hook in `src/hooks/use-orb-mood.ts`, return `{ mood, boost, registerActivity }`. `Orb` consumes it internally for rendering; `app.tsx` calls `boost()` inside its existing `onSwipe` handler (one line addition — no behavior change).
-
-For the Landing page orb (`src/routes/index.tsx`), the face renders too but has no input — it just sits at full happiness with idle blinks/drift.
-
-## Files to change
-
-- `src/components/Orb.tsx` — add SVG face overlay, consume mood, apply CSS vars + filters.
-- `src/hooks/use-orb-mood.ts` — NEW. Mood state, decay loop, boost API, blink/drift timers.
-- `src/styles.css` — add `.orb-face` styles, `--orb-mood`/`--orb-tint` defaults, mood-driven filter on `.orb-core`/`.orb-aurora`, mouth/eye transitions.
-- `src/routes/_authenticated/app.tsx` — in the existing `onSwipe` callback inside `useOrbGestures`, call `orbRef.current?.boostMood?.()`. No other logic touched.
+### 3. No changes to `app.tsx`, `__root.tsx`, or any `speak()` callers
+The global polling approach means every existing and future `speak()` call automatically animates the mouth.
 
 ## Technical notes
 
-- All mood timers live inside `Orb` / `useOrbMood`. No new global state, no DB, no network.
-- Use `forwardRef` with `useImperativeHandle` to expose `boostMood()` on the existing `orbRef` so app.tsx doesn't need new refs.
-- All gesture callbacks remain pure pass-throughs; `listening`/`thinking` orb states still override mood-driven animation speed (e.g. `orb-thinking` keeps spin).
-- Mood persists in `sessionStorage` so a quick reload doesn't reset to full — keeps the "alive" illusion.
-- Respects `prefers-reduced-motion`: disables blink/drift, keeps color transitions.
+- Polling at 80ms = 12.5 reads/sec of a synchronous boolean — negligible cost, far cheaper than wiring `onstart`/`onend` to every utterance and dealing with the iOS Safari quirks already documented in `app.tsx`.
+- `mouthOpen` is computed inside the same interval (no extra rAF loop). Sine driver: `0.5 + 0.5 * Math.sin(t * 18)` plus `Math.random() * 0.15`, clamped 0–1.
+- Respects `prefers-reduced-motion`: when set, mouth just toggles between closed and a single fixed open height instead of oscillating.
+- Stops cleanly when `speechSynthesis.speaking` flips false — `mouthOpen` snaps to 0 within one tick.
 
 ## Out of scope
-
-- No sound, no "Zzz" particles, no haptics.
-- No changes to gesture detection, speech, plans, or any other feature.
-- Tap, long-press, double/triple tap do not change mood (only swipes, per request).
+- Phoneme/viseme matching (would need an audio-analysis lib or per-utterance `onboundary` events, much heavier).
+- Lip-sync for media-gallery video playback (separate concern).
