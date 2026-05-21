@@ -106,6 +106,7 @@ function MediaPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>("all");
+  const downloadAll = useDownloadAll();
   const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
