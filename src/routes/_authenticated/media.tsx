@@ -875,6 +875,12 @@ function MediaPage() {
           </div>
         </div>
       )}
+
+      <DownloadAllProgress
+        progress={downloadAll.progress}
+        onCancel={downloadAll.cancel}
+        onDismiss={downloadAll.dismiss}
+      />
     </main>
   );
 }
