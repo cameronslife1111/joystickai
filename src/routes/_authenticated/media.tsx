@@ -14,6 +14,8 @@ import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
+import { useDownloadAll } from "@/hooks/use-download-all";
+import { DownloadAllProgress } from "@/components/DownloadAllProgress";
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -104,6 +106,7 @@ function MediaPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<Filter>("all");
+  const downloadAll = useDownloadAll();
   const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
   const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
@@ -360,16 +363,57 @@ function MediaPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <h1 className="font-display text-lg">Media Gallery</h1>
-        <button
-          onClick={() => {
-            console.log("[media] + clicked, input ref:", !!fileInputRef.current);
-            fileInputRef.current?.click();
-          }}
-          aria-label="Upload media"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
-        >
-          <Plus className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {(() => {
+            const downloadable = filtered.filter(
+              (a) => a.url && (a.status === "completed" || !a.status),
+            );
+            const busy = downloadAll.progress
+              && downloadAll.progress.phase !== "done"
+              && downloadAll.progress.phase !== "error"
+              && downloadAll.progress.phase !== "cancelled";
+            const disabled = downloadable.length === 0 || !!busy;
+            const filterLabel = filter === "all" ? "media" : `${filter}s`;
+            return (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  downloadAll.start(
+                    downloadable.map((a) => ({
+                      id: a.id,
+                      title: a.title,
+                      kind: a.kind,
+                      url: a.url,
+                      mime_type: a.mime_type,
+                      size_bytes: a.size_bytes,
+                    })),
+                    filterLabel,
+                  );
+                }}
+                aria-label={`Download all ${filterLabel}`}
+                title={
+                  downloadable.length === 0
+                    ? "Nothing to download yet"
+                    : `Download all ${filterLabel} (${downloadable.length})`
+                }
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              >
+                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+              </button>
+            );
+          })()}
+          <button
+            onClick={() => {
+              console.log("[media] + clicked, input ref:", !!fileInputRef.current);
+              fileInputRef.current?.click();
+            }}
+            aria-label="Upload media"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
       {/* Filter chips */}
@@ -831,6 +875,12 @@ function MediaPage() {
           </div>
         </div>
       )}
+
+      <DownloadAllProgress
+        progress={downloadAll.progress}
+        onCancel={downloadAll.cancel}
+        onDismiss={downloadAll.dismiss}
+      />
     </main>
   );
 }

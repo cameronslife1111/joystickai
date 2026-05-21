@@ -1,90 +1,75 @@
-# Call Mode with Orby
+# Download All — Media Gallery
 
-Add a yellow "Call Orby" button to the Plan Composer dialog. Tapping it starts a live, hands-free voice conversation with Orby. The conversation feels like a phone call: Orby greets the user, the mic auto-detects pauses and sends each utterance, Orby replies aloud, and the back-and-forth continues until the user asks to end the call — or asks Orby to "generate a plan", at which point the entire transcript becomes a proposed plan the user can approve.
+Add a download button next to the existing **+** button in the Media Gallery header that bundles every completed asset (images, videos, audio) in the current view into a single archive.
 
-## UX flow
+## UX
 
-1. In `PlanComposerDialog`, add a yellow secondary button "📞 Call Orby" next to "Generate Plan".
-2. Tapping it closes the composer and enters Call Mode:
-   - Orb turns white/yellow (new CSS variant `orb-call`).
-   - A minimal full-screen Call overlay appears: Orby in the center, a live caption strip ("Listening…" / "Orby is speaking…" / partial transcript), a mute mic toggle, and a red "End call" button.
-   - Orby greets: "Hey, I'm listening. What's on your mind?"
-3. The user can dismiss the overlay (swipe down or tap a small minimize chevron) and keep using the entire app normally. Call mode keeps running in the background — sentence auto-read (`speak()` for the active sentence) is suppressed while the call is live; only the Orby conversation is audible. The Orb itself stays white/yellow everywhere as the visible "call active" indicator, and tapping it re-opens the call overlay.
-4. The call ends when:
-   - The user taps "End call".
-   - The user says an end phrase ("hang up", "end the call", "goodbye", "bye", "talk to you later"…).
-   - The user says a generate-plan phrase ("generate a plan", "turn that into a plan", "make that a plan"…). Orby says "Okay, generating that plan now." then hangs up, and the full transcript is sent to `plan-compose` as the user_request. The existing composing-plans watcher fires the "Plan ready" toast as usual.
+- **Placement**: New round icon button to the **left** of the `+` button in the header. Uses the `Download` lucide icon (already imported). Matches the size/shape of sibling buttons.
+- **Respects the active filter chip** (All / Images / Videos / Audio). "Download All" downloads whatever is currently visible — so the user can grab just videos, just audio, etc. Button label tooltip reflects this ("Download all images", "Download all", …).
+- **Disabled** when the gallery is empty or only contains `generating` / `failed` assets.
+- **Progress UX**: Clicking opens a small non-blocking progress sheet showing `Zipping 12 / 47 — 38 MB`. Has a Cancel button. A toast confirms when the file lands.
+- **Filename**: `orby-media-YYYY-MM-DD.zip` (or `orby-images-…`, etc., based on the filter).
+- **Filename collisions inside the zip**: prefix with kind folder (`images/`, `videos/`, `audio/`) and append a short id suffix on duplicates.
 
-## Voice loop (iOS Safari / Chrome mobile + desktop)
+## How it works
 
-Browser Web Speech API behavior differs sharply between iOS Chrome (which uses WKWebView and historically lacks `SpeechRecognition`), iOS Safari (added partial support recently but unreliable in background), and desktop Chrome (full support). To get a phone-call feel that works on iPhone 16 in Chrome mobile, use a hybrid:
+Client-side bundling — no server round-trip, no extra storage cost, works against the public asset URLs already in `media_assets.url`.
 
-- **Primary path (desktop Chrome + iOS Safari where available):** `webkitSpeechRecognition` with `continuous=true`, `interimResults=true`. Detect pauses by watching for ~1.2s of no new interim results after a final result, then commit the utterance and send.
-- **Fallback path (iOS Chrome and any browser without SpeechRecognition):** `MediaRecorder` + manual VAD using a `WebAudio` `AnalyserNode`. Compute RMS every 50ms; start an utterance when RMS crosses a threshold (with a 150ms "speech started" debounce) and end it after ~1000ms below threshold ("silence hangover"). Slice the recorded blob and send to a new server function `transcribe-audio` that calls a transcription API.
+### Desktop (primary path) — streaming zip, no memory spike
 
-A small `useCallSession` hook abstracts both paths behind one interface:
-```
-start(), stop(), onUtterance(text), onPartial(text), pauseMic(), resumeMic()
-```
+1. Use **`client-zip`** (tiny, pure-Web-Streams, ~3 KB) to build a `ReadableStream` zip on the fly.
+2. Pipe that stream into the **File System Access API** (`window.showSaveFilePicker`) when available (Chrome, Edge, Arc, Brave on desktop). The user picks the location once; bytes stream directly to disk — works for multi-GB galleries without holding anything in RAM.
+3. Fallback for desktop Firefox/Safari (no FS Access): use **StreamSaver.js** with the same `client-zip` stream — pipes via a service worker to a normal browser download. Still no full-buffer in memory.
 
-**Barge-in:** while Orby is speaking (`speechSynthesis.speaking`), the mic is paused. The moment a final utterance lands, `speechSynthesis.cancel()` is called so the user can interrupt mid-reply.
+### iPhone / iOS Safari (fallback path)
 
-**Turn-taking:**
-- User finishes utterance → pause mic → send transcript + rolling history to `chat-with-orby` server function (streamed) → speak the response with `speechSynthesis.speak()` → resume mic on `onend`.
-- Adaptive silence threshold: start at 1000ms, extend to 1800ms if the last utterance ended with a filler word ("um", "uh", "like", "so") to avoid cutting the user off mid-thought.
+iOS Safari doesn't support FS Access API and StreamSaver is unreliable there. Strategy:
 
-## Server side
+- If total estimated size **≤ 200 MB** (read `size_bytes` from `media_assets`): build the zip in memory with `client-zip` → `Blob` → trigger a normal `<a download>` click. iOS Safari will save it to Files.
+- If **> 200 MB**: warn the user and offer **chunked zips** — `orby-media-part-1-of-3.zip`, etc., each capped at ~150 MB. Each part is downloaded sequentially with a confirmation tap between parts (iOS requires a user gesture per download).
+- Single-file shortcut: if filter yields exactly one asset, skip zipping and trigger a direct download of the original URL.
 
-New server function `chatWithOrby` in `src/lib/orby-call.functions.ts` (auth-protected):
-- Input: `{ messages: ChatMsg[], userRequestSoFar: string }`.
-- Calls GPT-5.5 via the Lovable AI Gateway with a system prompt: "You're Orby on a live voice call. Keep replies short (1–2 sentences), conversational, and easy to listen to. Never use markdown or emoji. If the user asks you to make/generate/turn this into a plan, reply with exactly the JSON token `{{MAKE_PLAN}}` then a one-sentence confirmation."
-- Returns assistant text. Client detects the `{{MAKE_PLAN}}` sentinel and triggers plan generation locally (no server-side coupling needed).
+### Fetch concurrency
 
-New server function `transcribeAudio`:
-- Input: base64 audio chunk + mime type.
-- Calls OpenAI `gpt-4o-mini-transcribe` (already have `OPENAI_API_KEY`) and returns `{ text }`.
-- Used only by the fallback path.
+- Fetch source files with concurrency capped at **6** to stay friendly to Supabase Storage and mobile networks.
+- Use `AbortController` so Cancel actually stops in-flight fetches.
+- If a single asset 404s, skip it, log it, and include a `_skipped.txt` manifest in the zip listing what was missing — never abort the whole archive on one bad file.
 
-Plan generation reuses the existing `plan-compose` flow — the full call transcript is concatenated as `user_request` and submitted via the current pipeline. No new plan tables or status states.
+## Technical details
 
-## State / hooks
+**New dependency**
 
-- New `useCallSession` hook owns: mic stream, recognizer/recorder, VAD, turn-taking, history array, status (`idle | listening | thinking | speaking | ending`).
-- New `CallModeContext` provider mounted in `_authenticated/app.tsx` so the session survives navigation between Editor and Media. Exposes `startCall()`, `endCall(reason)`, `inCall`, `status`, `transcript`.
-- `app.tsx`: when `inCall` is true, suppress the active-sentence `speak()` and the 2-minute auto-repeat timer. Pass `inCall` to the Orb to apply the `orb-call` class.
+- `client-zip` (MIT, ~3 KB, Web-Streams native, works in Workers).
+- `streamsaver` only loaded dynamically on the Firefox/Safari-desktop fallback branch so it doesn't bloat the main bundle.
 
-## Visuals
+**New files**
 
-- Add `.orb-call` class in `src/styles.css` overriding aurora filters to a white/warm-yellow palette and a slow "ring pulse" animation (call-waiting feel).
-- `CallOverlay.tsx`: full-screen `fixed inset-0 z-[60]` with backdrop blur, centered Orb (size 220), live caption (`role="status"` for a11y), and bottom bar with Mute / End call. Mobile-first layout (`h-[100svh]`, safe-area padding).
-- `PlanComposerDialog.tsx`: footer becomes a 2-button row — yellow "📞 Call Orby" (calls `startCall()`, closes dialog) and the existing "Generate Plan".
+- `src/lib/download-archive.ts` — pure helper:
+  - `pickArchiveStrategy({ isIOS, hasFSAccess, totalBytes })` → `"fs-access" | "stream-saver" | "blob" | "chunked-blob"`.
+  - `downloadAllAssets(assets, { onProgress, signal, filename })` — orchestrates fetch + zip + save per strategy.
+  - `chunkAssetsBySize(assets, maxBytes)` for the iOS large-gallery case.
+- `src/components/DownloadAllProgress.tsx` — bottom sheet with progress bar, current filename, totals, Cancel.
+- `src/hooks/use-download-all.ts` — manages state (`idle | preparing | zipping | done | error | cancelled`), wires `AbortController`, exposes `start()` / `cancel()`.
 
-## iPhone 16 / Chrome mobile specifics
+**Edits**
 
-- Request `getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })` on the user tap (must be inside a user gesture on iOS).
-- Keep an `AudioContext` alive for the session; resume it on visibilitychange.
-- Use `speechSynthesis.speak()` inside a user gesture for the first utterance (Orby's greeting plays on the tap that started the call) to unlock TTS on iOS.
-- Add a `wakeLock` request (where supported) so the screen doesn't sleep mid-call.
-- Use `AudioContext.sampleRate` to record at 16kHz mono opus for fast upload on cellular.
+- `src/routes/_authenticated/media.tsx`:
+  - Add the new header button left of `+`.
+  - Wire it to `useDownloadAll`, passing the currently-filtered, `status === 'completed'` assets.
+  - Mount `<DownloadAllProgress />`.
 
-## Files
+**No backend changes.** Supabase Storage URLs are already public for this bucket (used by `<img>` / `<video>` today), so direct `fetch()` works with no CORS or signed-URL juggling.
 
-New:
-- `src/components/CallOverlay.tsx`
-- `src/contexts/CallModeContext.tsx`
-- `src/hooks/use-call-session.ts`
-- `src/hooks/use-vad.ts`
-- `src/lib/orby-call.functions.ts` (chatWithOrby, transcribeAudio)
-- `src/lib/call-phrases.ts` (end-call + make-plan phrase matchers)
+## Edge cases handled
 
-Modified:
-- `src/components/PlanComposerDialog.tsx` — add yellow Call button.
-- `src/routes/_authenticated/app.tsx` — mount provider, suppress speak/auto-repeat when `inCall`, apply orb-call class.
-- `src/components/Orb.tsx` — accept `inCall` prop, add white/yellow visual state.
-- `src/styles.css` — `.orb-call` tokens + pulse animation.
+- Empty gallery → button disabled.
+- All currently-visible assets are still `generating` → button disabled with tooltip "Wait for generation to finish".
+- User navigates away mid-zip → `AbortController` fires on unmount.
+- Same title twice → de-duplicated with id suffix.
+- Asset missing extension → inferred from `mime_type`, fallback to `.bin`.
 
 ## Out of scope
 
-- No persisted call history (transcript lives in memory; only saved into the plan when the user asks for one).
-- No multi-participant calls, no streaming TTS (browser `speechSynthesis` is good enough and free).
-- No background-tab audio capture beyond what mobile browsers already allow — if the OS pauses the tab, the call gracefully ends with a toast.
+- Server-side zipping (would cost egress twice, slow, and worker memory limited).
+- Selecting specific assets to download (could be a follow-up: checkbox multi-select mode).
+- Resumable downloads after a browser crash.
