@@ -1970,7 +1970,7 @@ function AppPage() {
                   <button
                     key={d.id}
                     onClick={() => pickDoc(d)}
-                    className="w-full truncate rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                    className="w-full shrink-0 truncate rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
                   >
                     {d.title}
                   </button>
