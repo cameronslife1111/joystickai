@@ -747,6 +747,19 @@ function MediaPage() {
             <div className="flex justify-end gap-2">
               <button onClick={() => { setRenameOpen(false); setSheetAsset(null); }}
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(renameText);
+                    toast.success("Copied to clipboard");
+                  } catch {
+                    toast.error("Could not copy");
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm text-foreground hover:bg-foreground/5"
+              >
+                <Copy className="h-4 w-4" /> Copy
+              </button>
               <button onClick={handleRename}
                 className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Save</button>
             </div>
