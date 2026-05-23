@@ -476,6 +476,9 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       overlayMinimized,
       setOverlayMinimized,
       generatePlanFromConversation,
+      readingDocs,
+      dismissReadingDocs,
+      actionLabel,
     }),
     [
       inCall,
@@ -488,6 +491,9 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       toggleMicMute,
       overlayMinimized,
       generatePlanFromConversation,
+      readingDocs,
+      dismissReadingDocs,
+      actionLabel,
     ],
   );
 
