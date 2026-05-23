@@ -114,12 +114,20 @@ Deno.serve(async (req) => {
           .eq("id", row_id)
           .eq("user_id", user.id);
       } catch (err: any) {
+        // fal errors carry the API response body on err.body — surface it so
+        // planners (and the AI Plans UI) see the real reason instead of a
+        // generic "Unprocessable Entity".
+        let detail = String(err?.message ?? err ?? "Generation failed");
+        const body = err?.body ?? err?.response?.body;
+        if (body) {
+          try {
+            const bodyStr = typeof body === "string" ? body : JSON.stringify(body);
+            if (bodyStr && bodyStr !== "{}") detail += ` — ${bodyStr.slice(0, 500)}`;
+          } catch { /* ignore */ }
+        }
         await admin
           .from("media_assets")
-          .update({
-            status: "failed",
-            error_message: String(err?.message ?? err ?? "Generation failed"),
-          })
+          .update({ status: "failed", error_message: detail })
           .eq("id", row_id)
           .eq("user_id", user.id);
       }
