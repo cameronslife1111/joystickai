@@ -1559,6 +1559,21 @@ function AppPage() {
             </button>
             <button
               onClick={() => {
+                if (typeof document !== "undefined") {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                }
+                if (activeDocId && composeText.trim()) {
+                  sendIdea(activeDocId, "current");
+                }
+              }}
+              disabled={!composeText.trim() || !activeDocId}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Insert here
+            </button>
+            <button
+              onClick={() => {
                 // Blur the compose textarea so iOS dismisses the keyboard
                 // before the destination picker (button-only UI) opens.
                 if (typeof document !== "undefined") {
