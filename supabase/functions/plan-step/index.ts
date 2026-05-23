@@ -655,7 +655,7 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   async remix_images(args, { user_id, admin, supabase }) {
-    const prompt = String(args.prompt ?? "").trim();
+    const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
 
     let ids: string[] = [];
