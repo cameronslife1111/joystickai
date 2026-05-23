@@ -160,6 +160,17 @@ function scoreCandidate(haystack: string, query: string, qTokens: string[]): num
   return score;
 }
 
+// fal's openai/gpt-image-2/edit endpoint returns 422 Unprocessable Entity when
+// the prompt is too long (observed around ~4k+ chars, especially with multiple
+// reference images). Planners often pipe entire continuity packages into the
+// prompt via {{step_N.result}} templates — cap defensively so we degrade to a
+// truncated prompt instead of a hard failure with no recovery.
+const MAX_EDIT_PROMPT_CHARS = 3500;
+function capEditPrompt(prompt: string): string {
+  if (prompt.length <= MAX_EDIT_PROMPT_CHARS) return prompt;
+  return prompt.slice(0, MAX_EDIT_PROMPT_CHARS - 20).trimEnd() + " …[truncated]";
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
@@ -615,7 +626,7 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   async regenerate_image(args, { user_id, admin, supabase }) {
-    const prompt = String(args.prompt ?? "").trim();
+    const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
 
@@ -655,7 +666,7 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   async remix_images(args, { user_id, admin, supabase }) {
-    const prompt = String(args.prompt ?? "").trim();
+    const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
 
     let ids: string[] = [];
