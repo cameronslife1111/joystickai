@@ -1479,7 +1479,7 @@ function AppPage() {
                 }
               }}
               placeholder="Type your new idea…"
-              className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none placeholder:text-muted-foreground/40 md:text-4xl"
+              className="w-full resize-none bg-transparent text-center font-display text-5xl leading-tight outline-none placeholder:text-muted-foreground/40 md:text-6xl"
               rows={4}
             />
           ) : editing ? (
