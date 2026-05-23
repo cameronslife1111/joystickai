@@ -33,7 +33,7 @@
   --color-aurora-2: var(--aurora-2);
   --color-aurora-3: var(--aurora-3);
   --color-aurora-4: var(--aurora-4);
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-display: "Poppins", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
