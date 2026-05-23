@@ -639,6 +639,9 @@ function AppPage() {
 
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     editOriginIdxRef.current = currentIdx;
     const list = sentences ?? [];
     if (list.length === 0) {
