@@ -25,9 +25,23 @@ import {
   markSentencesForDeletion,
 } from "@/lib/orby-call-docs.functions";
 
-export type CallStatus = "idle" | "listening" | "thinking" | "speaking" | "ending";
+export type CallStatus =
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "ending"
+  | "reading"
+  | "adding"
+  | "marking";
 
 export type CallMessage = { role: "user" | "assistant"; content: string };
+
+export type ReadingDoc = {
+  id: string;
+  title: string;
+  sentences: { id: string; content: string; order_index: number }[];
+};
 
 interface CallModeContextValue {
   inCall: boolean;
@@ -41,6 +55,9 @@ interface CallModeContextValue {
   overlayMinimized: boolean;
   setOverlayMinimized: (v: boolean) => void;
   generatePlanFromConversation: () => Promise<void>;
+  readingDocs: ReadingDoc[] | null;
+  dismissReadingDocs: () => void;
+  actionLabel: string | null;
 }
 
 const Ctx = createContext<CallModeContextValue | null>(null);
