@@ -795,6 +795,24 @@ function AppPage() {
     // Even rows we plan to reuse need to be parked first, because their new
     // order_index may collide with another existing row's current order_index
     // under the unique (document_id, order_index) constraint.
+    let parked = false;
+    // If any post-park step fails, call move_sentence(0,0) which compacts the
+    // document's order_index back to 0..N-1 — rescuing parked rows that would
+    // otherwise be stranded at PARK_BASE+ forever (the bug that left one doc
+    // with order_index = 1,000,012).
+    const recoverFromPark = async () => {
+      if (!parked || !activeDocId) return;
+      try {
+        await supabase.rpc("move_sentence", {
+          p_document_id: activeDocId,
+          p_from_index: 0,
+          p_to_index: 0,
+        });
+      } catch (e) {
+        console.error("[edit] recovery compact failed", e);
+      }
+    };
+
     if (existing.length > 0) {
       const PARK_BASE = 1_000_000;
       const parkUpdates = await Promise.all(
@@ -811,6 +829,7 @@ function AppPage() {
         toast.error("Couldn't save edits");
         return false;
       }
+      parked = true;
     }
 
     // Step B: place each reused row at its new order_index. Content is
@@ -829,6 +848,7 @@ function AppPage() {
       const updErr = updateResults.find((r) => r.error)?.error;
       if (updErr) {
         console.error("[edit] update step failed", updErr);
+        await recoverFromPark();
         toast.error("Couldn't save edits");
         return false;
       }
@@ -847,6 +867,7 @@ function AppPage() {
       const { error: insErr } = await supabase.from("sentences").insert(newRows);
       if (insErr) {
         console.error("[edit] insert step failed", insErr);
+        await recoverFromPark();
         toast.error("Couldn't save edits");
         return false;
       }
@@ -858,10 +879,12 @@ function AppPage() {
       const { error: delErr } = await supabase.from("sentences").delete().in("id", surplus);
       if (delErr) {
         console.error("[edit] delete-surplus step failed", delErr);
+        await recoverFromPark();
         toast.error("Couldn't save edits");
         return false;
       }
     }
+
 
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
 

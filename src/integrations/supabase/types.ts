@@ -293,6 +293,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compact_sentence_indexes: {
+        Args: { p_document_id: string }
+        Returns: undefined
+      }
       insert_sentences_at: {
         Args: {
           p_contents: string[]
