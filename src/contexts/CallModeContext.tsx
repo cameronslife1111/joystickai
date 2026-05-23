@@ -494,7 +494,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
         sendingRef.current = false;
       }
     },
-    [callChat, speakAsync, startRecognition, stopRecognition],
+    [callChat, speakAsync, startRecognition, stopRecognition, resolveDocsFn, readDocsFn, addTextFn, markFn, readingDocs],
   );
 
   // Mirror messages so commitUtterance can read latest without re-binding.
