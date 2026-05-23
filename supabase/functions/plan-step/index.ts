@@ -160,6 +160,17 @@ function scoreCandidate(haystack: string, query: string, qTokens: string[]): num
   return score;
 }
 
+// fal's openai/gpt-image-2/edit endpoint returns 422 Unprocessable Entity when
+// the prompt is too long (observed around ~4k+ chars, especially with multiple
+// reference images). Planners often pipe entire continuity packages into the
+// prompt via {{step_N.result}} templates — cap defensively so we degrade to a
+// truncated prompt instead of a hard failure with no recovery.
+const MAX_EDIT_PROMPT_CHARS = 3500;
+function capEditPrompt(prompt: string): string {
+  if (prompt.length <= MAX_EDIT_PROMPT_CHARS) return prompt;
+  return prompt.slice(0, MAX_EDIT_PROMPT_CHARS - 20).trimEnd() + " …[truncated]";
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
