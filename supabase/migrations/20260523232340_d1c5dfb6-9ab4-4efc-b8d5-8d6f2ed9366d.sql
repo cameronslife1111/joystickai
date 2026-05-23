@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.compact_sentence_indexes(uuid) TO authenticated;
