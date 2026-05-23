@@ -89,6 +89,15 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const [partialUser, setPartialUser] = useState("");
   const [micMuted, setMicMuted] = useState(false);
   const [overlayMinimized, setOverlayMinimized] = useState(false);
+  const [readingDocs, setReadingDocs] = useState<ReadingDoc[] | null>(null);
+  const [actionLabel, setActionLabel] = useState<string | null>(null);
+
+  const dismissReadingDocs = useCallback(() => setReadingDocs(null), []);
+
+  const resolveDocsFn = useServerFn(resolveDocumentsByVoice);
+  const readDocsFn = useServerFn(readDocumentsForCall);
+  const addTextFn = useServerFn(addTextToDocument);
+  const markFn = useServerFn(markSentencesForDeletion);
 
   const inCallRef = useRef(false);
   const micMutedRef = useRef(false);
