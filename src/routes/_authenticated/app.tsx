@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 });
 
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
-type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null };
+type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; pending_delete?: boolean };
 
 function AppPage() {
   const navigate = useNavigate();
@@ -1553,7 +1553,7 @@ function AppPage() {
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
               {currentSentence ? (
-                <SentenceText content={currentSentence.content} />
+                <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
               ) : (
                 <span className="text-muted-foreground italic text-2xl">
                   Hold the orb and speak, or double-tap to write.

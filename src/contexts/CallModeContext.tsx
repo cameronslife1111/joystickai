@@ -11,11 +11,37 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { chatWithOrby } from "@/lib/orby-call.functions";
-import { isEndCallPhrase, isMakePlanPhrase } from "@/lib/call-phrases";
+import {
+  isEndCallPhrase,
+  isMakePlanPhrase,
+  isReadDocPhrase,
+  isAddTextPhrase,
+  isMarkDeletePhrase,
+} from "@/lib/call-phrases";
+import {
+  resolveDocumentsByVoice,
+  readDocumentsForCall,
+  addTextToDocument,
+  markSentencesForDeletion,
+} from "@/lib/orby-call-docs.functions";
 
-export type CallStatus = "idle" | "listening" | "thinking" | "speaking" | "ending";
+export type CallStatus =
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "ending"
+  | "reading"
+  | "adding"
+  | "marking";
 
 export type CallMessage = { role: "user" | "assistant"; content: string };
+
+export type ReadingDoc = {
+  id: string;
+  title: string;
+  sentences: { id: string; content: string; order_index: number }[];
+};
 
 interface CallModeContextValue {
   inCall: boolean;
@@ -29,6 +55,9 @@ interface CallModeContextValue {
   overlayMinimized: boolean;
   setOverlayMinimized: (v: boolean) => void;
   generatePlanFromConversation: () => Promise<void>;
+  readingDocs: ReadingDoc[] | null;
+  dismissReadingDocs: () => void;
+  actionLabel: string | null;
 }
 
 const Ctx = createContext<CallModeContextValue | null>(null);
@@ -60,6 +89,15 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const [partialUser, setPartialUser] = useState("");
   const [micMuted, setMicMuted] = useState(false);
   const [overlayMinimized, setOverlayMinimized] = useState(false);
+  const [readingDocs, setReadingDocs] = useState<ReadingDoc[] | null>(null);
+  const [actionLabel, setActionLabel] = useState<string | null>(null);
+
+  const dismissReadingDocs = useCallback(() => setReadingDocs(null), []);
+
+  const resolveDocsFn = useServerFn(resolveDocumentsByVoice);
+  const readDocsFn = useServerFn(readDocumentsForCall);
+  const addTextFn = useServerFn(addTextToDocument);
+  const markFn = useServerFn(markSentencesForDeletion);
 
   const inCallRef = useRef(false);
   const micMutedRef = useRef(false);
@@ -199,7 +237,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       const text = (partialUserRef.current || "").trim();
       if (!text) return;
       void commitUtterance(text);
-    }, 1200);
+    }, 3200);
   };
 
   // We need a ref mirror of partialUser to read inside timer callbacks.
@@ -243,6 +281,193 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // ----- Read document(s) -----
+        if (isReadDocPhrase(text)) {
+          stopRecognition();
+          setStatus("reading");
+          setActionLabel("Finding document…");
+          try {
+            const recent = messagesRef.current
+              .slice(-6)
+              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+              .join("\n");
+            const looksMultiple =
+              /\b(those|these|both|all|multiple|two|three|and)\b/i.test(text);
+            const { matches } = await resolveDocsFn({
+              data: {
+                utterance: text,
+                recentTranscript: recent,
+                expectMultiple: looksMultiple,
+                purpose: "read",
+              },
+            });
+            const confident = matches.filter((m) => m.confidence >= 0.4);
+            if (confident.length === 0) {
+              setActionLabel(null);
+              setStatus("speaking");
+              await speakAsync("I couldn't find a matching document. What's the title?");
+            } else {
+              setActionLabel(
+                `Reading ${confident.map((m) => `"${m.title}"`).join(", ")}…`,
+              );
+              const { docs } = await readDocsFn({
+                data: { documentIds: confident.map((m) => m.id) },
+              });
+              setReadingDocs(docs);
+              // Inject as assistant context so follow-ups can reference it.
+              const contextMsg: CallMessage = {
+                role: "assistant",
+                content: docs
+                  .map(
+                    (d) =>
+                      `[document: "${d.title}"]\n` +
+                      d.sentences.map((s, i) => `${i + 1}. ${s.content}`).join("\n"),
+                  )
+                  .join("\n\n"),
+              };
+              setMessages((prev) => [...prev, contextMsg]);
+              setStatus("speaking");
+              const titles = docs.map((d) => d.title).join(" and ");
+              await speakAsync(
+                docs.length === 1
+                  ? `Got it. I've read ${titles}. What's your question?`
+                  : `Got it. I've read ${titles}. What's your question?`,
+              );
+            }
+          } catch (e: any) {
+            console.warn("[call] read doc error", e);
+            setStatus("speaking");
+            await speakAsync("Sorry, I had trouble reading that document.");
+          } finally {
+            setActionLabel(null);
+          }
+          if (!inCallRef.current) return;
+          setStatus("listening");
+          startRecognition();
+          return;
+        }
+
+        // ----- Add text to document -----
+        if (isAddTextPhrase(text)) {
+          stopRecognition();
+          setStatus("adding");
+          setActionLabel("Finding document…");
+          try {
+            const recent = messagesRef.current
+              .slice(-6)
+              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+              .join("\n");
+            const { matches } = await resolveDocsFn({
+              data: {
+                utterance: text,
+                recentTranscript: recent,
+                expectMultiple: false,
+                purpose: "add",
+              },
+            });
+            const target = matches.find((m) => m.confidence >= 0.4);
+            if (!target) {
+              setStatus("speaking");
+              await speakAsync("Which document should I add that to?");
+            } else {
+              // Extract the text-to-add: strip the command framing using AI-like
+              // light heuristics — let the user's full utterance through; the
+              // sentence splitter handles structure.
+              const stripped = text
+                .replace(
+                  /\b(please|can you|could you|hey orby|orby)\b/gi,
+                  "",
+                )
+                .replace(
+                  new RegExp(
+                    `\\b(add|append|write|put|stick|save)\\b[\\s\\S]*?\\b(to|in|into)\\b\\s+(the\\s+|my\\s+)?${target.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[\\s\\S]*?(document|doc|note)?`,
+                    "i",
+                  ),
+                  "",
+                )
+                .replace(/^[\s,:.-]+|[\s,:.-]+$/g, "")
+                .trim();
+              const toAdd = stripped || text;
+              setActionLabel(`Adding to "${target.title}"…`);
+              const { inserted } = await addTextFn({
+                data: { documentId: target.id, text: toAdd },
+              });
+              setStatus("speaking");
+              await speakAsync(
+                inserted > 0
+                  ? `Added to ${target.title}.`
+                  : `I couldn't find anything to add.`,
+              );
+            }
+          } catch (e: any) {
+            console.warn("[call] add text error", e);
+            setStatus("speaking");
+            await speakAsync("Sorry, I couldn't add that.");
+          } finally {
+            setActionLabel(null);
+          }
+          if (!inCallRef.current) return;
+          setStatus("listening");
+          startRecognition();
+          return;
+        }
+
+        // ----- Mark sentences for deletion -----
+        if (isMarkDeletePhrase(text)) {
+          stopRecognition();
+          setStatus("marking");
+          setActionLabel("Finding sentences…");
+          try {
+            // Prefer the most-recently-read doc if any, else resolve from utterance.
+            let targetId: string | null = readingDocs?.[0]?.id ?? null;
+            let targetTitle: string | null = readingDocs?.[0]?.title ?? null;
+            if (!targetId) {
+              const recent = messagesRef.current
+                .slice(-6)
+                .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+                .join("\n");
+              const { matches } = await resolveDocsFn({
+                data: {
+                  utterance: text,
+                  recentTranscript: recent,
+                  expectMultiple: false,
+                  purpose: "mark",
+                },
+              });
+              const target = matches.find((m) => m.confidence >= 0.4);
+              if (target) {
+                targetId = target.id;
+                targetTitle = target.title;
+              }
+            }
+            if (!targetId) {
+              setStatus("speaking");
+              await speakAsync("Which document are those sentences in?");
+            } else {
+              const { marked } = await markFn({
+                data: { documentId: targetId, utterance: text },
+              });
+              setStatus("speaking");
+              await speakAsync(
+                marked > 0
+                  ? `Marked ${marked} sentence${marked === 1 ? "" : "s"} in ${targetTitle ?? "that document"} for deletion.`
+                  : `I couldn't find a matching sentence to mark.`,
+              );
+            }
+          } catch (e: any) {
+            console.warn("[call] mark delete error", e);
+            setStatus("speaking");
+            await speakAsync("Sorry, I couldn't mark that.");
+          } finally {
+            setActionLabel(null);
+          }
+          if (!inCallRef.current) return;
+          setStatus("listening");
+          startRecognition();
+          return;
+        }
+
+
         // Normal AI turn.
         setStatus("thinking");
         stopRecognition();
@@ -269,7 +494,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
         sendingRef.current = false;
       }
     },
-    [callChat, speakAsync, startRecognition, stopRecognition],
+    [callChat, speakAsync, startRecognition, stopRecognition, resolveDocsFn, readDocsFn, addTextFn, markFn, readingDocs],
   );
 
   // Mirror messages so commitUtterance can read latest without re-binding.
@@ -438,6 +663,9 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       overlayMinimized,
       setOverlayMinimized,
       generatePlanFromConversation,
+      readingDocs,
+      dismissReadingDocs,
+      actionLabel,
     }),
     [
       inCall,
@@ -450,6 +678,9 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       toggleMicMute,
       overlayMinimized,
       generatePlanFromConversation,
+      readingDocs,
+      dismissReadingDocs,
+      actionLabel,
     ],
   );
 

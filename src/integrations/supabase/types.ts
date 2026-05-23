@@ -212,6 +212,7 @@ export type Database = {
           id: string
           linked_document_id: string | null
           order_index: number
+          pending_delete: boolean
           user_id: string
         }
         Insert: {
@@ -221,6 +222,7 @@ export type Database = {
           id?: string
           linked_document_id?: string | null
           order_index?: number
+          pending_delete?: boolean
           user_id: string
         }
         Update: {
@@ -230,6 +232,7 @@ export type Database = {
           id?: string
           linked_document_id?: string | null
           order_index?: number
+          pending_delete?: boolean
           user_id?: string
         }
         Relationships: [

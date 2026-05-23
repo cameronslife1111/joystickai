@@ -21,6 +21,32 @@ const PLAN_PATTERNS = [
   /\bsave (that|this|it) as (a )?plan\b/,
 ];
 
+// "Read / open / pull up" a document or documents.
+const READ_DOC_PATTERNS = [
+  /\bread (that|this|the|those|these|my) (document|doc|docs|documents|note|notes)\b/,
+  /\b(read|open|pull up|load|grab|fetch) (the |that |a )?(document|doc|note) (called|named|titled)\b/,
+  /\bread (it|them) (for me|now|please)?\b/,
+  /\b(open|pull up|load|grab) (.+) (document|doc|note)s?\b/,
+  /\b(read|open) (both|all|the) (of them|documents|docs|notes)\b/,
+];
+
+// "Add … to the X document".
+const ADD_TEXT_PATTERNS = [
+  /\badd (.+) to (the |my )?(.+) (document|doc|note)\b/,
+  /\b(append|write|put|stick) (.+) (in|into|to) (the |my )?(.+) (document|doc|note)\b/,
+  /\badd (this|that|the following) to (the |my )?(.+) (document|doc|note)\b/,
+  /\bsave (this|that) (in|into|to) (the |my )?(.+) (document|doc|note)\b/,
+];
+
+// "Mark … for deletion" / "flag … for deletion".
+const MARK_DELETE_PATTERNS = [
+  /\bmark (.+) for (deletion|delete|removal)\b/,
+  /\bflag (.+) for (deletion|delete|removal)\b/,
+  /\bmark (that|this|the last|the current) (sentence|line|one) (for deletion|to delete)?\b/,
+  /\bcross out (.+)\b/,
+  /\bstrike (out |through )?(.+)\b/,
+];
+
 function normalize(s: string) {
   return s
     .toLowerCase()
@@ -39,4 +65,22 @@ export function isMakePlanPhrase(text: string): boolean {
   const t = normalize(text);
   if (!t) return false;
   return PLAN_PATTERNS.some((re) => re.test(t));
+}
+
+export function isReadDocPhrase(text: string): boolean {
+  const t = normalize(text);
+  if (!t) return false;
+  return READ_DOC_PATTERNS.some((re) => re.test(t));
+}
+
+export function isAddTextPhrase(text: string): boolean {
+  const t = normalize(text);
+  if (!t) return false;
+  return ADD_TEXT_PATTERNS.some((re) => re.test(t));
+}
+
+export function isMarkDeletePhrase(text: string): boolean {
+  const t = normalize(text);
+  if (!t) return false;
+  return MARK_DELETE_PATTERNS.some((re) => re.test(t));
 }
