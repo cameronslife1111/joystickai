@@ -1,14 +1,21 @@
 import { linkify } from "@/lib/linkify";
+import { cn } from "@/lib/utils";
 
 type Props = {
   content: string;
   className?: string;
+  pendingDelete?: boolean;
 };
 
-export function SentenceText({ content, className }: Props) {
+export function SentenceText({ content, className, pendingDelete }: Props) {
   const segments = linkify(content);
   return (
-    <span className={className}>
+    <span
+      className={cn(
+        className,
+        pendingDelete && "line-through decoration-2 text-red-400/70",
+      )}
+    >
       {segments.map((seg, i) => {
         if (seg.type === "text") {
           return <span key={i}>{seg.value}</span>;

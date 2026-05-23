@@ -199,7 +199,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       const text = (partialUserRef.current || "").trim();
       if (!text) return;
       void commitUtterance(text);
-    }, 1200);
+    }, 3200);
   };
 
   // We need a ref mirror of partialUser to read inside timer callbacks.
