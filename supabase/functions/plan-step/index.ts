@@ -615,7 +615,7 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   async regenerate_image(args, { user_id, admin, supabase }) {
-    const prompt = String(args.prompt ?? "").trim();
+    const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
 
