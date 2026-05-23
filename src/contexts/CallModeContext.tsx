@@ -11,7 +11,19 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { chatWithOrby } from "@/lib/orby-call.functions";
-import { isEndCallPhrase, isMakePlanPhrase } from "@/lib/call-phrases";
+import {
+  isEndCallPhrase,
+  isMakePlanPhrase,
+  isReadDocPhrase,
+  isAddTextPhrase,
+  isMarkDeletePhrase,
+} from "@/lib/call-phrases";
+import {
+  resolveDocumentsByVoice,
+  readDocumentsForCall,
+  addTextToDocument,
+  markSentencesForDeletion,
+} from "@/lib/orby-call-docs.functions";
 
 export type CallStatus = "idle" | "listening" | "thinking" | "speaking" | "ending";
 
