@@ -115,20 +115,32 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Unauthorized" }, 401);
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-  const user = userData.user;
-
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  const { plan_id } = body ?? {};
+  const { plan_id, user_id: bodyUserId, internal_secret } = body ?? {};
   if (typeof plan_id !== "string") return json({ error: "plan_id required" }, 400);
+
+  const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET");
+  const isInternal =
+    !!PLAN_TICK_SECRET &&
+    internal_secret === PLAN_TICK_SECRET &&
+    typeof bodyUserId === "string";
+
+  let userId: string;
+  if (isInternal) {
+    userId = bodyUserId;
+  } else {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    userId = userData.user.id;
+  }
+  const user = { id: userId };
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -142,6 +154,7 @@ Deno.serve(async (req) => {
     .single();
   if (planErr || !plan) return json({ error: "plan not found" }, 404);
   if (plan.status !== "composing") return json({ error: `plan is ${plan.status}, not composing` }, 409);
+
 
   try {
     // ---- Build a WORKSPACE SNAPSHOT so the planner can resolve doc/media
