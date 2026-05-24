@@ -127,6 +127,84 @@ export type Database = {
           },
         ]
       }
+      plan_schedules: {
+        Row: {
+          attached_document_ids: string[]
+          cadence: string
+          claim_at: string | null
+          created_at: string
+          enabled: boolean
+          ends_at: string | null
+          id: string
+          interval_n: number
+          last_plan_id: string | null
+          last_run_at: string | null
+          max_runs: number | null
+          month_days: number[]
+          next_run_at: string | null
+          run_count: number
+          starts_at: string | null
+          time_of_day: string | null
+          timezone: string
+          title: string
+          updated_at: string
+          user_id: string
+          user_request: string
+          weekdays: number[]
+          year_month_days: Json
+        }
+        Insert: {
+          attached_document_ids?: string[]
+          cadence: string
+          claim_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          ends_at?: string | null
+          id?: string
+          interval_n?: number
+          last_plan_id?: string | null
+          last_run_at?: string | null
+          max_runs?: number | null
+          month_days?: number[]
+          next_run_at?: string | null
+          run_count?: number
+          starts_at?: string | null
+          time_of_day?: string | null
+          timezone?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+          user_request: string
+          weekdays?: number[]
+          year_month_days?: Json
+        }
+        Update: {
+          attached_document_ids?: string[]
+          cadence?: string
+          claim_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          ends_at?: string | null
+          id?: string
+          interval_n?: number
+          last_plan_id?: string | null
+          last_run_at?: string | null
+          max_runs?: number | null
+          month_days?: number[]
+          next_run_at?: string | null
+          run_count?: number
+          starts_at?: string | null
+          time_of_day?: string | null
+          timezone?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+          user_request?: string
+          weekdays?: number[]
+          year_month_days?: Json
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           acknowledged: boolean
@@ -143,6 +221,8 @@ export type Database = {
           origin_sentence_index: number | null
           plan_summary: string | null
           result_summary: string | null
+          schedule_id: string | null
+          scheduled_for: string | null
           status: string
           step_claim_at: string | null
           steps: Json | null
@@ -168,6 +248,8 @@ export type Database = {
           origin_sentence_index?: number | null
           plan_summary?: string | null
           result_summary?: string | null
+          schedule_id?: string | null
+          scheduled_for?: string | null
           status: string
           step_claim_at?: string | null
           steps?: Json | null
@@ -193,6 +275,8 @@ export type Database = {
           origin_sentence_index?: number | null
           plan_summary?: string | null
           result_summary?: string | null
+          schedule_id?: string | null
+          scheduled_for?: string | null
           status?: string
           step_claim_at?: string | null
           steps?: Json | null
@@ -305,6 +389,40 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_due_schedule: {
+        Args: { p_id: string }
+        Returns: {
+          attached_document_ids: string[]
+          cadence: string
+          claim_at: string | null
+          created_at: string
+          enabled: boolean
+          ends_at: string | null
+          id: string
+          interval_n: number
+          last_plan_id: string | null
+          last_run_at: string | null
+          max_runs: number | null
+          month_days: number[]
+          next_run_at: string | null
+          run_count: number
+          starts_at: string | null
+          time_of_day: string | null
+          timezone: string
+          title: string
+          updated_at: string
+          user_id: string
+          user_request: string
+          weekdays: number[]
+          year_month_days: Json
+        }
+        SetofOptions: {
+          from: "*"
+          to: "plan_schedules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       compact_sentence_indexes: {
         Args: { p_document_id: string }
         Returns: undefined
