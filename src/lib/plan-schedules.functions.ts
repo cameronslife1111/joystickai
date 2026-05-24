@@ -22,7 +22,9 @@ const scheduleInputSchema = z.object({
   starts_at: z.string().datetime().nullable().optional(),
   ends_at: z.string().datetime().nullable().optional(),
   max_runs: z.number().int().min(1).max(10000).nullable().optional(),
+  enabled: z.boolean().optional(),
 });
+
 
 type ScheduleInput = z.infer<typeof scheduleInputSchema>;
 
