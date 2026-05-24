@@ -1128,6 +1128,7 @@ Deno.serve(async (req) => {
     if (result && typeof result === "object" && "__pending_media" in result) {
       step.status = "awaiting_media";
       step.pending_media_id = result.__pending_media;
+      step.media_started_at = new Date().toISOString();
       await releaseClaim({ steps, status: "awaiting_media" });
       return json({ status: "awaiting_media", media_id: result.__pending_media });
     }
