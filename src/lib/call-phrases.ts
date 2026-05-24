@@ -97,3 +97,9 @@ export function isMarkDeletePhrase(text: string): boolean {
   if (!t) return false;
   return MARK_DELETE_PATTERNS.some((re) => re.test(t));
 }
+
+export function isFindDocPhrase(text: string): boolean {
+  const t = normalize(text);
+  if (!t) return false;
+  return FIND_DOC_PATTERNS.some((re) => re.test(t));
+}
