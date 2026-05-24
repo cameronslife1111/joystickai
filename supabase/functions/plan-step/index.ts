@@ -939,11 +939,17 @@ Deno.serve(async (req) => {
   }
   const plan = claimed;
 
+  const newTickCount = (plan.tick_count ?? 0) + 1;
   const releaseClaim = async (extraUpdates: Record<string, unknown> = {}) => {
-    await admin
-      .from("plans")
-      .update({ step_claim_at: null, ...extraUpdates })
-      .eq("id", plan_id);
+    const patch: Record<string, unknown> = {
+      step_claim_at: null,
+      tick_count: newTickCount,
+      ...extraUpdates,
+    };
+    // Default: reset no-progress counter on every advance. The awaiting_media
+    // "still generating" branch overrides this to bump it instead.
+    if (!("consecutive_no_progress" in patch)) patch.consecutive_no_progress = 0;
+    await admin.from("plans").update(patch).eq("id", plan_id);
   };
 
   // ---- Guardrails ----
