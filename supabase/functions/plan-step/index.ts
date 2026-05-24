@@ -1088,7 +1088,7 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient });
+    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal });
 
     // Async media generation: pause the plan until the media asset finishes.
     if (result && typeof result === "object" && "__pending_media" in result) {
