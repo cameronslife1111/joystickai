@@ -16,6 +16,7 @@ import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
 import { Route as ApiPublicPlanSchedulerTickRouteImport } from './routes/api/public/plan-scheduler-tick'
+import { Route as ApiPublicMediaPollTickRouteImport } from './routes/api/public/media-poll-tick'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -52,12 +53,18 @@ const ApiPublicPlanSchedulerTickRoute =
     path: '/api/public/plan-scheduler-tick',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicMediaPollTickRoute = ApiPublicMediaPollTickRouteImport.update({
+  id: '/api/public/media-poll-tick',
+  path: '/api/public/media-poll-tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/app': typeof AuthenticatedAppRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
+  '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
@@ -86,6 +95,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app'
     | '/media'
+    | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
   fileRoutesByTo: FileRoutesByTo
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app'
     | '/media'
+    | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
   id:
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/app'
     | '/_authenticated/media'
+    | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
   fileRoutesById: FileRoutesById
@@ -111,6 +123,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicMediaPollTickRoute: typeof ApiPublicMediaPollTickRoute
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
 }
@@ -166,6 +179,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPlanSchedulerTickRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/media-poll-tick': {
+      id: '/api/public/media-poll-tick'
+      path: '/api/public/media-poll-tick'
+      fullPath: '/api/public/media-poll-tick'
+      preLoaderRoute: typeof ApiPublicMediaPollTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -187,9 +207,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicMediaPollTickRoute: ApiPublicMediaPollTickRoute,
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
