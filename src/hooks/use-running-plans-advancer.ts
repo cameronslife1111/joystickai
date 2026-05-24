@@ -2,12 +2,13 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 
-// Base tick — used for plans that are actively executing local tool calls.
-const FAST_TICK_MS = 2000;
-// Slower tick — used when a plan is just waiting on a media generation job
-// (which itself can take 30s-3min). Polling fast here would needlessly hammer
-// edge functions and storage.
-const SLOW_TICK_MS = 6000;
+// The server-side `/api/public/plan-tick` cron is the source of truth for
+// advancing plans — it runs every 10s whether or not the app is open. These
+// client-side ticks are a latency optimization: when a tab is open, advance
+// faster so the user sees progress instantly. The atomic claim guard in
+// plan-step prevents double execution if both fire at once.
+const FAST_TICK_MS = 4000;
+const SLOW_TICK_MS = 8000;
 
 export function useRunningPlansAdvancer(
   userId: string | undefined | null,
