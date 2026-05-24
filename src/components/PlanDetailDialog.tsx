@@ -46,42 +46,42 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85vh] overflow-y-auto break-words">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden break-words">
         <DialogHeader>
           <DialogTitle>Plan detail</DialogTitle>
         </DialogHeader>
 
-        <section className="space-y-1">
+        <section className="space-y-1 min-w-0">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Your request</div>
-          <p className="text-sm whitespace-pre-wrap">{plan.user_request}</p>
+          <p className="text-sm whitespace-pre-wrap break-words">{plan.user_request}</p>
         </section>
 
         {plan.plan_summary && (
-          <section className="space-y-1">
+          <section className="space-y-1 min-w-0">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">Summary</div>
-            <p className="text-sm whitespace-pre-wrap">{plan.plan_summary}</p>
+            <p className="text-sm whitespace-pre-wrap break-words">{plan.plan_summary}</p>
           </section>
         )}
 
-        <section className="space-y-2">
+        <section className="space-y-2 min-w-0">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Steps</div>
           <ol className="space-y-2">
             {steps.map((s, i) => (
-              <li key={i} className="rounded-md border border-border bg-card/40 p-2 text-sm">
-                <div className="flex items-start gap-2">
+              <li key={i} className="rounded-md border border-border bg-card/40 p-2 text-sm min-w-0">
+                <div className="flex items-start gap-2 min-w-0">
                   <span className="text-muted-foreground">{i + 1}.</span>
-                  <div className="flex-1">
-                    <div>{s.description}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="break-words">{s.description}</div>
                     <div className={`mt-0.5 text-xs ${STEP_STATUS_COLOR[s.status] ?? "text-muted-foreground"}`}>
                       {s.status ?? "pending"}
                     </div>
                     {s.status === "completed" && s.result != null && (
-                      <pre className="mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-[10px] text-muted-foreground">
+                      <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-muted/40 p-2 text-[10px] text-muted-foreground">
                         {JSON.stringify(s.result, null, 2).slice(0, 400)}
                       </pre>
                     )}
                     {s.status === "failed" && s.error && (
-                      <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap">{s.error}</div>
+                      <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap break-all">{s.error}</div>
                     )}
                   </div>
                 </div>
