@@ -54,7 +54,7 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
     onOpenChange(false);
     void supabase.functions.invoke("plan-step", { body: { plan_id: planId } });
     qc.invalidateQueries({ queryKey: ["plans"] });
-    toast.success("Plan running in the background");
+    toast.success("Running in the background — safe to close the app", { duration: 6000 });
     onApproved?.();
   };
 
