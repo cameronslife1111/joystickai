@@ -10,7 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { chatWithOrby } from "@/lib/orby-call.functions";
+import { chatWithOrby, distillCallTranscript } from "@/lib/orby-call.functions";
 import {
   isEndCallPhrase,
   isMakePlanPhrase,
