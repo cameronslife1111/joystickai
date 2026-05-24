@@ -1,40 +1,98 @@
-## Problem
+## Goal
 
-In the **🔍 Search docs** overlay, the initial (unfiltered) list shows document titles vertically clipped — only the middle horizontal slice of each title is visible. As soon as the user types and the result list shrinks, rows render at their normal height.
+In Call Mode, let the user ask "what's that document called?" (or describe a document by topic/guess) and have Orby speak back the correct title(s) without reading, opening, or modifying anything. After Orby answers, the conversation continues normally so the user can decide what to do next.
 
-## Root cause
+## Approach
 
-In `src/routes/_authenticated/app.tsx` (~line 1966–1977), the results list is:
+Add a new lightweight voice intent: **"find / name the document"**. It reuses the existing fuzzy AI resolver (`resolveDocumentsByVoice`) — no DB changes, no new server function needed.
 
-```text
-<div class="flex max-h-[50vh] flex-col gap-1.5 overflow-y-auto">
-  <button class="w-full truncate rounded-xl ... px-4 py-3 ...">
-```
+### 1. New phrase matcher — `src/lib/call-phrases.ts`
 
-Flex children in a column default to `min-height: auto` but **can still shrink** when the total content exceeds the container. With many docs, each button is being compressed vertically by the flex layout, which clips the text. `truncate` adds `overflow: hidden`, hiding the clipped portion. When the list filters down to a few items, there's no overflow pressure, so heights look correct.
+Add `isFindDocPhrase(text)` that matches natural ways of asking for a title:
 
-This is the exact same bug previously fixed for the "Send to" and document picker lists by adding `shrink-0`.
+- "what's that document called"
+- "what's the name of the doc about <X>"
+- "what was that note called"
+- "do you remember the title of <X>"
+- "which document has <X>" / "find the document about <X>"
+- "i forgot the name of the document <about/for/with> <X>"
 
-## Fix
+Must NOT collide with existing `isReadDocPhrase` / `isAddTextPhrase` / `isMarkDeletePhrase`. We'll check this intent FIRST in `commitUtterance` so e.g. "what's the document called" doesn't get swallowed by anything else.
 
-Add `shrink-0` to the result button so each row keeps its natural height regardless of how many items are in the scrollable list. The parent already handles overflow via `overflow-y-auto`.
+### 2. Handler in `CallModeContext.tsx`
 
-Change (single line, ~line 1973):
-
-```text
-className="w-full truncate rounded-xl border ... px-4 py-3 ... hover:bg-foreground/10"
-```
-
-to:
+In `commitUtterance`, add a branch before the read/add/mark branches:
 
 ```text
-className="w-full shrink-0 truncate rounded-xl border ... px-4 py-3 ... hover:bg-foreground/10"
+if (isFindDocPhrase(text)) {
+  stopRecognition();
+  setStatus("thinking");
+  setActionLabel("Looking that up…");
+  const recent = <last 6 messages joined as today>;
+  const { matches } = await resolveDocsFn({
+    data: {
+      utterance: text,
+      recentTranscript: recent,
+      expectMultiple: true,   // user may be fishing across several
+      purpose: "read",        // existing enum, semantically fine for lookup
+    },
+  });
+  const confident = matches.filter(m => m.confidence >= 0.35).slice(0, 3);
+  let reply: string;
+  if (confident.length === 0) {
+    reply = "I don't see a document that matches. Want to describe what it's about?";
+  } else if (confident.length === 1) {
+    reply = `The title you may be referring to is "${confident[0].title}". Want me to read it or add something to it?`;
+  } else {
+    const list = confident.map(m => `"${m.title}"`).join(", ");
+    reply = `It could be one of these: ${list}. Which one did you mean?`;
+  }
+  setMessages(prev => [...prev, { role: "assistant", content: reply }]);
+  setStatus("speaking");
+  await speakAsync(reply);
+  setActionLabel(null);
+  if (!inCallRef.current) return;
+  setStatus("listening");
+  startRecognition();
+  return;
+}
 ```
 
-No other changes needed. Filter behavior, keyboard handling, and styling stay identical.
+Notes:
+- We deliberately do NOT push the document content into the context — the user only wants the *name*. If they then say "read it" or "add X to it", the existing read/add intents handle the next turn (and `resolveDocumentsByVoice` already considers `recentTranscript`, so the just-spoken title will resolve correctly).
+- Threshold is slightly looser (0.35) since users are explicitly fishing.
+- Cap at 3 suggestions so TTS stays short.
+
+### 3. System prompt nudge — `src/lib/orby-call.functions.ts`
+
+Add one short line to the existing system prompt so the LLM stays consistent if the regex misses and the message hits the normal chat path:
+
+> If the user asks what a document is called, who has the title for X, or is trying to remember a document's name, give the closest matching title from prior context briefly (e.g. "The title you may be referring to is 'X'.") and offer no follow-up actions unless asked.
+
+### 4. Order of intents in `commitUtterance`
+
+```text
+end → make plan → FIND DOC (new) → read doc → add text → mark delete → normal chat
+```
+
+Putting "find" before "read" matters because "what's that document" shares vocabulary with read intents.
+
+## Files touched
+
+- `src/lib/call-phrases.ts` — add `isFindDocPhrase` + patterns
+- `src/contexts/CallModeContext.tsx` — import it, add new branch in `commitUtterance`
+- `src/lib/orby-call.functions.ts` — one extra sentence in the system prompt
 
 ## Verification
 
-- Open the app, tap 🔍 Search docs with the full document list → every row renders at full height, scroll works.
-- Type to filter → still renders correctly.
-- Check on mobile viewport too.
+- Start a call, say "Hey, what's the document called that has the meme stuff?" → Orby replies with the title and asks what you want to do.
+- Say "I forgot the name of that checklist" → Orby returns the closest match.
+- Say "what was that document called" with no context → Orby says it doesn't see one and asks for a topic.
+- Say "read the meme document" right after → existing read intent still fires (regression check).
+- Say "add 'buy milk' to the checklist document" → existing add intent still fires.
+
+## Out of scope
+
+- No new DB columns, no new server function, no UI changes.
+- Not changing the reading panel.
+- Not auto-opening / auto-reading the matched doc — explicitly user-initiated next turn.
