@@ -91,9 +91,9 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
         </section>
 
         {plan.status === "failed" && (
-          <section className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3">
+          <section className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 min-w-0">
             <div className="text-xs uppercase tracking-wider text-destructive">What went wrong</div>
-            <p className="text-sm whitespace-pre-wrap">{plan.error_message}</p>
+            <p className="text-sm whitespace-pre-wrap break-all">{plan.error_message}</p>
             {plan.error_lovable_prompt && (
               <button
                 onClick={async () => {
