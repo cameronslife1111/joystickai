@@ -435,6 +435,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      insert_sentences_at_as: {
+        Args: {
+          p_contents: string[]
+          p_document_id: string
+          p_insert_at: number
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       move_sentence: {
         Args: {
           p_document_id: string
