@@ -396,11 +396,11 @@ const TOOL_HANDLERS: Record<string, any> = {
         .eq("document_id", args.document_id);
       insertAt = count ?? 0;
     }
-    // Atomic shift + insert via the proven public.insert_sentences_at RPC,
-    // run as the authenticated user so its auth.uid() ownership check passes.
-    // This eliminates the half-shifted intermediate state the previous hand-
-    // rolled two-pass had, which could collide with concurrent shifts.
-    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+    // Atomic shift + insert. Use the SECURITY DEFINER `_as` variant via the
+    // admin client so this works in background tick mode (no user JWT, so
+    // auth.uid() is null and the original RPC raised "not authenticated").
+    const { error: rpcErr } = await admin.rpc("insert_sentences_at_as", {
+      p_user_id: user_id,
       p_document_id: args.document_id,
       p_contents: [args.content],
       p_insert_at: insertAt,
