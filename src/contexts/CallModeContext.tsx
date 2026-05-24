@@ -10,7 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { chatWithOrby } from "@/lib/orby-call.functions";
+import { chatWithOrby, distillCallTranscript } from "@/lib/orby-call.functions";
 import {
   isEndCallPhrase,
   isMakePlanPhrase,
@@ -111,6 +111,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const wakeLockRef = useRef<any>(null);
 
   const callChat = useServerFn(chatWithOrby);
+  const distillFn = useServerFn(distillCallTranscript);
 
   // Keep refs in sync.
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
@@ -561,11 +562,31 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
         const transcript = msgs
           .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
           .join("\n");
-        const userRequest =
-          "Turn the following voice conversation between the user and Orby into a concrete plan. " +
-          "Capture every concrete intent, decision, or task the user expressed.\n\n" +
-          "===== Conversation transcript =====\n" +
-          transcript;
+        // Voice transcripts include Orby's filler/questions and the user's
+        // intents tangled together. Distill into a clean enumerated request
+        // brief BEFORE handing it to plan-compose so the planner doesn't try
+        // to interpret the conversation itself as the plan.
+        const cappedTranscript =
+          transcript.length > 16000 ? transcript.slice(-16000) : transcript;
+        let userRequest: string;
+        let distilledOk = false;
+        try {
+          const res = await distillFn({ data: { transcript: cappedTranscript } });
+          const brief = (res?.request ?? "").trim();
+          if (brief) {
+            userRequest =
+              "Plan request distilled from a voice call with Orby:\n\n" + brief;
+            distilledOk = true;
+          } else {
+            throw new Error("empty brief");
+          }
+        } catch {
+          userRequest =
+            "Turn the following voice conversation between the user and Orby into a concrete plan. " +
+            "Capture every concrete intent, decision, or task the user expressed.\n\n" +
+            "===== Conversation transcript =====\n" +
+            transcript;
+        }
         const { data: row, error } = await supabase
           .from("plans")
           .insert({
@@ -578,13 +599,19 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
           .single();
         if (error || !row) throw new Error(error?.message || "Failed to create plan");
         void supabase.functions.invoke("plan-compose", { body: { plan_id: row.id } });
-        toast("Orby is generating your plan from the call…", { duration: 4000 });
+        toast(
+          distilledOk
+            ? "Orby is generating your plan from the call…"
+            : "Orby is generating your plan (using raw transcript)…",
+          { duration: 4000 },
+        );
       } catch (e: any) {
         toast.error(e?.message ?? "Couldn't generate plan");
       }
     },
-    [],
+    [distillFn],
   );
+
 
   const generatePlanFromConversation = useCallback(async () => {
     await generatePlanFromConversationInternal(messagesRef.current);

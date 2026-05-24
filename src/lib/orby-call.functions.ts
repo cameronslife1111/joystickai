@@ -43,3 +43,43 @@ export const chatWithOrby = createServerFn({ method: "POST" })
 
     return { text: (text ?? "").trim() };
   });
+
+const distillSchema = z.object({
+  transcript: z.string().min(1).max(20000),
+});
+
+export const distillCallTranscript = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => distillSchema.parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+    const provider = createOpenAiProvider(apiKey);
+    const model = provider("gpt-5.5");
+
+    const system =
+      "You convert a voice call transcript between a user and Orby (an AI assistant) into a clean, actionable request brief that a downstream planner will turn into tool steps. " +
+      "Read the whole transcript and extract EVERY concrete thing the user asked for, decided on, or said they want done. " +
+      "Ignore Orby's filler, acknowledgements, hedges, and clarifying questions — those are not intents. " +
+      "Ignore small talk and abandoned/retracted ideas. " +
+      "Preserve specific document titles, media titles, names, numbers, and exact phrasings the user used (do not paraphrase proper nouns or quoted text) so the planner can match them. " +
+      "Combine duplicated requests into one item. Order items the way the user said them. " +
+      "Output PLAIN TEXT ONLY in this exact shape:\n\n" +
+      "Summary: <one short sentence describing the overall goal>\n" +
+      "Tasks:\n" +
+      "1. <imperative task>\n" +
+      "2. <imperative task>\n" +
+      "...\n\n" +
+      "No markdown, no headings beyond the two labels above, no JSON, no commentary, no preamble. Keep the whole brief under 1500 characters. " +
+      "If the user expressed no concrete actionable intent, output exactly: Summary: No actionable request was made on the call.\nTasks:\n(none)";
+
+    const { text } = await aiSdkGenerateText({
+      model,
+      system,
+      messages: [{ role: "user", content: data.transcript }],
+    });
+
+    return { request: (text ?? "").trim() };
+  });
+
