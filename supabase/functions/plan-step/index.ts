@@ -15,9 +15,37 @@ const json = (body: unknown, status = 200) =>
 
 const TRASH = "\u{1F5D1}\u{FE0F}";
 
-// Invokes a sibling Supabase Edge Function with the user's auth, so RLS-aware functions
-// behave as if the user themself called them.
-async function invokeEdgeFunction(supabase: any, functionName: string, body: any) {
+// Invokes a sibling Supabase Edge Function. In user mode the user's JWT comes
+// in via the `supabase` client. In internal (cron tick) mode we POST directly
+// to the function URL with the service role token + a shared secret + user_id,
+// so the receiver can recover the user identity without a JWT.
+async function invokeEdgeFunction(
+  supabase: any,
+  functionName: string,
+  body: any,
+  ctx?: { internal?: boolean; user_id?: string },
+) {
+  if (ctx?.internal) {
+    const url = `${SUPABASE_URL}/functions/v1/${functionName}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({
+        ...body,
+        internal_secret: PLAN_TICK_SECRET,
+        user_id: ctx.user_id,
+      }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`${functionName} failed: ${res.status} ${txt.slice(0, 400)}`);
+    }
+    return;
+  }
   const { error } = await supabase.functions.invoke(functionName, { body });
   if (error) {
     throw new Error(`${functionName} failed: ${error.message ?? String(error)}`);
@@ -591,7 +619,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     return data;
   },
 
-  async generate_image(args, { user_id, admin, supabase }) {
+  async generate_image(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
@@ -621,11 +649,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "generate-image", {
       row_id: row.id, prompt, image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async regenerate_image(args, { user_id, admin, supabase }) {
+  async regenerate_image(args, { user_id, admin, supabase, internal }) {
     const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
@@ -661,11 +689,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "edit-image", {
       row_id: row.id, prompt, image_urls: [source.url], image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async remix_images(args, { user_id, admin, supabase }) {
+  async remix_images(args, { user_id, admin, supabase, internal }) {
     const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
 
@@ -711,11 +739,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "edit-image", {
       row_id: row.id, prompt, image_urls: sources.map((s) => s.url), image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async image_to_video(args, { user_id, admin, supabase }) {
+  async image_to_video(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
@@ -764,11 +792,11 @@ const TOOL_HANDLERS: Record<string, any> = {
       generate_audio,
       negative_prompt,
       cfg_scale,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async video_to_video(args, { user_id, admin, supabase }) {
+  async video_to_video(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
@@ -811,11 +839,11 @@ const TOOL_HANDLERS: Record<string, any> = {
       character_orientation,
       keep_original_sound,
       element_image_url: elementImage?.url ?? null,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async audio_image_to_video(args, { user_id, admin, supabase }) {
+  async audio_image_to_video(args, { user_id, admin, supabase, internal }) {
     const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
     const audio = await TOOL_HANDLERS._load_media(admin, user_id, args.audio_media_id, "audio");
     const validTalking = ["stable", "expressive"];
@@ -851,7 +879,7 @@ const TOOL_HANDLERS: Record<string, any> = {
       image_url: sourceImage.url,
       audio_url: audio.url,
       talking_style, resolution, aspect_ratio, caption,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 };
@@ -880,34 +908,51 @@ function buildLovablePrompt(plan: any, failedStep: any, errorMessage: string): s
   ].join("\n");
 }
 
+const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET") ?? "";
+
+// Hard caps — defense in depth against runaway plans.
+const MAX_TICKS = 300; // plenty for 50 media steps
+const MAX_NO_PROGRESS = 120; // ~12 minutes of awaiting_media with no movement
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Unauthorized" }, 401);
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-  const user = userData.user;
-
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  const { plan_id } = body ?? {};
+  const { plan_id, user_id: bodyUserId, internal_secret } = body ?? {};
   if (typeof plan_id !== "string") return json({ error: "plan_id required" }, 400);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Two callers: (a) user from the app with a bearer token, (b) the server-side
+  // plan-tick cron passing the shared secret + the plan's user_id.
+  let userId: string;
+  let userClient: any;
+  const isInternal = !!internal_secret && internal_secret === PLAN_TICK_SECRET;
+  if (isInternal) {
+    if (typeof bodyUserId !== "string") return json({ error: "user_id required" }, 400);
+    userId = bodyUserId;
+    // No end-user JWT on internal ticks; tool handlers fall through to `admin`.
+    userClient = admin;
+  } else {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    userId = userData.user.id;
+  }
+  const user = { id: userId };
+
   // ---- Concurrency guard ----
-  // Atomically claim this plan for execution. If another invocation (other tab,
-  // duplicate poll tick, manual approval racing the advancer) already holds the
-  // claim, bail out — they will advance the plan and the next tick will retry.
-  // A 90s ceiling auto-expires zombie claims from edge functions that died mid-step.
+  // Atomically claim this plan for execution. A 90s ceiling auto-expires
+  // zombie claims from edge functions that died mid-step.
   const STALE_CLAIM_CUTOFF = new Date(Date.now() - 90_000).toISOString();
   const { data: claimed } = await admin
     .from("plans")
@@ -920,16 +965,43 @@ Deno.serve(async (req) => {
   if (!claimed) {
     return json({ status: "running", note: "already_running" });
   }
-  // From here on, the `claimed` row is the source of truth — never trust an
-  // earlier in-memory snapshot.
   const plan = claimed;
 
+  const newTickCount = (plan.tick_count ?? 0) + 1;
   const releaseClaim = async (extraUpdates: Record<string, unknown> = {}) => {
+    const patch: Record<string, unknown> = {
+      step_claim_at: null,
+      tick_count: newTickCount,
+      ...extraUpdates,
+    };
+    // Default: reset no-progress counter on every advance. The awaiting_media
+    // "still generating" branch overrides this to bump it instead.
+    if (!("consecutive_no_progress" in patch)) patch.consecutive_no_progress = 0;
+    await admin.from("plans").update(patch).eq("id", plan_id);
+  };
+
+  // ---- Guardrails ----
+  const failWithReason = async (reason: string) => {
     await admin
       .from("plans")
-      .update({ step_claim_at: null, ...extraUpdates })
+      .update({
+        step_claim_at: null,
+        status: "failed",
+        error_message: reason,
+        completed_at: new Date().toISOString(),
+      })
       .eq("id", plan_id);
+    return json({ status: "failed", error: reason });
   };
+  if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
+    return await failWithReason("watchdog_timeout: plan exceeded its wall-clock deadline");
+  }
+  if ((plan.tick_count ?? 0) >= MAX_TICKS) {
+    return await failWithReason(`tick_limit_exceeded: plan ran for ${MAX_TICKS} server ticks without finishing`);
+  }
+  if ((plan.consecutive_no_progress ?? 0) >= MAX_NO_PROGRESS) {
+    return await failWithReason("stalled: media generation made no progress for too long");
+  }
 
   if (plan.status === "approved") {
     plan.status = "running";
@@ -970,7 +1042,9 @@ Deno.serve(async (req) => {
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
-      await releaseClaim();
+      // Still waiting on the vendor — bump the no-progress counter so we
+      // can fail-stop after MAX_NO_PROGRESS ticks instead of polling forever.
+      await releaseClaim({ consecutive_no_progress: (plan.consecutive_no_progress ?? 0) + 1 });
       return json({ status: "awaiting_media", media_id: mediaId });
     }
     if (media.status === "failed") {
@@ -1014,7 +1088,7 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient });
+    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal });
 
     // Async media generation: pause the plan until the media asset finishes.
     if (result && typeof result === "object" && "__pending_media" in result) {

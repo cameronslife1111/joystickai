@@ -33,19 +33,24 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Unauthorized" }, 401);
-
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-  const user = userData.user;
-
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
+
+  const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET") ?? "";
+  let user: { id: string };
+  if (body?.internal_secret && body.internal_secret === PLAN_TICK_SECRET && typeof body?.user_id === "string") {
+    user = { id: body.user_id };
+  } else {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    user = { id: userData.user.id };
+  }
   const { row_id } = body ?? {};
   if (typeof row_id !== "string") return json({ error: "row_id required" }, 400);
 
