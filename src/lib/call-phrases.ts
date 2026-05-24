@@ -47,6 +47,19 @@ const MARK_DELETE_PATTERNS = [
   /\bstrike (out |through )?(.+)\b/,
 ];
 
+// "What's that document called?" / "name of the doc about X" / "find the doc that…"
+const FIND_DOC_PATTERNS = [
+  /\bwhat('?s| is| was) (that|the|this) (document|doc|note) called\b/,
+  /\bwhat('?s| is| was) the (name|title) of (the |that |my )?(.+?)(document|doc|note)?\b/,
+  /\b(do you |can you )?remember (the |that )?(name|title) of (.+)\b/,
+  /\b(i |i'?ve )?(forgot|forget|can'?t remember|don'?t remember) (the |that )?(name|title) of (.+)\b/,
+  /\bwhich (document|doc|note) (has|contains|is about|covers) (.+)\b/,
+  /\b(find|look up|search for) (the |a |that )?(document|doc|note) (about|for|with|named|called|titled) (.+)\b/,
+  /\bwhat (document|doc|note) (is about|covers|has) (.+)\b/,
+  /\b(name|title) (of )?(that|the|this) (document|doc|note)\b/,
+];
+
+
 function normalize(s: string) {
   return s
     .toLowerCase()
@@ -83,4 +96,10 @@ export function isMarkDeletePhrase(text: string): boolean {
   const t = normalize(text);
   if (!t) return false;
   return MARK_DELETE_PATTERNS.some((re) => re.test(t));
+}
+
+export function isFindDocPhrase(text: string): boolean {
+  const t = normalize(text);
+  if (!t) return false;
+  return FIND_DOC_PATTERNS.some((re) => re.test(t));
 }

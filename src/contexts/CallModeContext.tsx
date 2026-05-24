@@ -17,6 +17,7 @@ import {
   isReadDocPhrase,
   isAddTextPhrase,
   isMarkDeletePhrase,
+  isFindDocPhrase,
 } from "@/lib/call-phrases";
 import {
   resolveDocumentsByVoice,
@@ -278,6 +279,53 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
           await speakAsync("Got it, I'll generate that plan now.");
           await generatePlanRef.current([...messagesRef.current, userMsg]);
           await endCallRef.current("plan");
+          return;
+        }
+
+        // ----- Find / name a document (no read, no edit) -----
+        if (isFindDocPhrase(text)) {
+          stopRecognition();
+          setStatus("thinking");
+          setActionLabel("Looking that up…");
+          try {
+            const recent = messagesRef.current
+              .slice(-6)
+              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+              .join("\n");
+            const { matches } = await resolveDocsFn({
+              data: {
+                utterance: text,
+                recentTranscript: recent,
+                expectMultiple: true,
+                purpose: "read",
+              },
+            });
+            const confident = matches
+              .filter((m) => m.confidence >= 0.35)
+              .slice(0, 3);
+            let reply: string;
+            if (confident.length === 0) {
+              reply =
+                "I don't see a document that matches. Want to describe what it's about?";
+            } else if (confident.length === 1) {
+              reply = `The title you may be referring to is "${confident[0].title}". Want me to read it or add to it?`;
+            } else {
+              const list = confident.map((m) => `"${m.title}"`).join(", ");
+              reply = `It could be one of these: ${list}. Which one did you mean?`;
+            }
+            setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+            setStatus("speaking");
+            await speakAsync(reply);
+          } catch (e: any) {
+            console.warn("[call] find doc error", e);
+            setStatus("speaking");
+            await speakAsync("Sorry, I had trouble looking that up.");
+          } finally {
+            setActionLabel(null);
+          }
+          if (!inCallRef.current) return;
+          setStatus("listening");
+          startRecognition();
           return;
         }
 
