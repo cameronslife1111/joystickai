@@ -15,9 +15,37 @@ const json = (body: unknown, status = 200) =>
 
 const TRASH = "\u{1F5D1}\u{FE0F}";
 
-// Invokes a sibling Supabase Edge Function with the user's auth, so RLS-aware functions
-// behave as if the user themself called them.
-async function invokeEdgeFunction(supabase: any, functionName: string, body: any) {
+// Invokes a sibling Supabase Edge Function. In user mode the user's JWT comes
+// in via the `supabase` client. In internal (cron tick) mode we POST directly
+// to the function URL with the service role token + a shared secret + user_id,
+// so the receiver can recover the user identity without a JWT.
+async function invokeEdgeFunction(
+  supabase: any,
+  functionName: string,
+  body: any,
+  ctx?: { internal?: boolean; user_id?: string },
+) {
+  if (ctx?.internal) {
+    const url = `${SUPABASE_URL}/functions/v1/${functionName}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({
+        ...body,
+        internal_secret: PLAN_TICK_SECRET,
+        user_id: ctx.user_id,
+      }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`${functionName} failed: ${res.status} ${txt.slice(0, 400)}`);
+    }
+    return;
+  }
   const { error } = await supabase.functions.invoke(functionName, { body });
   if (error) {
     throw new Error(`${functionName} failed: ${error.message ?? String(error)}`);
