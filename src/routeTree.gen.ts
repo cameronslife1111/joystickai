@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -39,18 +40,25 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   path: '/app',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const ApiPublicPlanTickRoute = ApiPublicPlanTickRouteImport.update({
+  id: '/api/public/plan-tick',
+  path: '/api/public/plan-tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,13 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/app': typeof AuthenticatedAppRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/app' | '/media'
+  fullPaths: '/' | '/auth' | '/app' | '/media' | '/api/public/plan-tick'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/app' | '/media'
+  to: '/' | '/auth' | '/app' | '/media' | '/api/public/plan-tick'
   id:
     | '__root__'
     | '/'
@@ -72,12 +81,14 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/app'
     | '/_authenticated/media'
+    | '/api/public/plan-tick'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -117,6 +128,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/plan-tick': {
+      id: '/api/public/plan-tick'
+      path: '/api/public/plan-tick'
+      fullPath: '/api/public/plan-tick'
+      preLoaderRoute: typeof ApiPublicPlanTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -138,7 +156,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
