@@ -133,6 +133,7 @@ export type Database = {
           approved_at: string | null
           attached_document_ids: string[]
           completed_at: string | null
+          consecutive_no_progress: number
           created_at: string
           current_step: number
           error_lovable_prompt: string | null
@@ -145,16 +146,19 @@ export type Database = {
           status: string
           step_claim_at: string | null
           steps: Json | null
+          tick_count: number
           total_steps: number
           updated_at: string
           user_id: string
           user_request: string
+          watchdog_at: string | null
         }
         Insert: {
           acknowledged?: boolean
           approved_at?: string | null
           attached_document_ids?: string[]
           completed_at?: string | null
+          consecutive_no_progress?: number
           created_at?: string
           current_step?: number
           error_lovable_prompt?: string | null
@@ -167,16 +171,19 @@ export type Database = {
           status: string
           step_claim_at?: string | null
           steps?: Json | null
+          tick_count?: number
           total_steps?: number
           updated_at?: string
           user_id: string
           user_request: string
+          watchdog_at?: string | null
         }
         Update: {
           acknowledged?: boolean
           approved_at?: string | null
           attached_document_ids?: string[]
           completed_at?: string | null
+          consecutive_no_progress?: number
           created_at?: string
           current_step?: number
           error_lovable_prompt?: string | null
@@ -189,10 +196,12 @@ export type Database = {
           status?: string
           step_claim_at?: string | null
           steps?: Json | null
+          tick_count?: number
           total_steps?: number
           updated_at?: string
           user_id?: string
           user_request?: string
+          watchdog_at?: string | null
         }
         Relationships: [
           {
