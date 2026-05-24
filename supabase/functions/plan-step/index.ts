@@ -1027,6 +1027,38 @@ Deno.serve(async (req) => {
       await releaseClaim({ status: "running" });
       return json({ status: "running" });
     }
+
+    // Wall-clock cap per media item — videos can legitimately take 15+ min,
+    // but if nothing finishes after MAX_MEDIA_WAIT_MS we should bail out.
+    const mediaStartedAt: string | undefined = step?.media_started_at;
+    if (mediaStartedAt && Date.now() - new Date(mediaStartedAt).getTime() > MAX_MEDIA_WAIT_MS) {
+      step.status = "failed";
+      step.error = `media_timeout: still generating after ${Math.round(MAX_MEDIA_WAIT_MS / 60000)} min`;
+      const lovablePrompt = buildLovablePrompt(plan, step, step.error);
+      await releaseClaim({
+        steps, status: "failed", error_message: step.error,
+        error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
+      });
+      return json({ status: "failed", error: step.error });
+    }
+
+    // First, drain fal's queue for this row if it's a queued (video) job.
+    // Without this, the media_assets row only changes when the browser hook
+    // happens to be running — closing the tab strands the plan.
+    const { data: preCheck } = await admin
+      .from("media_assets")
+      .select("id, status, fal_status_url")
+      .eq("id", mediaId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (preCheck?.status === "generating" && preCheck.fal_status_url) {
+      try {
+        await invokeEdgeFunction(userClient, "poll-video-job", { row_id: mediaId }, { internal: isInternal, user_id: user.id });
+      } catch (_e) {
+        // Poll failures are non-fatal — we'll retry next tick.
+      }
+    }
+
     const { data: media } = await admin
       .from("media_assets")
       .select("id, status, url, title, error_message")
@@ -1044,8 +1076,8 @@ Deno.serve(async (req) => {
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
-      // Still waiting on the vendor — bump the no-progress counter so we
-      // can fail-stop after MAX_NO_PROGRESS ticks instead of polling forever.
+      // Still rendering at the vendor. Bump the no-progress counter as a
+      // secondary safety net; the wall-clock cap above is the primary one.
       await releaseClaim({ consecutive_no_progress: (plan.consecutive_no_progress ?? 0) + 1 });
       return json({ status: "awaiting_media", media_id: mediaId });
     }
