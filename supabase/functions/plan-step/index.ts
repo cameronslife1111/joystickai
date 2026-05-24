@@ -619,7 +619,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     return data;
   },
 
-  async generate_image(args, { user_id, admin, supabase }) {
+  async generate_image(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
@@ -649,11 +649,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "generate-image", {
       row_id: row.id, prompt, image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async regenerate_image(args, { user_id, admin, supabase }) {
+  async regenerate_image(args, { user_id, admin, supabase, internal }) {
     const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
@@ -689,11 +689,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "edit-image", {
       row_id: row.id, prompt, image_urls: [source.url], image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async remix_images(args, { user_id, admin, supabase }) {
+  async remix_images(args, { user_id, admin, supabase, internal }) {
     const prompt = capEditPrompt(String(args.prompt ?? "").trim());
     if (!prompt) throw new Error("prompt is required");
 
@@ -739,11 +739,11 @@ const TOOL_HANDLERS: Record<string, any> = {
 
     await invokeEdgeFunction(supabase, "edit-image", {
       row_id: row.id, prompt, image_urls: sources.map((s) => s.url), image_size, quality, output_format,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async image_to_video(args, { user_id, admin, supabase }) {
+  async image_to_video(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
@@ -792,11 +792,11 @@ const TOOL_HANDLERS: Record<string, any> = {
       generate_audio,
       negative_prompt,
       cfg_scale,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async video_to_video(args, { user_id, admin, supabase }) {
+  async video_to_video(args, { user_id, admin, supabase, internal }) {
     const prompt = String(args.prompt ?? "").trim();
     if (!prompt) throw new Error("prompt is required");
     const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
@@ -839,11 +839,11 @@ const TOOL_HANDLERS: Record<string, any> = {
       character_orientation,
       keep_original_sound,
       element_image_url: elementImage?.url ?? null,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 
-  async audio_image_to_video(args, { user_id, admin, supabase }) {
+  async audio_image_to_video(args, { user_id, admin, supabase, internal }) {
     const sourceImage = await TOOL_HANDLERS._load_media(admin, user_id, args.source_image_id, "image");
     const audio = await TOOL_HANDLERS._load_media(admin, user_id, args.audio_media_id, "audio");
     const validTalking = ["stable", "expressive"];
@@ -879,7 +879,7 @@ const TOOL_HANDLERS: Record<string, any> = {
       image_url: sourceImage.url,
       audio_url: audio.url,
       talking_style, resolution, aspect_ratio, caption,
-    });
+    }, { internal, user_id });
     return { __pending_media: row.id };
   },
 };
