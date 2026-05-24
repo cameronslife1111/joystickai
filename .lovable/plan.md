@@ -1,56 +1,58 @@
-# Fix Call Mode → Plan generation
+## What's actually breaking
 
-## Problem
+I traced the failure to plan `71b46541…` (7-step multi-video plan):
+- It got stuck waiting on the very first video (`media_assets 99148d3b…`)
+- The plan was marked `failed` at 02:03 with `stalled: media generation made no progress for too long` (after `consecutive_no_progress = 120`)
+- That same video actually **completed at 02:23** — 20 minutes *after* the plan had already given up
 
-When you end a Call Mode session with "make a plan", the entire raw transcript (every user line + every Orby reply) is dropped into `plans.user_request` with only a one-line instruction telling `plan-compose` to "turn this conversation into a plan." The planner then treats the conversation itself as the request and:
+**Root cause: nothing on the server polls fal.ai for video status.**
 
-- drops intents the user expressed mid-call,
-- gets confused by Orby's hedging replies and follow-up questions,
-- sometimes mirrors conversational phrasing as steps instead of synthesizing real tool calls.
+- Images use `fal.subscribe(...)` inside the edge function and block until done, so they "just work".
+- Videos use fal's queue API (submit → status_url → response_url). The only thing that ever calls `poll-video-job` to drain that queue is the **browser hook** `useVideoJobPolling` running in the user's tab.
+- The `plan-step` runner's `awaiting_media` branch only reads the `media_assets` row — it never asks fal what the real status is.
+- So whenever the app is closed (or the user is on a different screen long enough), `media.status` stays `generating`, the runner increments `consecutive_no_progress` every tick, and after ~12 min the watchdog kills the plan. The video later finishes successfully and gets stored, but the plan is already dead.
 
-The user wants the same result they'd get by long-pressing Orby, pasting the conversation, and saying "use this conversation to generate a plan" — i.e. a distillation step first, then planning.
+This also explains the "after one video it stops" observation: the first video happens to finish while the app is open (browser polls), the plan advances, the second video starts, the user navigates away or the tab idles, the second video stalls out, plan dies.
 
-## Fix
+## The fix
 
-Insert a **transcript-distillation pass** between the call ending and `plan-compose`. The distiller is a small LLM call that reads the full transcript and outputs a clean, enumerated request brief listing every concrete intent the user expressed. That brief — not the raw transcript — becomes `plans.user_request`, and the existing planner runs against it unchanged.
+### 1. Drive fal polling from the server (the real fix)
 
-### 1. New server function: `distillCallTranscript`
+In `supabase/functions/plan-step/index.ts`, inside the `awaiting_media` branch (around line 1020–1048): before reading the `media_assets` row, if the row is `generating` AND has a `fal_status_url`, invoke `poll-video-job` internally using the existing `invokeEdgeFunction(..., { internal: true, user_id })` pattern. Then re-read the row.
 
-File: `src/lib/orby-call.functions.ts` (add alongside `chatWithOrby`).
+This makes every `plan-tick` cron run (every 10s) actively pump fal's queue for any video the plan is waiting on — no browser required.
 
-- Input: `{ transcript: string }` (Zod-validated, capped length).
-- Uses the same `createOpenAiProvider` / `gpt-5.5` setup already in this file.
-- System prompt instructs the model to:
-  - Read a voice transcript between the user and Orby.
-  - Ignore Orby's filler/acknowledgement lines and questions.
-  - Extract every concrete thing the user wants done, in the order they said it.
-  - Output a single plain-text brief: a one-line summary followed by a numbered list of intents, each phrased as a direct imperative ("Add a sentence about X to the Y doc", "Generate an image of Z", etc.).
-  - Preserve specific titles, names, and references the user mentioned verbatim so the planner's snapshot matcher can resolve them.
-  - No markdown headings, no JSON — just the brief as plain text the planner will read.
-- Returns `{ request: string }`.
+### 2. Only count "no progress" when there really is none
 
-### 2. Wire it into Call Mode
+Today the counter bumps on every tick the media is still `generating`, even right after submission. Change the awaiting_media branch so:
+- The counter resets to 0 whenever the underlying fal queue reports `IN_PROGRESS` with a fresh response (i.e. the poll call we just added succeeded and the vendor is still working) — basically, distinguish "stalled" from "still rendering".
+- Track a `media_started_at` on the step when we first enter awaiting_media, and use it for a per-media wall-clock cap (e.g. 25 min) instead of a tick-count cap. Video gens routinely take 8–15 min.
 
-File: `src/contexts/CallModeContext.tsx`, `generatePlanFromConversationInternal` (~lines 553–587):
+### 3. Bump the timeouts to match reality
 
-- Build the transcript as today.
-- Call `distillCallTranscript({ data: { transcript } })` via `useServerFn` (lifted to module top with the other server fns).
-- Use the returned `request` as `user_request` on the inserted `plans` row, prefixed with a short header like `Plan request distilled from a voice call with Orby:\n\n` so the planner knows the origin.
-- If distillation fails (network/LLM error), fall back to the current behavior (raw transcript) so the user never loses their call — but show a toast noting the fallback.
-- Keep the existing toast + `plan-compose` invocation. Approval flow is unchanged.
+In `plan-step/index.ts`:
+- Raise `MAX_NO_PROGRESS` from `120` (~12 min at one tick per ~6s) to `300`, so a single slow vendor render can't kill a long plan.
+- Leave `MAX_TICKS = 300` and the 2-hour `watchdog_at` as the outer safety nets (they're fine).
 
-### 3. No schema / planner changes
+### 4. Surface failed/completed plans the user can actually find
 
-`plan-compose` already does the right thing once it receives a clean request. No migrations, no edits to `supabase/functions/plan-compose/index.ts`, no changes to the approval UI.
+The user reported the plan "disappears". Verify `AIPlansScreen.tsx` History tab includes both `failed` and `completed` (it should — but I'll confirm and fix if a filter is dropping `failed` plans without `acknowledged=false`). No DB changes needed.
 
-## Technical notes
+### 5. Backstop: a media-poll cron
 
-- The distiller runs client-initiated through a TanStack server function (same pattern as `chatWithOrby`), so it inherits `requireSupabaseAuth` and the existing AI gateway wiring. No new secrets.
-- Cap transcript at ~16k chars before sending; truncate from the start if longer (recent turns matter more for plan intent).
-- Keep the distiller's output cap modest (e.g. ask for ≤ ~1500 chars) so `plan-compose`'s snapshot budget isn't squeezed.
-- Don't store the raw transcript separately — `plan_summary` after composition already gives the user a readable description, and the distilled brief is what they'll want to see if they inspect the plan.
+Add a tiny `/api/public/media-poll-tick` route that selects up to N `media_assets` rows with `status='generating'` and `fal_status_url IS NOT NULL` older than 15s, and invokes `poll-video-job` for each. Wire a `pg_cron` job to hit it every 15s.
+
+This is redundant with fix #1 for plan-driven videos but it also rescues **user-initiated** videos (Image-to-Video dialog, etc.) when the user closes the tab mid-generation — same underlying bug class.
 
 ## Files touched
 
-- `src/lib/orby-call.functions.ts` — add `distillCallTranscript` server fn.
-- `src/contexts/CallModeContext.tsx` — call the distiller before inserting the plan row; fall back on failure.
+- `supabase/functions/plan-step/index.ts` — server-driven poll in `awaiting_media`, smarter no-progress accounting, bigger budget.
+- `src/routes/api/public/media-poll-tick.ts` *(new)* — cron-driven media drainer.
+- One small SQL `cron.schedule(...)` insert for the new tick route (no migration; data op).
+- `src/components/AIPlansScreen.tsx` — confirm/repair History filter so failed plans never disappear.
+
+## Out of scope
+
+- No changes to how plans are composed or to the tool catalog.
+- No changes to image generation (it already blocks correctly).
+- No client-side hook changes — the browser `useVideoJobPolling` stays as a latency optimization.
