@@ -17,6 +17,7 @@ import {
   isReadDocPhrase,
   isAddTextPhrase,
   isMarkDeletePhrase,
+  isFindDocPhrase,
 } from "@/lib/call-phrases";
 import {
   resolveDocumentsByVoice,
