@@ -880,34 +880,51 @@ function buildLovablePrompt(plan: any, failedStep: any, errorMessage: string): s
   ].join("\n");
 }
 
+const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET") ?? "";
+
+// Hard caps — defense in depth against runaway plans.
+const MAX_TICKS = 300; // plenty for 50 media steps
+const MAX_NO_PROGRESS = 120; // ~12 minutes of awaiting_media with no movement
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Unauthorized" }, 401);
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-  const user = userData.user;
-
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  const { plan_id } = body ?? {};
+  const { plan_id, user_id: bodyUserId, internal_secret } = body ?? {};
   if (typeof plan_id !== "string") return json({ error: "plan_id required" }, 400);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // Two callers: (a) user from the app with a bearer token, (b) the server-side
+  // plan-tick cron passing the shared secret + the plan's user_id.
+  let userId: string;
+  let userClient: any;
+  const isInternal = !!internal_secret && internal_secret === PLAN_TICK_SECRET;
+  if (isInternal) {
+    if (typeof bodyUserId !== "string") return json({ error: "user_id required" }, 400);
+    userId = bodyUserId;
+    // No end-user JWT on internal ticks; tool handlers fall through to `admin`.
+    userClient = admin;
+  } else {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    userId = userData.user.id;
+  }
+  const user = { id: userId };
+
   // ---- Concurrency guard ----
-  // Atomically claim this plan for execution. If another invocation (other tab,
-  // duplicate poll tick, manual approval racing the advancer) already holds the
-  // claim, bail out — they will advance the plan and the next tick will retry.
-  // A 90s ceiling auto-expires zombie claims from edge functions that died mid-step.
+  // Atomically claim this plan for execution. A 90s ceiling auto-expires
+  // zombie claims from edge functions that died mid-step.
   const STALE_CLAIM_CUTOFF = new Date(Date.now() - 90_000).toISOString();
   const { data: claimed } = await admin
     .from("plans")
@@ -920,8 +937,6 @@ Deno.serve(async (req) => {
   if (!claimed) {
     return json({ status: "running", note: "already_running" });
   }
-  // From here on, the `claimed` row is the source of truth — never trust an
-  // earlier in-memory snapshot.
   const plan = claimed;
 
   const releaseClaim = async (extraUpdates: Record<string, unknown> = {}) => {
@@ -930,6 +945,29 @@ Deno.serve(async (req) => {
       .update({ step_claim_at: null, ...extraUpdates })
       .eq("id", plan_id);
   };
+
+  // ---- Guardrails ----
+  const failWithReason = async (reason: string) => {
+    await admin
+      .from("plans")
+      .update({
+        step_claim_at: null,
+        status: "failed",
+        error_message: reason,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", plan_id);
+    return json({ status: "failed", error: reason });
+  };
+  if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
+    return await failWithReason("watchdog_timeout: plan exceeded its wall-clock deadline");
+  }
+  if ((plan.tick_count ?? 0) >= MAX_TICKS) {
+    return await failWithReason(`tick_limit_exceeded: plan ran for ${MAX_TICKS} server ticks without finishing`);
+  }
+  if ((plan.consecutive_no_progress ?? 0) >= MAX_NO_PROGRESS) {
+    return await failWithReason("stalled: media generation made no progress for too long");
+  }
 
   if (plan.status === "approved") {
     plan.status = "running";
