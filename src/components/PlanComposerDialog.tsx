@@ -8,7 +8,9 @@ import { useQuery } from "@tanstack/react-query";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toast } from "sonner";
 import { useCallMode } from "@/contexts/CallModeContext";
-import { Phone } from "lucide-react";
+import { Phone, CalendarClock } from "lucide-react";
+import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
+
 
 interface Props {
   open: boolean;
@@ -36,6 +38,8 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
   const [search, setSearch] = useState("");
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
   const { startCall } = useCallMode();
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+
 
   const { data: docs = [], isLoading: docsLoading } = useQuery({
     queryKey: ["plan_composer_docs"],
@@ -278,6 +282,15 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
             Call Orby
           </button>
           <button
+            type="button"
+            onClick={() => setScheduleOpen(true)}
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-muted/40 disabled:opacity-50"
+          >
+            <CalendarClock className="h-4 w-4" />
+            Schedule
+          </button>
+          <button
             onClick={submit}
             disabled={!canSubmit}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
@@ -285,6 +298,21 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
             {busy ? "Planning…" : "Generate Plan"}
           </button>
         </div>
+        <ScheduleEditorDialog
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+          defaults={{
+            user_request: text.trim(),
+            attached_document_ids: attachedIds,
+            title: text.trim().slice(0, 60) || "Untitled schedule",
+          }}
+          onSaved={() => {
+            reset();
+            onOpenChange(false);
+            toast.success("Schedule saved — manage in AI Plans → Scheduled.");
+          }}
+        />
+
       </DialogContent>
     </Dialog>
   );

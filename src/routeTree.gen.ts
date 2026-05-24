@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
+import { Route as ApiPublicPlanSchedulerTickRouteImport } from './routes/api/public/plan-scheduler-tick'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -45,12 +46,19 @@ const ApiPublicPlanTickRoute = ApiPublicPlanTickRouteImport.update({
   path: '/api/public/plan-tick',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPlanSchedulerTickRoute =
+  ApiPublicPlanSchedulerTickRouteImport.update({
+    id: '/api/public/plan-scheduler-tick',
+    path: '/api/public/plan-scheduler-tick',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRoutesByTo {
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRoutesById {
@@ -67,13 +76,26 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/app': typeof AuthenticatedAppRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
+  '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/app' | '/media' | '/api/public/plan-tick'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/app'
+    | '/media'
+    | '/api/public/plan-scheduler-tick'
+    | '/api/public/plan-tick'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/app' | '/media' | '/api/public/plan-tick'
+  to:
+    | '/'
+    | '/auth'
+    | '/app'
+    | '/media'
+    | '/api/public/plan-scheduler-tick'
+    | '/api/public/plan-tick'
   id:
     | '__root__'
     | '/'
@@ -81,6 +103,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/app'
     | '/_authenticated/media'
+    | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
   fileRoutesById: FileRoutesById
 }
@@ -88,6 +111,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
 }
 
@@ -135,6 +159,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPlanTickRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/plan-scheduler-tick': {
+      id: '/api/public/plan-scheduler-tick'
+      path: '/api/public/plan-scheduler-tick'
+      fullPath: '/api/public/plan-scheduler-tick'
+      preLoaderRoute: typeof ApiPublicPlanSchedulerTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -156,18 +187,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

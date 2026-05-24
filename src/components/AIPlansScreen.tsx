@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PlanDetailDialog } from "./PlanDetailDialog";
 import { PlanApprovalDialog } from "./PlanApprovalDialog";
+import { ScheduledPlansList } from "./plan/ScheduledPlansList";
 
 interface Props {
   onClose: () => void;
@@ -17,6 +19,8 @@ type Plan = {
   total_steps: number;
   created_at: string;
   acknowledged: boolean;
+  schedule_id: string | null;
+  scheduled_for: string | null;
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -30,6 +34,9 @@ const STATUS_COLOR: Record<string, string> = {
   proposed: "bg-yellow-500/20 text-yellow-300",
 };
 
+const ACTIVE_STATUSES = new Set(["proposed", "composing", "approved", "running", "awaiting_media"]);
+const HISTORY_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
 function timeAgo(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return `${Math.floor(diff)}s ago`;
@@ -42,6 +49,7 @@ export function AIPlansScreen({ onClose }: Props) {
   const qc = useQueryClient();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [approvalId, setApprovalId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"active" | "scheduled" | "history">("active");
 
   const { data: plans } = useQuery({
     queryKey: ["plans"],
@@ -49,13 +57,13 @@ export function AIPlansScreen({ onClose }: Props) {
     queryFn: async (): Promise<Plan[]> => {
       const { data } = await supabase
         .from("plans")
-        .select("id, status, user_request, current_step, total_steps, created_at, acknowledged")
+        .select("id, status, user_request, current_step, total_steps, created_at, acknowledged, schedule_id, scheduled_for")
         .order("created_at", { ascending: false });
-      return data ?? [];
+      return (data as any) ?? [];
     },
   });
 
-  // Mark all unacknowledged completed/failed as acknowledged on mount
+  // Mark all unacknowledged completed/failed as acknowledged on mount.
   useEffect(() => {
     (async () => {
       await supabase
@@ -67,32 +75,8 @@ export function AIPlansScreen({ onClose }: Props) {
     })();
   }, [qc]);
 
-  const sections = useMemo(() => {
-    const all = plans ?? [];
-    return [
-      {
-        key: "proposed",
-        title: "Awaiting approval",
-        items: all.filter((p) => p.status === "proposed"),
-        clearable: false,
-      },
-      {
-        key: "composing",
-        title: "Planning",
-        items: all.filter((p) => p.status === "composing"),
-        clearable: false,
-      },
-      {
-        key: "running",
-        title: "Running",
-        items: all.filter((p) => p.status === "approved" || p.status === "running" || p.status === "awaiting_media"),
-        clearable: false,
-      },
-      { key: "failed", title: "Failed", items: all.filter((p) => p.status === "failed"), clearable: true },
-      { key: "cancelled", title: "Cancelled", items: all.filter((p) => p.status === "cancelled"), clearable: true },
-      { key: "completed", title: "Completed", items: all.filter((p) => p.status === "completed"), clearable: true },
-    ];
-  }, [plans]);
+  const active = useMemo(() => (plans ?? []).filter((p) => ACTIVE_STATUSES.has(p.status)), [plans]);
+  const history = useMemo(() => (plans ?? []).filter((p) => HISTORY_STATUSES.has(p.status)), [plans]);
 
   const handleRowClick = (p: Plan) => {
     if (p.status === "proposed" || p.status === "composing") {
@@ -102,8 +86,8 @@ export function AIPlansScreen({ onClose }: Props) {
     }
   };
 
-  const handleClearSection = async (sectionKey: string, statusValues: string[], label: string) => {
-    if (!confirm(`Delete all ${label} plans? This can't be undone.`)) return;
+  const clearHistory = async (status: string) => {
+    if (!confirm(`Delete all ${status} plans? This can't be undone.`)) return;
     const { data: auth } = await supabase.auth.getUser();
     const uid = auth.user?.id;
     if (!uid) return;
@@ -111,15 +95,41 @@ export function AIPlansScreen({ onClose }: Props) {
       .from("plans")
       .delete()
       .eq("user_id", uid)
-      .in("status", statusValues);
-    if (error) {
-      toast.error(`Couldn't clear: ${error.message}`);
-      return;
-    }
-    toast.success(`Cleared ${label} plans`);
+      .eq("status", status);
+    if (error) { toast.error(`Couldn't clear: ${error.message}`); return; }
+    toast.success(`Cleared ${status} plans`);
     qc.invalidateQueries({ queryKey: ["plans"] });
     qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
   };
+
+  const renderRow = (p: Plan) => (
+    <li key={p.id}>
+      <button
+        onClick={() => handleRowClick(p)}
+        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-muted/40"
+      >
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${STATUS_COLOR[p.status] ?? "bg-muted"}`}>
+          {p.status === "awaiting_media" ? "media" : p.status}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm">
+            {p.user_request.slice(0, 120)}
+            {p.schedule_id && (
+              <span className="ml-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">
+                scheduled
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            {p.status === "proposed"
+              ? "Tap to review"
+              : `${p.current_step}/${p.total_steps} · ${timeAgo(p.created_at)}`}
+          </div>
+        </div>
+        <span className="shrink-0 text-muted-foreground">›</span>
+      </button>
+    </li>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground overflow-hidden">
@@ -129,52 +139,61 @@ export function AIPlansScreen({ onClose }: Props) {
           Close
         </button>
       </header>
-      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-4 space-y-6 sm:px-4">
-        {sections.map((sec) => (
-          <section key={sec.key}>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
-                {sec.title} ({sec.items.length})
-              </h2>
-              {sec.clearable && sec.items.length > 0 && (
-                <button
-                  onClick={() => handleClearSection(sec.key, [sec.key], sec.title.toLowerCase())}
-                  className="rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:text-destructive"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-            {sec.items.length === 0 ? (
-              <div className="text-xs text-muted-foreground/60">None</div>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="flex flex-1 min-h-0 flex-col">
+        <div className="shrink-0 border-b border-border px-3 py-2 sm:px-4">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="active">Active ({active.length})</TabsTrigger>
+            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+            <TabsTrigger value="history">History ({history.length})</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-4 sm:px-4">
+          <TabsContent value="active" className="mt-0">
+            {active.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                Nothing running right now.
+              </div>
             ) : (
-              <ul className="space-y-2">
-                {sec.items.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      onClick={() => handleRowClick(p)}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-muted/40"
-                    >
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${STATUS_COLOR[p.status] ?? "bg-muted"}`}>
-                        {p.status === "awaiting_media" ? "media" : p.status}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm">{p.user_request.slice(0, 120)}</div>
-                        <div className="mt-0.5 text-[11px] text-muted-foreground">
-                          {p.status === "proposed"
-                            ? "Tap to review"
-                            : `${p.current_step}/${p.total_steps} · ${timeAgo(p.created_at)}`}
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-muted-foreground">›</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <ul className="space-y-2">{active.map(renderRow)}</ul>
             )}
-          </section>
-        ))}
-      </div>
+          </TabsContent>
+
+          <TabsContent value="scheduled" className="mt-0">
+            <ScheduledPlansList />
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0 space-y-4">
+            {(["completed", "failed", "cancelled"] as const).map((status) => {
+              const items = history.filter((p) => p.status === status);
+              return (
+                <section key={status}>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
+                      {status} ({items.length})
+                    </h2>
+                    {items.length > 0 && (
+                      <button
+                        onClick={() => clearHistory(status)}
+                        className="rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:text-destructive"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  {items.length === 0 ? (
+                    <div className="text-xs text-muted-foreground/60">None</div>
+                  ) : (
+                    <ul className="space-y-2">{items.map(renderRow)}</ul>
+                  )}
+                </section>
+              );
+            })}
+          </TabsContent>
+        </div>
+      </Tabs>
+
       <PlanDetailDialog planId={detailId} open={!!detailId} onOpenChange={(v: boolean) => { if (!v) setDetailId(null); }} />
       <PlanApprovalDialog
         planId={approvalId}
