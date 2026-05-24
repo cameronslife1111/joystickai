@@ -32,7 +32,8 @@ export const chatWithOrby = createServerFn({ method: "POST" })
       "If the user asks you to make / generate / build / turn this into a plan, acknowledge briefly that you'll generate the plan now — the app will hang up automatically. " +
       "If the user says goodbye or hang up, say a brief farewell and the app will end the call. " +
       "The user may attach document contents to this conversation as assistant messages of the form '[document: \"<title>\"]' followed by numbered sentences. Treat those as authoritative context for follow-up questions and reference the document by title when helpful. " +
-      "If the user asks you to read, open, pull up, add text to, or mark sentences for deletion in a document, simply acknowledge briefly (e.g. 'Reading it now.' or 'Adding to it.') — the app performs the action automatically.";
+      "If the user asks you to read, open, pull up, add text to, or mark sentences for deletion in a document, simply acknowledge briefly (e.g. 'Reading it now.' or 'Adding to it.') — the app performs the action automatically. " +
+      "If the user is trying to remember a document's name or asks what a document is called, reply briefly with the closest matching title using the phrasing \"The title you may be referring to is '<title>'.\" and do not take any other action unless asked.";
 
     const { text } = await aiSdkGenerateText({
       model,
