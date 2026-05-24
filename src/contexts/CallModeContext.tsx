@@ -111,6 +111,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const wakeLockRef = useRef<any>(null);
 
   const callChat = useServerFn(chatWithOrby);
+  const distillFn = useServerFn(distillCallTranscript);
 
   // Keep refs in sync.
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
