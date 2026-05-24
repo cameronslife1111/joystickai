@@ -1014,7 +1014,9 @@ Deno.serve(async (req) => {
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
-      await releaseClaim();
+      // Still waiting on the vendor — bump the no-progress counter so we
+      // can fail-stop after MAX_NO_PROGRESS ticks instead of polling forever.
+      await releaseClaim({ consecutive_no_progress: (plan.consecutive_no_progress ?? 0) + 1 });
       return json({ status: "awaiting_media", media_id: mediaId });
     }
     if (media.status === "failed") {
