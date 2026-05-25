@@ -944,6 +944,72 @@ function AppPage() {
     }
   }, [favorites, activeDocId, docs, sentences, currentIdx, saveFavorites, saveLastFavoriteSlot, cancelCompose, claimSpeech, speak]);
 
+  // Swap every slot currently holding the active document to the next
+  // document in alphabetical order (same sort used everywhere else).
+  const swapSlot = useCallback(async () => {
+    if (!docs || !activeDocId) return;
+    const slotsHolding = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s) => s.id === activeDocId)
+      .map((s) => s.i);
+    if (slotsHolding.length === 0) {
+      toast.error("This document isn't in any slot");
+      return;
+    }
+    if (docs.length < 2) {
+      toast.error("No other document to swap to");
+      return;
+    }
+    const sorted = sortDocsByTitle(docs);
+    const curPos = sorted.findIndex((d) => d.id === activeDocId);
+    const nextDoc = sorted[(curPos + 1) % sorted.length];
+    if (!nextDoc || nextDoc.id === activeDocId) return;
+
+    const token = claimSpeech();
+    const next = [...favorites];
+    for (const i of slotsHolding) next[i] = nextDoc.id;
+    await saveFavorites(next);
+    const stickSlot = slotsHolding.includes(favIdxRef.current)
+      ? favIdxRef.current
+      : slotsHolding[0];
+    favIdxRef.current = stickSlot;
+    await saveLastFavoriteSlot(stickSlot);
+
+    // Navigate the view to the new document, mirroring onSwipeRight.
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", nextDoc.id)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", nextDoc.id)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0 ? 0 : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+    qc.setQueryData<Sentence[]>(["sentences", nextDoc.id], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === nextDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", nextDoc.id);
+    }
+    setActiveDocId(nextDoc.id);
+    toast.success(`Swapped to "${nextDoc.title}" in ${slotsHolding.length} slot${slotsHolding.length === 1 ? "" : "s"}`);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak]);
+
+
+
 
   // Parse a .txt file of checklists into [{ title, sentences[] }, ...]
   // Format: titles on their own line wrapped in ===...===, items below as
@@ -1299,7 +1365,9 @@ function AppPage() {
         toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
       },
     },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites]);
+    { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); void swapSlot(); } },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, swapSlot]);
+
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
@@ -1326,7 +1394,9 @@ function AppPage() {
     filled[19] = grid[20]; // 20 Plan mode
     filled[20] = grid[21]; // 21 AI Plans
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
+    filled[22] = grid[23]; // 23 Swap slot
     filled[23] = grid[14]; // 24 Sign out
+
 
     return filled;
   }, [grid]);
