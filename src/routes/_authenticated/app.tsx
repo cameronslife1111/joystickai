@@ -1365,7 +1365,9 @@ function AppPage() {
         toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
       },
     },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites]);
+    { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); void swapSlot(); } },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, swapSlot]);
+
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
