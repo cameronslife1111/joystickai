@@ -941,6 +941,43 @@ function MediaPage() {
         </div>
       )}
 
+      {/* Batch delete confirm */}
+      {confirmBatchDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => { if (!batchDeleting) setConfirmBatchDelete(false); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 font-display text-base">
+              Delete {selectedIds.size} item{selectedIds.size === 1 ? "" : "s"}?
+            </p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              This removes the files from your gallery and storage. This can't be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                disabled={batchDeleting}
+                onClick={() => setConfirmBatchDelete(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={batchDeleting}
+                onClick={() => { setConfirmBatchDelete(false); void handleBatchDelete(); }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25 disabled:opacity-40"
+              >
+                {batchDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Floating Generate FAB — hidden when viewer is open */}
       {viewerIdx === null && (
         <button
