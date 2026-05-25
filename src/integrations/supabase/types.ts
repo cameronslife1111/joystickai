@@ -423,6 +423,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      commit_document_edit: {
+        Args: { p_contents: string[]; p_document_id: string }
+        Returns: undefined
+      }
       compact_sentence_indexes: {
         Args: { p_document_id: string }
         Returns: undefined
