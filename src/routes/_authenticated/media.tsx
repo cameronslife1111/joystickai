@@ -415,66 +415,137 @@ function MediaPage() {
 
       {/* Top bar */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
-        <button
-          onClick={() => navigate({ to: "/app" })}
-          aria-label="Back"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="font-display text-lg">Media Gallery</h1>
         <div className="flex items-center gap-2">
-          {(() => {
-            const downloadable = filtered.filter(
-              (a) => a.url && (a.status === "completed" || !a.status),
-            );
-            const busy = downloadAll.progress
-              && downloadAll.progress.phase !== "done"
-              && downloadAll.progress.phase !== "error"
-              && downloadAll.progress.phase !== "cancelled";
-            const disabled = downloadable.length === 0 || !!busy;
-            const filterLabel = filter === "all" ? "media" : `${filter}s`;
-            return (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  downloadAll.start(
-                    downloadable.map((a) => ({
-                      id: a.id,
-                      title: a.title,
-                      kind: a.kind,
-                      url: a.url,
-                      mime_type: a.mime_type,
-                      size_bytes: a.size_bytes,
-                    })),
-                    filterLabel,
-                  );
-                }}
-                aria-label={`Download all ${filterLabel}`}
-                title={
-                  downloadable.length === 0
-                    ? "Nothing to download yet"
-                    : `Download all ${filterLabel} (${downloadable.length})`
-                }
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
-              >
-                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-              </button>
-            );
-          })()}
+          <button
+            onClick={() => navigate({ to: "/app" })}
+            aria-label="Back"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <button
             onClick={() => {
-              console.log("[media] + clicked, input ref:", !!fileInputRef.current);
-              fileInputRef.current?.click();
+              if (selectMode) exitSelectMode();
+              else setSelectMode(true);
             }}
-            aria-label="Upload media"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+            aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
+            title={selectMode ? "Exit multi-select" : "Select multiple"}
+            className={
+              "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
+              (selectMode
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-foreground/10 hover:bg-foreground/10")
+            }
           >
-            <Plus className="h-5 w-5" />
+            <CheckSquare className="h-5 w-5" />
           </button>
         </div>
+        <h1 className="font-display text-lg">
+          {selectMode ? `${selectedIds.size} selected` : "Media Gallery"}
+        </h1>
+        <div className="flex items-center gap-2">
+          {selectMode ? (
+            <>
+              <button
+                type="button"
+                disabled={selectedIds.size === 0 || batchDeleting}
+                onClick={() => setConfirmBatchDelete(true)}
+                aria-label={`Delete ${selectedIds.size} items`}
+                className="flex h-10 items-center justify-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/15 px-3 text-destructive transition active:scale-95 hover:bg-destructive/25 disabled:opacity-40"
+              >
+                {batchDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <span className="text-sm">{selectedIds.size}</span>
+              </button>
+              <button
+                type="button"
+                onClick={exitSelectMode}
+                aria-label="Cancel selection"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </>
+          ) : (
+            <>
+              {(() => {
+                const downloadable = filtered.filter(
+                  (a) => a.url && (a.status === "completed" || !a.status),
+                );
+                const busy = downloadAll.progress
+                  && downloadAll.progress.phase !== "done"
+                  && downloadAll.progress.phase !== "error"
+                  && downloadAll.progress.phase !== "cancelled";
+                const disabled = downloadable.length === 0 || !!busy;
+                const filterLabel = filter === "all" ? "media" : `${filter}s`;
+                return (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      downloadAll.start(
+                        downloadable.map((a) => ({
+                          id: a.id,
+                          title: a.title,
+                          kind: a.kind,
+                          url: a.url,
+                          mime_type: a.mime_type,
+                          size_bytes: a.size_bytes,
+                        })),
+                        filterLabel,
+                      );
+                    }}
+                    aria-label={`Download all ${filterLabel}`}
+                    title={
+                      downloadable.length === 0
+                        ? "Nothing to download yet"
+                        : `Download all ${filterLabel} (${downloadable.length})`
+                    }
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  >
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+                  </button>
+                );
+              })()}
+              <button
+                onClick={() => {
+                  console.log("[media] + clicked, input ref:", !!fileInputRef.current);
+                  fileInputRef.current?.click();
+                }}
+                aria-label="Upload media"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            </>
+          )}
+        </div>
       </header>
+
+      {/* Select-all bar */}
+      {selectMode && (
+        <div className="flex items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
+          <span className="text-muted-foreground">
+            {selectedIds.size === 0 ? "Tap items to select" : `${selectedIds.size} of ${filtered.length} selected`}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set(filtered.map((a) => a.id)))}
+              className="rounded-full border border-foreground/10 px-3 py-1 hover:bg-foreground/10"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0}
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-full border border-foreground/10 px-3 py-1 hover:bg-foreground/10 disabled:opacity-40"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter chips */}
       <div className="flex gap-2 overflow-x-auto px-4 py-3">
