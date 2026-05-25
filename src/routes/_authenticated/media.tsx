@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
+  CheckSquare, CheckCircle2,
 } from "lucide-react";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
@@ -122,6 +123,10 @@ function MediaPage() {
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -313,6 +318,61 @@ function MediaPage() {
     await deleteAsset(a);
   }, [sheetAsset, deleteAsset]);
 
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setConfirmBatchDelete(false);
+  }, []);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBatchDeleting(true);
+    const ids = Array.from(selectedIds);
+    const all = qc.getQueryData<Asset[]>(["media_assets"]) ?? [];
+    const targets = all.filter((a) => selectedIds.has(a.id));
+    const paths = targets.map((a) => a.storage_path).filter((p): p is string => !!p);
+
+    // Optimistic remove from cache
+    qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => !selectedIds.has(x.id)) ?? prev);
+
+    let storageFailed = 0;
+    if (paths.length > 0) {
+      const { data, error } = await supabase.storage.from(BUCKET).remove(paths);
+      if (error) {
+        storageFailed = paths.length;
+      } else {
+        const removed = new Set((data ?? []).map((d: any) => d.name as string));
+        storageFailed = paths.filter((p) => !removed.has(p)).length;
+      }
+    }
+
+    const { error: delErr } = await supabase.from("media_assets").delete().in("id", ids);
+    if (delErr) {
+      toast.error(delErr.message);
+      qc.invalidateQueries({ queryKey: ["media_assets"] });
+      setBatchDeleting(false);
+      return;
+    }
+
+    qc.invalidateQueries({ queryKey: ["media_assets"] });
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+    if (storageFailed > 0) {
+      toast.success(`Deleted ${ids.length} item${ids.length === 1 ? "" : "s"} (${storageFailed} storage file${storageFailed === 1 ? "" : "s"} could not be removed)`);
+    } else {
+      toast.success(`Deleted ${ids.length} item${ids.length === 1 ? "" : "s"}`);
+    }
+    setBatchDeleting(false);
+    exitSelectMode();
+  }, [selectedIds, qc, exitSelectMode]);
+
   // Viewer keyboard + swipe
   useEffect(() => {
     if (viewerIdx === null) return;
@@ -355,66 +415,137 @@ function MediaPage() {
 
       {/* Top bar */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
-        <button
-          onClick={() => navigate({ to: "/app" })}
-          aria-label="Back"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="font-display text-lg">Media Gallery</h1>
         <div className="flex items-center gap-2">
-          {(() => {
-            const downloadable = filtered.filter(
-              (a) => a.url && (a.status === "completed" || !a.status),
-            );
-            const busy = downloadAll.progress
-              && downloadAll.progress.phase !== "done"
-              && downloadAll.progress.phase !== "error"
-              && downloadAll.progress.phase !== "cancelled";
-            const disabled = downloadable.length === 0 || !!busy;
-            const filterLabel = filter === "all" ? "media" : `${filter}s`;
-            return (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  downloadAll.start(
-                    downloadable.map((a) => ({
-                      id: a.id,
-                      title: a.title,
-                      kind: a.kind,
-                      url: a.url,
-                      mime_type: a.mime_type,
-                      size_bytes: a.size_bytes,
-                    })),
-                    filterLabel,
-                  );
-                }}
-                aria-label={`Download all ${filterLabel}`}
-                title={
-                  downloadable.length === 0
-                    ? "Nothing to download yet"
-                    : `Download all ${filterLabel} (${downloadable.length})`
-                }
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
-              >
-                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-              </button>
-            );
-          })()}
+          <button
+            onClick={() => navigate({ to: "/app" })}
+            aria-label="Back"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
           <button
             onClick={() => {
-              console.log("[media] + clicked, input ref:", !!fileInputRef.current);
-              fileInputRef.current?.click();
+              if (selectMode) exitSelectMode();
+              else setSelectMode(true);
             }}
-            aria-label="Upload media"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+            aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
+            title={selectMode ? "Exit multi-select" : "Select multiple"}
+            className={
+              "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
+              (selectMode
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-foreground/10 hover:bg-foreground/10")
+            }
           >
-            <Plus className="h-5 w-5" />
+            <CheckSquare className="h-5 w-5" />
           </button>
         </div>
+        <h1 className="font-display text-lg">
+          {selectMode ? `${selectedIds.size} selected` : "Media Gallery"}
+        </h1>
+        <div className="flex items-center gap-2">
+          {selectMode ? (
+            <>
+              <button
+                type="button"
+                disabled={selectedIds.size === 0 || batchDeleting}
+                onClick={() => setConfirmBatchDelete(true)}
+                aria-label={`Delete ${selectedIds.size} items`}
+                className="flex h-10 items-center justify-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/15 px-3 text-destructive transition active:scale-95 hover:bg-destructive/25 disabled:opacity-40"
+              >
+                {batchDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <span className="text-sm">{selectedIds.size}</span>
+              </button>
+              <button
+                type="button"
+                onClick={exitSelectMode}
+                aria-label="Cancel selection"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </>
+          ) : (
+            <>
+              {(() => {
+                const downloadable = filtered.filter(
+                  (a) => a.url && (a.status === "completed" || !a.status),
+                );
+                const busy = downloadAll.progress
+                  && downloadAll.progress.phase !== "done"
+                  && downloadAll.progress.phase !== "error"
+                  && downloadAll.progress.phase !== "cancelled";
+                const disabled = downloadable.length === 0 || !!busy;
+                const filterLabel = filter === "all" ? "media" : `${filter}s`;
+                return (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      downloadAll.start(
+                        downloadable.map((a) => ({
+                          id: a.id,
+                          title: a.title,
+                          kind: a.kind,
+                          url: a.url,
+                          mime_type: a.mime_type,
+                          size_bytes: a.size_bytes,
+                        })),
+                        filterLabel,
+                      );
+                    }}
+                    aria-label={`Download all ${filterLabel}`}
+                    title={
+                      downloadable.length === 0
+                        ? "Nothing to download yet"
+                        : `Download all ${filterLabel} (${downloadable.length})`
+                    }
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  >
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+                  </button>
+                );
+              })()}
+              <button
+                onClick={() => {
+                  console.log("[media] + clicked, input ref:", !!fileInputRef.current);
+                  fileInputRef.current?.click();
+                }}
+                aria-label="Upload media"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            </>
+          )}
+        </div>
       </header>
+
+      {/* Select-all bar */}
+      {selectMode && (
+        <div className="flex items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
+          <span className="text-muted-foreground">
+            {selectedIds.size === 0 ? "Tap items to select" : `${selectedIds.size} of ${filtered.length} selected`}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set(filtered.map((a) => a.id)))}
+              className="rounded-full border border-foreground/10 px-3 py-1 hover:bg-foreground/10"
+            >
+              Select all
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0}
+              onClick={() => setSelectedIds(new Set())}
+              className="rounded-full border border-foreground/10 px-3 py-1 hover:bg-foreground/10 disabled:opacity-40"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter chips */}
       <div className="flex gap-2 overflow-x-auto px-4 py-3">
@@ -467,21 +598,33 @@ function MediaPage() {
             {filtered.map((a, i) => {
               const isGenerating = a.status === "generating";
               const isFailed = a.status === "failed";
+              const isSelected = selectedIds.has(a.id);
               return (
                 <button
                   key={a.id}
                   onClick={() => {
+                    if (selectMode) {
+                      if (isGenerating) return;
+                      toggleSelected(a.id);
+                      return;
+                    }
                     if (isGenerating) return;
                     if (isFailed) { setFailedAsset(a); return; }
                     openViewer(i);
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    if (selectMode) return;
                     if (isGenerating) return;
                     setSheetAsset(a);
                   }}
                   style={NO_CALLOUT_STYLE}
-                  className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
+                  className={
+                    "group relative aspect-square overflow-hidden rounded-2xl border bg-foreground/5 transition active:scale-95 " +
+                    (selectMode && isSelected
+                      ? "border-primary ring-2 ring-primary"
+                      : "border-foreground/10")
+                  }
                 >
                   {isGenerating ? (
                     <div
@@ -525,13 +668,23 @@ function MediaPage() {
                           <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
                         </div>
                       )}
-                      {!a.seen_at && (
+                      {!a.seen_at && !selectMode && (
                         <span
                           className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
                           style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
                         />
                       )}
                     </>
+                  )}
+                  {selectMode && (
+                    <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-background/80 backdrop-blur">
+                      {isSelected
+                        ? <CheckCircle2 className="h-5 w-5 text-primary" />
+                        : <span className="h-4 w-4 rounded-full border-2 border-foreground/40" />}
+                    </span>
+                  )}
+                  {selectMode && isSelected && (
+                    <span className="pointer-events-none absolute inset-0 bg-primary/15" />
                   )}
                 </button>
               );
@@ -783,6 +936,43 @@ function MediaPage() {
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button onClick={handleDelete}
                 className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch delete confirm */}
+      {confirmBatchDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => { if (!batchDeleting) setConfirmBatchDelete(false); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 font-display text-base">
+              Delete {selectedIds.size} item{selectedIds.size === 1 ? "" : "s"}?
+            </p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              This removes the files from your gallery and storage. This can't be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                disabled={batchDeleting}
+                onClick={() => setConfirmBatchDelete(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={batchDeleting}
+                onClick={() => { setConfirmBatchDelete(false); void handleBatchDelete(); }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25 disabled:opacity-40"
+              >
+                {batchDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Delete
+              </button>
             </div>
           </div>
         </div>
