@@ -754,142 +754,47 @@ function AppPage() {
       return true;
     }
 
-    // Identity-preserving diff: for each new part, try to match an existing row
-    // by exact content (preferring the existing row whose order_index is
-    // closest to the part's new position). Reusing the row id preserves
-    // linked_document_id and any other per-row metadata so links travel with
-    // the sentence text instead of being stuck to a position.
-    //
-    // Build a content -> [{ id, order_index }] multimap of unclaimed rows.
-    const pool = new Map<string, { id: string; order_index: number }[]>();
-    for (const row of existing) {
-      const list = pool.get(row.content);
-      const entry = { id: row.id, order_index: row.order_index };
-      if (list) list.push(entry);
-      else pool.set(row.content, [entry]);
+    // Skip-if-unchanged: if new parts match existing rows' content in order,
+    // there is nothing to save. Neutralizes the case where opening + closing
+    // the editor on a doc containing sentences with internal '?' / '!' / '.'
+    // would otherwise trigger a destructive re-split + reinsert round-trip.
+    if (existing.length === parts.length) {
+      let same = true;
+      for (let i = 0; i < parts.length; i++) {
+        if (existing[i].content !== parts[i]) { same = false; break; }
+      }
+      if (same) {
+        const fallback = Math.min(editOriginIdxRef.current, parts.length - 1);
+        const targetIdx = rawTargetIdx == null
+          ? Math.max(0, fallback)
+          : Math.max(0, Math.min(rawTargetIdx, parts.length - 1));
+        await setIndex(targetIdx);
+        setEditing(false);
+        setEditText("");
+        const token = claimSpeech();
+        speak(parts[targetIdx], token);
+        return true;
+      }
     }
 
-    type Plan =
-      | { kind: "reuse"; id: string; newIdx: number; content: string }
-      | { kind: "insert"; newIdx: number; content: string };
-    const plans: Plan[] = [];
-    const claimedIds = new Set<string>();
-
-    parts.forEach((content, newIdx) => {
-      const candidates = pool.get(content);
-      if (candidates && candidates.length > 0) {
-        // Pick the candidate whose original order_index is closest to newIdx.
-        let bestI = 0;
-        let bestDist = Math.abs(candidates[0].order_index - newIdx);
-        for (let i = 1; i < candidates.length; i++) {
-          const d = Math.abs(candidates[i].order_index - newIdx);
-          if (d < bestDist) { bestDist = d; bestI = i; }
-        }
-        const chosen = candidates.splice(bestI, 1)[0];
-        if (candidates.length === 0) pool.delete(content);
-        claimedIds.add(chosen.id);
-        plans.push({ kind: "reuse", id: chosen.id, newIdx, content });
-      } else {
-        plans.push({ kind: "insert", newIdx, content });
-      }
+    // Atomic save: a single transactional RPC replaces the old 4-step
+    // park/reuse/insert/delete dance. A mid-save network handoff
+    // (Wi-Fi <-> cellular) can now only land in pre-call or post-call state,
+    // never a "rows stranded at order_index 1_000_000+" half-applied state.
+    // The RPC preserves row identity (and therefore linked_document_id) by
+    // matching new parts to existing rows on exact content, closest-by-order.
+    const { error: rpcErr } = await supabase.rpc("commit_document_edit", {
+      p_document_id: activeDocId,
+      p_contents: parts,
     });
-
-    // Step A: park ALL existing rows in a high range to free 0..N-1.
-    // Even rows we plan to reuse need to be parked first, because their new
-    // order_index may collide with another existing row's current order_index
-    // under the unique (document_id, order_index) constraint.
-    let parked = false;
-    // If any post-park step fails, call move_sentence(0,0) which compacts the
-    // document's order_index back to 0..N-1 — rescuing parked rows that would
-    // otherwise be stranded at PARK_BASE+ forever (the bug that left one doc
-    // with order_index = 1,000,012).
-    const recoverFromPark = async () => {
-      if (!parked || !activeDocId) return;
-      try {
-        await supabase.rpc("move_sentence", {
-          p_document_id: activeDocId,
-          p_from_index: 0,
-          p_to_index: 0,
-        });
-      } catch (e) {
-        console.error("[edit] recovery compact failed", e);
-      }
-    };
-
-    if (existing.length > 0) {
-      const PARK_BASE = 1_000_000;
-      const parkUpdates = await Promise.all(
-        existing.map((s, i) =>
-          supabase.from("sentences")
-            .update({ order_index: PARK_BASE + i })
-            .eq("id", s.id)
-            .then((res) => res),
-        ),
-      );
-      const parkErr = parkUpdates.find((r) => r.error)?.error;
-      if (parkErr) {
-        console.error("[edit] park step failed", parkErr);
-        toast.error("Couldn't save edits");
-        return false;
-      }
-      parked = true;
+    if (rpcErr) {
+      console.error("[edit] commit_document_edit failed", rpcErr);
+      toast.error("Couldn't save edits");
+      return false;
     }
-
-    // Step B: place each reused row at its new order_index. Content is
-    // unchanged by definition (we matched on exact content), but we still set
-    // it to be explicit. linked_document_id is left untouched.
-    const reuseSteps = plans.filter((p): p is Extract<Plan, { kind: "reuse" }> => p.kind === "reuse");
-    if (reuseSteps.length > 0) {
-      const updateResults = await Promise.all(
-        reuseSteps.map((p) =>
-          supabase.from("sentences")
-            .update({ order_index: p.newIdx, content: p.content })
-            .eq("id", p.id)
-            .then((res) => res),
-        ),
-      );
-      const updErr = updateResults.find((r) => r.error)?.error;
-      if (updErr) {
-        console.error("[edit] update step failed", updErr);
-        await recoverFromPark();
-        toast.error("Couldn't save edits");
-        return false;
-      }
-    }
-
-    // Step C: insert brand-new rows at their target order_index. No link
-    // (linked_document_id defaults to null) — new text gets a fresh identity.
-    const insertSteps = plans.filter((p): p is Extract<Plan, { kind: "insert" }> => p.kind === "insert");
-    if (insertSteps.length > 0) {
-      const newRows = insertSteps.map((p) => ({
-        user_id: u.user!.id,
-        document_id: activeDocId,
-        content: p.content,
-        order_index: p.newIdx,
-      }));
-      const { error: insErr } = await supabase.from("sentences").insert(newRows);
-      if (insErr) {
-        console.error("[edit] insert step failed", insErr);
-        await recoverFromPark();
-        toast.error("Couldn't save edits");
-        return false;
-      }
-    }
-
-    // Step D: delete any existing rows that weren't claimed (still parked).
-    const surplus = existing.filter((s) => !claimedIds.has(s.id)).map((s) => s.id);
-    if (surplus.length > 0) {
-      const { error: delErr } = await supabase.from("sentences").delete().in("id", surplus);
-      if (delErr) {
-        console.error("[edit] delete-surplus step failed", delErr);
-        await recoverFromPark();
-        toast.error("Couldn't save edits");
-        return false;
-      }
-    }
-
 
     qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+
 
     // Resolve the post-save index.
     const fallback = Math.min(editOriginIdxRef.current, parts.length - 1);
