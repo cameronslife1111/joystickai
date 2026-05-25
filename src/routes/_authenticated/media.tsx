@@ -318,6 +318,61 @@ function MediaPage() {
     await deleteAsset(a);
   }, [sheetAsset, deleteAsset]);
 
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setConfirmBatchDelete(false);
+  }, []);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setBatchDeleting(true);
+    const ids = Array.from(selectedIds);
+    const all = qc.getQueryData<Asset[]>(["media_assets"]) ?? [];
+    const targets = all.filter((a) => selectedIds.has(a.id));
+    const paths = targets.map((a) => a.storage_path).filter((p): p is string => !!p);
+
+    // Optimistic remove from cache
+    qc.setQueryData<Asset[]>(["media_assets"], (prev) => prev?.filter((x) => !selectedIds.has(x.id)) ?? prev);
+
+    let storageFailed = 0;
+    if (paths.length > 0) {
+      const { data, error } = await supabase.storage.from(BUCKET).remove(paths);
+      if (error) {
+        storageFailed = paths.length;
+      } else {
+        const removed = new Set((data ?? []).map((d: any) => d.name as string));
+        storageFailed = paths.filter((p) => !removed.has(p)).length;
+      }
+    }
+
+    const { error: delErr } = await supabase.from("media_assets").delete().in("id", ids);
+    if (delErr) {
+      toast.error(delErr.message);
+      qc.invalidateQueries({ queryKey: ["media_assets"] });
+      setBatchDeleting(false);
+      return;
+    }
+
+    qc.invalidateQueries({ queryKey: ["media_assets"] });
+    qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+    if (storageFailed > 0) {
+      toast.success(`Deleted ${ids.length} item${ids.length === 1 ? "" : "s"} (${storageFailed} storage file${storageFailed === 1 ? "" : "s"} could not be removed)`);
+    } else {
+      toast.success(`Deleted ${ids.length} item${ids.length === 1 ? "" : "s"}`);
+    }
+    setBatchDeleting(false);
+    exitSelectMode();
+  }, [selectedIds, qc, exitSelectMode]);
+
   // Viewer keyboard + swipe
   useEffect(() => {
     if (viewerIdx === null) return;
