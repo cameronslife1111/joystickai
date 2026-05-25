@@ -1394,7 +1394,9 @@ function AppPage() {
     filled[19] = grid[20]; // 20 Plan mode
     filled[20] = grid[21]; // 21 AI Plans
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
+    filled[22] = grid[23]; // 23 Swap slot
     filled[23] = grid[14]; // 24 Sign out
+
 
     return filled;
   }, [grid]);
