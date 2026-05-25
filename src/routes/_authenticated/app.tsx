@@ -558,7 +558,15 @@ function AppPage() {
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
-    if (lockFavorites) return; // List cycling locked by user
+    if (lockFavorites) {
+      // List cycling locked — repeat current sentence instead of advancing.
+      const token = claimSpeech();
+      const text = sentences?.[currentIdx]?.content;
+      if (text) speak(text, token);
+      return;
+    }
+
+
 
 
     // Claim TTS BEFORE the network round-trip so any in-flight utterance
