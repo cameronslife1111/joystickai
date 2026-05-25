@@ -598,21 +598,33 @@ function MediaPage() {
             {filtered.map((a, i) => {
               const isGenerating = a.status === "generating";
               const isFailed = a.status === "failed";
+              const isSelected = selectedIds.has(a.id);
               return (
                 <button
                   key={a.id}
                   onClick={() => {
+                    if (selectMode) {
+                      if (isGenerating) return;
+                      toggleSelected(a.id);
+                      return;
+                    }
                     if (isGenerating) return;
                     if (isFailed) { setFailedAsset(a); return; }
                     openViewer(i);
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    if (selectMode) return;
                     if (isGenerating) return;
                     setSheetAsset(a);
                   }}
                   style={NO_CALLOUT_STYLE}
-                  className="group relative aspect-square overflow-hidden rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95"
+                  className={
+                    "group relative aspect-square overflow-hidden rounded-2xl border bg-foreground/5 transition active:scale-95 " +
+                    (selectMode && isSelected
+                      ? "border-primary ring-2 ring-primary"
+                      : "border-foreground/10")
+                  }
                 >
                   {isGenerating ? (
                     <div
@@ -656,13 +668,23 @@ function MediaPage() {
                           <span className="line-clamp-2 text-[10px] text-white/90">{a.title}</span>
                         </div>
                       )}
-                      {!a.seen_at && (
+                      {!a.seen_at && !selectMode && (
                         <span
                           className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
                           style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
                         />
                       )}
                     </>
+                  )}
+                  {selectMode && (
+                    <span className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-background/80 backdrop-blur">
+                      {isSelected
+                        ? <CheckCircle2 className="h-5 w-5 text-primary" />
+                        : <span className="h-4 w-4 rounded-full border-2 border-foreground/40" />}
+                    </span>
+                  )}
+                  {selectMode && isSelected && (
+                    <span className="pointer-events-none absolute inset-0 bg-primary/15" />
                   )}
                 </button>
               );
