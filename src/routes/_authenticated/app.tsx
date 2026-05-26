@@ -1016,6 +1016,52 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak]);
 
+  // Open the document in a favorites slot: jump to it, restore its saved
+  // sentence position, and speak the current sentence (same flow as
+  // cycling to it via swipe-right).
+  const openFavoriteSlot = useCallback(async (i: number) => {
+    const targetId = favorites[i];
+    if (!targetId) return;
+    const token = claimSpeech();
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+    favIdxRef.current = i;
+    void saveLastFavoriteSlot(i);
+    setActiveDocId(targetId);
+    setFavoritesOpen(false);
+    setPickerSlot(null);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [favorites, qc, claimSpeech, speak, saveLastFavoriteSlot]);
+
+
+
 
 
 
