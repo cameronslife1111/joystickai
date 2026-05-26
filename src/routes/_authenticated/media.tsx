@@ -945,6 +945,58 @@ function MediaPage() {
         </div>
       )}
 
+      {/* View prompt */}
+      {promptAsset && (() => {
+        const params = promptAsset.generation_params as { user_text?: string } | null;
+        const promptText = params?.user_text?.trim() ?? "";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onClick={() => setPromptAsset(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-foreground/10 bg-card p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-3 font-display text-base">Prompt</p>
+              {promptText ? (
+                <div className="mb-4 max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-foreground/10 bg-background/50 p-3 text-sm leading-relaxed selection:bg-primary/20">
+                  {promptText}
+                </div>
+              ) : (
+                <div className="mb-4 rounded-xl border border-foreground/10 bg-background/50 p-3 text-sm italic text-muted-foreground">
+                  No prompt available for this asset.
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setPromptAsset(null)}
+                  className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+                <button
+                  disabled={!promptText}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(promptText);
+                      toast.success("Prompt copied");
+                    } catch {
+                      toast.error("Couldn't copy prompt");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Copy className="h-4 w-4" /> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+
+
       {/* Batch delete confirm */}
       {confirmBatchDelete && (
         <div
