@@ -1016,52 +1016,6 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak]);
 
-  // Open the document in a favorites slot: jump to it, restore its saved
-  // sentence position, and speak the current sentence (same flow as
-  // cycling to it via swipe-right).
-  const openFavoriteSlot = useCallback(async (i: number) => {
-    const targetId = favorites[i];
-    if (!targetId) return;
-    const token = claimSpeech();
-    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
-      supabase
-        .from("documents")
-        .select("current_sentence_index, title")
-        .eq("id", targetId)
-        .maybeSingle(),
-      supabase
-        .from("sentences")
-        .select("*")
-        .eq("document_id", targetId)
-        .order("order_index", { ascending: true })
-        .order("created_at", { ascending: true }),
-    ]);
-    if (token !== speechTokenRef.current) return;
-    const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
-    const clamped = list.length === 0
-      ? 0
-      : Math.max(0, Math.min(savedIdx, list.length - 1));
-    const resolved = list[clamped];
-    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
-    qc.setQueryData<Doc[]>(["documents"], (prev) =>
-      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
-    );
-    if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
-    }
-    favIdxRef.current = i;
-    void saveLastFavoriteSlot(i);
-    setActiveDocId(targetId);
-    setFavoritesOpen(false);
-    setPickerSlot(null);
-    if (resolved?.content) speak(resolved.content, token);
-  }, [favorites, qc, claimSpeech, speak, saveLastFavoriteSlot]);
-
-
-
 
 
 
@@ -1783,34 +1737,25 @@ function AppPage() {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
                 return (
-                  <div
+                  <button
                     key={i}
-                    className="flex w-full items-center gap-2 rounded-xl border border-foreground/10 bg-foreground/5 pl-3 pr-1.5 py-1 transition hover:bg-foreground/10"
+                    onClick={() => setPickerSlot(i)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition active:scale-[0.98] hover:bg-foreground/10"
                   >
-                    <button
-                      onClick={() => doc ? openFavoriteSlot(i) : setPickerSlot(i)}
-                      className="flex flex-1 items-center gap-3 py-1.5 text-left transition active:scale-[0.98]"
-                    >
-                      <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                        {i + 1}
-                      </span>
-                      {doc ? (
-                        <span className="flex-1 truncate text-sm">{doc.title}</span>
-                      ) : (
-                        <span className="flex-1 text-sm italic text-muted-foreground/60">Empty</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setPickerSlot(i); }}
-                      aria-label={doc ? `Edit slot ${i + 1}` : `Assign slot ${i + 1}`}
-                      className="shrink-0 rounded-lg px-2 py-1.5 text-base text-muted-foreground/70 transition hover:bg-foreground/10 hover:text-foreground active:scale-[0.95]"
-                    >
-                      {doc ? "✎" : "+"}
-                    </button>
-                  </div>
+                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    {doc ? (
+                      <span className="flex-1 truncate text-sm">{doc.title}</span>
+                    ) : (
+                      <span className="flex-1 text-sm italic text-muted-foreground/60">Empty</span>
+                    )}
+                    <span className="text-base text-muted-foreground/60">
+                      {doc ? "›" : "+"}
+                    </span>
+                  </button>
                 );
               })}
-
             </div>
           </div>
 
