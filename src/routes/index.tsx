@@ -103,7 +103,7 @@ function Landing() {
 
               <div className="flex items-end gap-6">
                 <div className="relative h-28 w-28 shrink-0 md:h-36 md:w-36">
-                  <Orb size={0} className="!h-full !w-full" interactive={false} />
+                  <Orb size={144} interactive={false} />
                 </div>
                 <p className="max-w-xs text-base italic leading-relaxed text-slate-400 md:text-lg">
                   “Orby shows you exactly one sentence at a time.”
