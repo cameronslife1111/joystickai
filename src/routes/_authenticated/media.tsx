@@ -48,6 +48,7 @@ type Asset = {
   created_at: string;
   status?: AssetStatus;
   error_message?: string | null;
+  generation_params?: Record<string, unknown> | null;
 };
 type Filter = "all" | "image" | "video" | "audio";
 
