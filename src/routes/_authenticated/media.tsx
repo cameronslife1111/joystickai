@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
-  CheckSquare, CheckCircle2,
+  CheckSquare, CheckCircle2, FileText,
 } from "lucide-react";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
@@ -48,6 +48,7 @@ type Asset = {
   created_at: string;
   status?: AssetStatus;
   error_message?: string | null;
+  generation_params?: Record<string, unknown> | null;
 };
 type Filter = "all" | "image" | "video" | "audio";
 
@@ -112,6 +113,7 @@ function MediaPage() {
   const [chromeVisible, setChromeVisible] = useState(true);
   const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [promptAsset, setPromptAsset] = useState<Asset | null>(null);
   const [renameText, setRenameText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -831,6 +833,9 @@ function MediaPage() {
               <SheetButton icon={<Download className="h-4 w-4" />} label="Download"
                 onClick={() => handleDownload(sheetAsset)}
               />
+              <SheetButton icon={<FileText className="h-4 w-4" />} label="View prompt"
+                onClick={() => { const a = sheetAsset; setSheetAsset(null); setPromptAsset(a); }}
+              />
               {sheetAsset.kind === "image" && (
                 <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
                   onClick={() => { const a = sheetAsset; setSheetAsset(null); setRegenerateAsset(a); }}
@@ -940,6 +945,58 @@ function MediaPage() {
           </div>
         </div>
       )}
+
+      {/* View prompt */}
+      {promptAsset && (() => {
+        const params = promptAsset.generation_params as { user_text?: string } | null;
+        const promptText = params?.user_text?.trim() ?? "";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            onClick={() => setPromptAsset(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-foreground/10 bg-card p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-3 font-display text-base">Prompt</p>
+              {promptText ? (
+                <div className="mb-4 max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-foreground/10 bg-background/50 p-3 text-sm leading-relaxed selection:bg-primary/20">
+                  {promptText}
+                </div>
+              ) : (
+                <div className="mb-4 rounded-xl border border-foreground/10 bg-background/50 p-3 text-sm italic text-muted-foreground">
+                  No prompt available for this asset.
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setPromptAsset(null)}
+                  className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+                <button
+                  disabled={!promptText}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(promptText);
+                      toast.success("Prompt copied");
+                    } catch {
+                      toast.error("Couldn't copy prompt");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Copy className="h-4 w-4" /> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+
 
       {/* Batch delete confirm */}
       {confirmBatchDelete && (
