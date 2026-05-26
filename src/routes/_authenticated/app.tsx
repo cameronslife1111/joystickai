@@ -1783,25 +1783,34 @@ function AppPage() {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
                 return (
-                  <button
+                  <div
                     key={i}
-                    onClick={() => setPickerSlot(i)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition active:scale-[0.98] hover:bg-foreground/10"
+                    className="flex w-full items-center gap-2 rounded-xl border border-foreground/10 bg-foreground/5 pl-3 pr-1.5 py-1 transition hover:bg-foreground/10"
                   >
-                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                      {i + 1}
-                    </span>
-                    {doc ? (
-                      <span className="flex-1 truncate text-sm">{doc.title}</span>
-                    ) : (
-                      <span className="flex-1 text-sm italic text-muted-foreground/60">Empty</span>
-                    )}
-                    <span className="text-base text-muted-foreground/60">
-                      {doc ? "›" : "+"}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => doc ? openFavoriteSlot(i) : setPickerSlot(i)}
+                      className="flex flex-1 items-center gap-3 py-1.5 text-left transition active:scale-[0.98]"
+                    >
+                      <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      {doc ? (
+                        <span className="flex-1 truncate text-sm">{doc.title}</span>
+                      ) : (
+                        <span className="flex-1 text-sm italic text-muted-foreground/60">Empty</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPickerSlot(i); }}
+                      aria-label={doc ? `Edit slot ${i + 1}` : `Assign slot ${i + 1}`}
+                      className="shrink-0 rounded-lg px-2 py-1.5 text-base text-muted-foreground/70 transition hover:bg-foreground/10 hover:text-foreground active:scale-[0.95]"
+                    >
+                      {doc ? "✎" : "+"}
+                    </button>
+                  </div>
                 );
               })}
+
             </div>
           </div>
 
