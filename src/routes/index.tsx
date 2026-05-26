@@ -64,7 +64,7 @@ function Landing() {
 
       {/* Bento grid */}
       <section className="mx-auto w-full max-w-7xl px-4 pb-12 pt-4 md:px-8">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:auto-rows-[140px]">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:auto-rows-[180px]">
           {/* HERO */}
           <div className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#1e293b] to-[#0f172a] p-8 md:col-span-8 md:row-span-3">
             <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-[#c4b5fd]/20 blur-[120px]" />
