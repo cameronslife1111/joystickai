@@ -112,6 +112,7 @@ function MediaPage() {
   const [chromeVisible, setChromeVisible] = useState(true);
   const [sheetAsset, setSheetAsset] = useState<Asset | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [promptAsset, setPromptAsset] = useState<Asset | null>(null);
   const [renameText, setRenameText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
