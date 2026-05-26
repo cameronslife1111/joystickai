@@ -832,6 +832,9 @@ function MediaPage() {
               <SheetButton icon={<Download className="h-4 w-4" />} label="Download"
                 onClick={() => handleDownload(sheetAsset)}
               />
+              <SheetButton icon={<FileText className="h-4 w-4" />} label="View prompt"
+                onClick={() => { const a = sheetAsset; setSheetAsset(null); setPromptAsset(a); }}
+              />
               {sheetAsset.kind === "image" && (
                 <SheetButton icon={<RefreshCw className="h-4 w-4" />} label="Regenerate"
                   onClick={() => { const a = sheetAsset; setSheetAsset(null); setRegenerateAsset(a); }}
