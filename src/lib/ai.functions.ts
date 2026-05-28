@@ -64,7 +64,7 @@ export const aiContinue = createServerFn({ method: "POST" })
   });
 
 const generateTextSchema = z.object({
-  prompt: z.string().min(1).max(8000),
+  prompt: z.string().min(1).max(100000),
   contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
   targetDocumentId: z.string().uuid(),
   position: z.enum(["top", "bottom", "after_current"]),
@@ -151,7 +151,7 @@ export const generateText = createServerFn({ method: "POST" })
   });
 
 const analyzeImageSchema = z.object({
-  prompt: z.string().max(8000).default(""),
+  prompt: z.string().max(100000).default(""),
   imageUrl: z.string().url(),
   contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
   targetDocumentId: z.string().uuid(),
@@ -252,7 +252,7 @@ export const analyzeImage = createServerFn({ method: "POST" })
   });
 
 const webSearchSchema = z.object({
-  prompt: z.string().min(1).max(8000),
+  prompt: z.string().min(1).max(100000),
   contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
   targetDocumentId: z.string().uuid(),
   position: z.enum(["top", "bottom", "after_current"]),
