@@ -78,6 +78,8 @@ function AppPage() {
   const mutedRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
+  const editCaretRef = useRef<number>(0);
+  const keyboardPrimerRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
