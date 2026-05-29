@@ -4,6 +4,10 @@ export type SwipeDirection = "up" | "down" | "left" | "right";
 
 interface OrbGestureCallbacks {
   onTap?: () => void;
+  /** Fires synchronously on pointer-up the moment a press is classified as a
+   * tap (not a swipe / long-press). Runs INSIDE the user gesture, so it's the
+   * only safe place to focus an input and pop the iOS keyboard. */
+  onTapCandidate?: () => void;
   onDoubleTap?: () => void;
   onTripleTap?: () => void;
   onLongPressStart?: () => void;
