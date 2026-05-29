@@ -1629,8 +1629,8 @@ function AppPage() {
         inputMode="text"
         className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-0"
         style={{ transform: "translateY(100%)" }}
-        readOnly
       />
+
 
       {/* Orb — sized to fit any viewport (never causes scroll) */}
       <section className="flex shrink-0 items-center justify-center pb-4">
