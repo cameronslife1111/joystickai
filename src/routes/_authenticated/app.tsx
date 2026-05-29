@@ -645,7 +645,7 @@ function AppPage() {
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
-  const onDoubleTap = useCallback(() => {
+  const enterEdit = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -654,13 +654,26 @@ function AppPage() {
     const list = sentences ?? [];
     if (list.length === 0) {
       setEditText("");
+      editCaretRef.current = 0;
       setEditing(true);
       return;
     }
     const full = list.map((s) => s.content).join("\n\n");
-    setEditText(full);
+    // Caret target = end of the originally-current sentence.
+    let caret = 0;
+    for (let i = 0; i <= currentIdx && i < list.length; i++) {
+      caret += list[i].content.length;
+      if (i < currentIdx) caret += 2; // "\n\n" separator
+    }
+    caret = Math.min(caret, full.length);
+    // Insert a space right after the current sentence and place the caret
+    // after that space so the user can immediately start typing.
+    const withSpace = full.slice(0, caret) + " " + full.slice(caret);
+    setEditText(withSpace);
+    editCaretRef.current = caret + 1;
     setEditing(true);
   }, [editing, currentIdx, sentences]);
+
 
   // Long press = open Plan Mode composer (voice capture removed)
   const onLongPressStart = useCallback(() => {
