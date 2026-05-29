@@ -708,6 +708,11 @@ function AppPage() {
       else if (d === "right") onSwipeRight();
       else onSwipeLeft();
     },
+  }, {
+    // Widen the single/double disambiguation window. On iOS the keyboard pops
+    // up on the first tap, which delays the user's second tap; with too short
+    // a window the single-tap action fires first and the double tap is lost.
+    doubleTapMs: 400,
   });
 
   // Parse the full-doc editor text into sentence parts.
