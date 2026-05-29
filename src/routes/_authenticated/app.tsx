@@ -78,6 +78,8 @@ function AppPage() {
   const mutedRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
+  const editCaretRef = useRef<number>(0);
+  const keyboardPrimerRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
@@ -504,6 +506,8 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    // Double tap: dismiss the keyboard that the first tap may have primed.
+    try { keyboardPrimerRef.current?.blur(); } catch {}
     setComposeText("");
     setComposing(true);
   }, []);
@@ -645,7 +649,7 @@ function AppPage() {
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
-  const onDoubleTap = useCallback(() => {
+  const enterEdit = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -654,13 +658,26 @@ function AppPage() {
     const list = sentences ?? [];
     if (list.length === 0) {
       setEditText("");
+      editCaretRef.current = 0;
       setEditing(true);
       return;
     }
     const full = list.map((s) => s.content).join("\n\n");
-    setEditText(full);
+    // Caret target = end of the originally-current sentence.
+    let caret = 0;
+    for (let i = 0; i <= currentIdx && i < list.length; i++) {
+      caret += list[i].content.length;
+      if (i < currentIdx) caret += 2; // "\n\n" separator
+    }
+    caret = Math.min(caret, full.length);
+    // Insert a space right after the current sentence and place the caret
+    // after that space so the user can immediately start typing.
+    const withSpace = full.slice(0, caret) + " " + full.slice(caret);
+    setEditText(withSpace);
+    editCaretRef.current = caret + 1;
     setEditing(true);
   }, [editing, currentIdx, sentences]);
+
 
   // Long press = open Plan Mode composer (voice capture removed)
   const onLongPressStart = useCallback(() => {
@@ -672,8 +689,13 @@ function AppPage() {
   }, []);
 
   useOrbGestures(orbRef, {
-    onTap: openNewIdea,
-    onDoubleTap,
+    // Synchronously prime focus inside the tap so iOS pops the keyboard for
+    // the single-tap edit view. On a double tap we blur it again.
+    onTapCandidate: () => {
+      try { keyboardPrimerRef.current?.focus(); } catch {}
+    },
+    onTap: enterEdit,
+    onDoubleTap: openNewIdea,
     onTripleTap: deleteCurrent,
     onLongPressStart,
     onLongPressEnd,
@@ -1473,51 +1495,41 @@ function AppPage() {
               ref={(el) => {
                 editTextareaRef.current = el;
                 if (!el) return;
-                // Defer focus + caret + scroll into the next frame so layout
-                // settles (important on iOS Safari/Chrome where the keyboard
-                // pushes the viewport).
                 if ((el as any).__joystickInit) return;
                 (el as any).__joystickInit = true;
+                // Focus SYNCHRONOUSLY so focus transfers from the primed hidden
+                // input and iOS keeps the keyboard up.
+                el.focus();
+                // Caret = right after the space inserted past the current sentence.
+                const caret = Math.min(editCaretRef.current, el.value.length);
+                try { el.setSelectionRange(caret, caret); } catch {}
+                // Center the caret line (scroll math only) on the next frame.
                 requestAnimationFrame(() => {
-                  el.focus();
-                  // Compute caret = end of the originally-current sentence.
-                  const list = sentences ?? [];
-                  const originIdx = editOriginIdxRef.current;
-                  let caret = 0;
-                  for (let i = 0; i <= originIdx && i < list.length; i++) {
-                    caret += list[i].content.length;
-                    if (i < originIdx) caret += 2; // "\n\n" separator
-                  }
-                  caret = Math.min(caret, el.value.length);
-                  try { el.setSelectionRange(caret, caret); } catch {}
-                  // Center the caret line using a hidden mirror div.
-                  requestAnimationFrame(() => {
-                    try {
-                      const cs = window.getComputedStyle(el);
-                      const mirror = document.createElement("div");
-                      const copyProps = [
-                        "boxSizing","width","fontFamily","fontSize","fontWeight",
-                        "lineHeight","letterSpacing","padding","border",
-                        "whiteSpace","wordWrap","wordBreak",
-                      ] as const;
-                      for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
-                      mirror.style.position = "absolute";
-                      mirror.style.visibility = "hidden";
-                      mirror.style.whiteSpace = "pre-wrap";
-                      mirror.style.overflow = "hidden";
-                      mirror.style.left = "-9999px";
-                      mirror.style.top = "0";
-                      mirror.textContent = el.value.slice(0, caret);
-                      const marker = document.createElement("span");
-                      marker.textContent = "\u200b";
-                      mirror.appendChild(marker);
-                      document.body.appendChild(mirror);
-                      const caretTop = marker.offsetTop;
-                      document.body.removeChild(mirror);
-                      const target = caretTop - el.clientHeight / 2;
-                      el.scrollTop = Math.max(0, target);
-                    } catch {}
-                  });
+                  try {
+                    const cs = window.getComputedStyle(el);
+                    const mirror = document.createElement("div");
+                    const copyProps = [
+                      "boxSizing","width","fontFamily","fontSize","fontWeight",
+                      "lineHeight","letterSpacing","padding","border",
+                      "whiteSpace","wordWrap","wordBreak",
+                    ] as const;
+                    for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
+                    mirror.style.position = "absolute";
+                    mirror.style.visibility = "hidden";
+                    mirror.style.whiteSpace = "pre-wrap";
+                    mirror.style.overflow = "hidden";
+                    mirror.style.left = "-9999px";
+                    mirror.style.top = "0";
+                    mirror.textContent = el.value.slice(0, caret);
+                    const marker = document.createElement("span");
+                    marker.textContent = "\u200b";
+                    mirror.appendChild(marker);
+                    document.body.appendChild(mirror);
+                    const caretTop = marker.offsetTop;
+                    document.body.removeChild(mirror);
+                    const target = caretTop - el.clientHeight / 2;
+                    el.scrollTop = Math.max(0, target);
+                  } catch {}
                 });
               }}
               value={editText}
@@ -1539,7 +1551,7 @@ function AppPage() {
                 <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
               ) : (
                 <span className="text-muted-foreground italic text-2xl">
-                  Hold the orb and speak, or double-tap to write.
+                  Hold the orb and speak, or tap to write.
                 </span>
               )}
             </p>
@@ -1607,6 +1619,18 @@ function AppPage() {
           </div>
         </div>
       )}
+
+      {/* Hidden input used to prime the iOS keyboard synchronously on tap,
+          then focus transfers to the edit textarea (keeps keyboard up). */}
+      <input
+        ref={keyboardPrimerRef}
+        aria-hidden="true"
+        tabIndex={-1}
+        inputMode="text"
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-0"
+        style={{ transform: "translateY(100%)" }}
+      />
+
 
       {/* Orb — sized to fit any viewport (never causes scroll) */}
       <section className="flex shrink-0 items-center justify-center pb-4">
