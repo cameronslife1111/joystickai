@@ -1551,7 +1551,7 @@ function AppPage() {
                 <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
               ) : (
                 <span className="text-muted-foreground italic text-2xl">
-                  Hold the orb and speak, or double-tap to write.
+                  Hold the orb and speak, or tap to write.
                 </span>
               )}
             </p>
