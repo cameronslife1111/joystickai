@@ -1495,51 +1495,41 @@ function AppPage() {
               ref={(el) => {
                 editTextareaRef.current = el;
                 if (!el) return;
-                // Defer focus + caret + scroll into the next frame so layout
-                // settles (important on iOS Safari/Chrome where the keyboard
-                // pushes the viewport).
                 if ((el as any).__joystickInit) return;
                 (el as any).__joystickInit = true;
+                // Focus SYNCHRONOUSLY so focus transfers from the primed hidden
+                // input and iOS keeps the keyboard up.
+                el.focus();
+                // Caret = right after the space inserted past the current sentence.
+                const caret = Math.min(editCaretRef.current, el.value.length);
+                try { el.setSelectionRange(caret, caret); } catch {}
+                // Center the caret line (scroll math only) on the next frame.
                 requestAnimationFrame(() => {
-                  el.focus();
-                  // Compute caret = end of the originally-current sentence.
-                  const list = sentences ?? [];
-                  const originIdx = editOriginIdxRef.current;
-                  let caret = 0;
-                  for (let i = 0; i <= originIdx && i < list.length; i++) {
-                    caret += list[i].content.length;
-                    if (i < originIdx) caret += 2; // "\n\n" separator
-                  }
-                  caret = Math.min(caret, el.value.length);
-                  try { el.setSelectionRange(caret, caret); } catch {}
-                  // Center the caret line using a hidden mirror div.
-                  requestAnimationFrame(() => {
-                    try {
-                      const cs = window.getComputedStyle(el);
-                      const mirror = document.createElement("div");
-                      const copyProps = [
-                        "boxSizing","width","fontFamily","fontSize","fontWeight",
-                        "lineHeight","letterSpacing","padding","border",
-                        "whiteSpace","wordWrap","wordBreak",
-                      ] as const;
-                      for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
-                      mirror.style.position = "absolute";
-                      mirror.style.visibility = "hidden";
-                      mirror.style.whiteSpace = "pre-wrap";
-                      mirror.style.overflow = "hidden";
-                      mirror.style.left = "-9999px";
-                      mirror.style.top = "0";
-                      mirror.textContent = el.value.slice(0, caret);
-                      const marker = document.createElement("span");
-                      marker.textContent = "\u200b";
-                      mirror.appendChild(marker);
-                      document.body.appendChild(mirror);
-                      const caretTop = marker.offsetTop;
-                      document.body.removeChild(mirror);
-                      const target = caretTop - el.clientHeight / 2;
-                      el.scrollTop = Math.max(0, target);
-                    } catch {}
-                  });
+                  try {
+                    const cs = window.getComputedStyle(el);
+                    const mirror = document.createElement("div");
+                    const copyProps = [
+                      "boxSizing","width","fontFamily","fontSize","fontWeight",
+                      "lineHeight","letterSpacing","padding","border",
+                      "whiteSpace","wordWrap","wordBreak",
+                    ] as const;
+                    for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
+                    mirror.style.position = "absolute";
+                    mirror.style.visibility = "hidden";
+                    mirror.style.whiteSpace = "pre-wrap";
+                    mirror.style.overflow = "hidden";
+                    mirror.style.left = "-9999px";
+                    mirror.style.top = "0";
+                    mirror.textContent = el.value.slice(0, caret);
+                    const marker = document.createElement("span");
+                    marker.textContent = "\u200b";
+                    mirror.appendChild(marker);
+                    document.body.appendChild(mirror);
+                    const caretTop = marker.offsetTop;
+                    document.body.removeChild(mirror);
+                    const target = caretTop - el.clientHeight / 2;
+                    el.scrollTop = Math.max(0, target);
+                  } catch {}
                 });
               }}
               value={editText}
