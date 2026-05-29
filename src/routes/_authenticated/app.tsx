@@ -506,8 +506,9 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    // Double tap: dismiss the keyboard that the first tap may have primed.
-    try { keyboardPrimerRef.current?.blur(); } catch {}
+    // Double tap also wants the keyboard: keep the primed keyboard up so it
+    // transfers to the compose textarea (do NOT blur — blurring dismisses the
+    // keyboard and iOS won't reopen it outside a user gesture).
     setComposeText("");
     setComposing(true);
   }, []);
@@ -1627,9 +1628,10 @@ function AppPage() {
         aria-hidden="true"
         tabIndex={-1}
         inputMode="text"
-        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-0"
-        style={{ transform: "translateY(100%)" }}
+        autoComplete="off"
+        className="pointer-events-none fixed left-2 top-2 h-px w-px opacity-0"
       />
+
 
 
       {/* Orb — sized to fit any viewport (never causes scroll) */}
