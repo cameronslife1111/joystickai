@@ -110,6 +110,9 @@ export function useOrbGestures(
       }
 
       // Tap counting: single / double / triple
+      // Fire synchronously while still inside the user gesture so callers can
+      // prime focus (iOS keyboard) before the disambiguation timer below.
+      cbRef.current.onTapCandidate?.();
       tapCount += 1;
       if (tapTimer) clearTimeout(tapTimer);
       tapTimer = setTimeout(() => {
