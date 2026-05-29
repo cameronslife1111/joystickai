@@ -687,8 +687,13 @@ function AppPage() {
   }, []);
 
   useOrbGestures(orbRef, {
-    onTap: openNewIdea,
-    onDoubleTap,
+    // Synchronously prime focus inside the tap so iOS pops the keyboard for
+    // the single-tap edit view. On a double tap we blur it again.
+    onTapCandidate: () => {
+      try { keyboardPrimerRef.current?.focus(); } catch {}
+    },
+    onTap: enterEdit,
+    onDoubleTap: openNewIdea,
     onTripleTap: deleteCurrent,
     onLongPressStart,
     onLongPressEnd,
