@@ -43,7 +43,7 @@ function AppPage() {
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
-  const [replaceMatching, setReplaceMatching] = useState(false);
+  const [replaceMatching, setReplaceMatching] = useState(true);
   const [jumpOpen, setJumpOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1772,7 +1772,7 @@ function AppPage() {
             const closePicker = () => {
               setPickerSlot(null);
               setPickerQuery("");
-              setReplaceMatching(false);
+              setReplaceMatching(true);
             };
             const pickDoc = async (docId: string) => {
               const next = [...favorites];
