@@ -4,10 +4,6 @@ export type SwipeDirection = "up" | "down" | "left" | "right";
 
 interface OrbGestureCallbacks {
   onTap?: () => void;
-  /** Fires synchronously on pointer-up the moment a press is classified as a
-   * tap (not a swipe / long-press). Runs INSIDE the user gesture, so it's the
-   * only safe place to focus an input and pop the iOS keyboard. */
-  onTapCandidate?: () => void;
   onDoubleTap?: () => void;
   onTripleTap?: () => void;
   onLongPressStart?: () => void;
@@ -110,9 +106,6 @@ export function useOrbGestures(
       }
 
       // Tap counting: single / double / triple
-      // Fire synchronously while still inside the user gesture so callers can
-      // prime focus (iOS keyboard) before the disambiguation timer below.
-      cbRef.current.onTapCandidate?.();
       tapCount += 1;
       if (tapTimer) clearTimeout(tapTimer);
       tapTimer = setTimeout(() => {

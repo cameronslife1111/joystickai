@@ -78,8 +78,6 @@ function AppPage() {
   const mutedRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
-  const editCaretRef = useRef<number>(0);
-  const keyboardPrimerRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
@@ -506,9 +504,6 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    // Double tap also wants the keyboard: keep the primed keyboard up so it
-    // transfers to the compose textarea (do NOT blur — blurring dismisses the
-    // keyboard and iOS won't reopen it outside a user gesture).
     setComposeText("");
     setComposing(true);
   }, []);
@@ -650,7 +645,7 @@ function AppPage() {
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
-  const enterEdit = useCallback(() => {
+  const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -659,26 +654,13 @@ function AppPage() {
     const list = sentences ?? [];
     if (list.length === 0) {
       setEditText("");
-      editCaretRef.current = 0;
       setEditing(true);
       return;
     }
     const full = list.map((s) => s.content).join("\n\n");
-    // Caret target = end of the originally-current sentence.
-    let caret = 0;
-    for (let i = 0; i <= currentIdx && i < list.length; i++) {
-      caret += list[i].content.length;
-      if (i < currentIdx) caret += 2; // "\n\n" separator
-    }
-    caret = Math.min(caret, full.length);
-    // Insert a space right after the current sentence and place the caret
-    // after that space so the user can immediately start typing.
-    const withSpace = full.slice(0, caret) + " " + full.slice(caret);
-    setEditText(withSpace);
-    editCaretRef.current = caret + 1;
+    setEditText(full);
     setEditing(true);
   }, [editing, currentIdx, sentences]);
-
 
   // Long press = open Plan Mode composer (voice capture removed)
   const onLongPressStart = useCallback(() => {
@@ -690,14 +672,8 @@ function AppPage() {
   }, []);
 
   useOrbGestures(orbRef, {
-    // Synchronously prime focus inside the tap so iOS pops the keyboard. Focus
-    // then transfers to the edit textarea (single tap) or compose textarea
-    // (double tap) when it mounts, keeping the keyboard up.
-    onTapCandidate: () => {
-      try { keyboardPrimerRef.current?.focus(); } catch {}
-    },
-    onTap: enterEdit,
-    onDoubleTap: openNewIdea,
+    onTap: openNewIdea,
+    onDoubleTap,
     onTripleTap: deleteCurrent,
     onLongPressStart,
     onLongPressEnd,
@@ -708,11 +684,6 @@ function AppPage() {
       else if (d === "right") onSwipeRight();
       else onSwipeLeft();
     },
-  }, {
-    // Widen the single/double disambiguation window. On iOS the keyboard pops
-    // up on the first tap, which delays the user's second tap; with too short
-    // a window the single-tap action fires first and the double tap is lost.
-    doubleTapMs: 400,
   });
 
   // Parse the full-doc editor text into sentence parts.
@@ -1502,41 +1473,51 @@ function AppPage() {
               ref={(el) => {
                 editTextareaRef.current = el;
                 if (!el) return;
+                // Defer focus + caret + scroll into the next frame so layout
+                // settles (important on iOS Safari/Chrome where the keyboard
+                // pushes the viewport).
                 if ((el as any).__joystickInit) return;
                 (el as any).__joystickInit = true;
-                // Focus SYNCHRONOUSLY so focus transfers from the primed hidden
-                // input and iOS keeps the keyboard up.
-                el.focus();
-                // Caret = right after the space inserted past the current sentence.
-                const caret = Math.min(editCaretRef.current, el.value.length);
-                try { el.setSelectionRange(caret, caret); } catch {}
-                // Center the caret line (scroll math only) on the next frame.
                 requestAnimationFrame(() => {
-                  try {
-                    const cs = window.getComputedStyle(el);
-                    const mirror = document.createElement("div");
-                    const copyProps = [
-                      "boxSizing","width","fontFamily","fontSize","fontWeight",
-                      "lineHeight","letterSpacing","padding","border",
-                      "whiteSpace","wordWrap","wordBreak",
-                    ] as const;
-                    for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
-                    mirror.style.position = "absolute";
-                    mirror.style.visibility = "hidden";
-                    mirror.style.whiteSpace = "pre-wrap";
-                    mirror.style.overflow = "hidden";
-                    mirror.style.left = "-9999px";
-                    mirror.style.top = "0";
-                    mirror.textContent = el.value.slice(0, caret);
-                    const marker = document.createElement("span");
-                    marker.textContent = "\u200b";
-                    mirror.appendChild(marker);
-                    document.body.appendChild(mirror);
-                    const caretTop = marker.offsetTop;
-                    document.body.removeChild(mirror);
-                    const target = caretTop - el.clientHeight / 2;
-                    el.scrollTop = Math.max(0, target);
-                  } catch {}
+                  el.focus();
+                  // Compute caret = end of the originally-current sentence.
+                  const list = sentences ?? [];
+                  const originIdx = editOriginIdxRef.current;
+                  let caret = 0;
+                  for (let i = 0; i <= originIdx && i < list.length; i++) {
+                    caret += list[i].content.length;
+                    if (i < originIdx) caret += 2; // "\n\n" separator
+                  }
+                  caret = Math.min(caret, el.value.length);
+                  try { el.setSelectionRange(caret, caret); } catch {}
+                  // Center the caret line using a hidden mirror div.
+                  requestAnimationFrame(() => {
+                    try {
+                      const cs = window.getComputedStyle(el);
+                      const mirror = document.createElement("div");
+                      const copyProps = [
+                        "boxSizing","width","fontFamily","fontSize","fontWeight",
+                        "lineHeight","letterSpacing","padding","border",
+                        "whiteSpace","wordWrap","wordBreak",
+                      ] as const;
+                      for (const p of copyProps) (mirror.style as any)[p] = (cs as any)[p];
+                      mirror.style.position = "absolute";
+                      mirror.style.visibility = "hidden";
+                      mirror.style.whiteSpace = "pre-wrap";
+                      mirror.style.overflow = "hidden";
+                      mirror.style.left = "-9999px";
+                      mirror.style.top = "0";
+                      mirror.textContent = el.value.slice(0, caret);
+                      const marker = document.createElement("span");
+                      marker.textContent = "\u200b";
+                      mirror.appendChild(marker);
+                      document.body.appendChild(mirror);
+                      const caretTop = marker.offsetTop;
+                      document.body.removeChild(mirror);
+                      const target = caretTop - el.clientHeight / 2;
+                      el.scrollTop = Math.max(0, target);
+                    } catch {}
+                  });
                 });
               }}
               value={editText}
@@ -1558,7 +1539,7 @@ function AppPage() {
                 <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
               ) : (
                 <span className="text-muted-foreground italic text-2xl">
-                  Hold the orb and speak, or tap to write.
+                  Hold the orb and speak, or double-tap to write.
                 </span>
               )}
             </p>
@@ -1626,19 +1607,6 @@ function AppPage() {
           </div>
         </div>
       )}
-
-      {/* Hidden input used to prime the iOS keyboard synchronously on tap,
-          then focus transfers to the edit textarea (keeps keyboard up). */}
-      <input
-        ref={keyboardPrimerRef}
-        aria-hidden="true"
-        tabIndex={-1}
-        inputMode="text"
-        autoComplete="off"
-        className="pointer-events-none fixed left-2 top-2 h-px w-px opacity-0"
-      />
-
-
 
       {/* Orb — sized to fit any viewport (never causes scroll) */}
       <section className="flex shrink-0 items-center justify-center pb-4">
