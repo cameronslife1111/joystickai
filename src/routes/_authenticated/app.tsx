@@ -918,16 +918,50 @@ function AppPage() {
       toast.error(error.message || "Failed to send");
       return;
     }
-    qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
-    toast(`Sent to ${targetDoc?.title ?? "document"}`, { id: "idea-sent" });
+
+    // Point the target document's reading position at the first newly
+    // inserted sentence so the idea is immediately reachable — and so it
+    // isn't buried off-screen in this one-sentence-at-a-time reader.
+    void supabase.from("documents")
+      .update({ current_sentence_index: insertAt })
+      .eq("id", targetDocId);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetDocId ? { ...d, current_sentence_index: insertAt } : d) ?? prev,
+    );
+
+    // Read back the true count so the user gets confirmation it landed.
+    const { count } = await supabase
+      .from("sentences")
+      .select("id", { count: "exact", head: true })
+      .eq("document_id", targetDocId);
+
+    // Refresh caches/counters live — both the target's sentences and the
+    // documents list — so nothing requires navigating away to update.
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["sentences", targetDocId] }),
+      qc.invalidateQueries({ queryKey: ["documents"] }),
+    ]);
+
+    const title = targetDoc?.title ?? "document";
+    const added = parts.length;
+    toast(
+      typeof count === "number"
+        ? `Added ${added} to "${title}" — ${count} total`
+        : `Added ${added} to "${title}"`,
+      { id: "idea-sent" },
+    );
     cancelCompose();
-    // Re-speak the current sentence the user was on so they can resume
-    // their place without tapping the orb. Called synchronously within the
-    // user-gesture handler so iOS Safari honors the utterance.
-    const resume = sentences?.[currentIdx]?.content;
-    if (resume) {
+
+    // If we sent into the document we're currently viewing, jump to and speak
+    // the new idea. Otherwise resume the active doc's current sentence.
+    // Called synchronously within the user-gesture handler so iOS Safari
+    // honors the utterance.
+    const spoken = targetDocId === activeDocId
+      ? parts[0]
+      : sentences?.[currentIdx]?.content;
+    if (spoken) {
       const token = claimSpeech();
-      speak(resume, token);
+      speak(spoken, token);
     }
   }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak]);
 
