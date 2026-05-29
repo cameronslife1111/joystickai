@@ -506,8 +506,9 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    // Double tap: dismiss the keyboard that the first tap may have primed.
-    try { keyboardPrimerRef.current?.blur(); } catch {}
+    // Double tap also wants the keyboard: keep the primed keyboard up so it
+    // transfers to the compose textarea (do NOT blur — blurring dismisses the
+    // keyboard and iOS won't reopen it outside a user gesture).
     setComposeText("");
     setComposing(true);
   }, []);
