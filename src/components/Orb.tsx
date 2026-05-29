@@ -87,6 +87,14 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
       }}
       type="button"
       aria-label="Orby"
+      // Prevent the orb <button> from grabbing focus on tap. On iOS, if the
+      // button steals focus right after pointer-up, it pulls focus away from
+      // the primed hidden input and the on-screen keyboard collapses before
+      // the edit / new-idea textarea can inherit it. Suppressing the default
+      // focus on pointerdown/mousedown keeps focus on the text inputs so the
+      // keyboard stays open. Click/gesture behavior is unaffected.
+      onPointerDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
       className={cn(
         "orb relative rounded-full select-none touch-none outline-none",
         "transition-transform active:scale-95",
