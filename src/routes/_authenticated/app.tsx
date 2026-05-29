@@ -1620,6 +1620,18 @@ function AppPage() {
         </div>
       )}
 
+      {/* Hidden input used to prime the iOS keyboard synchronously on tap,
+          then focus transfers to the edit textarea (keeps keyboard up). */}
+      <input
+        ref={keyboardPrimerRef}
+        aria-hidden="true"
+        tabIndex={-1}
+        inputMode="text"
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-0"
+        style={{ transform: "translateY(100%)" }}
+        readOnly
+      />
+
       {/* Orb — sized to fit any viewport (never causes scroll) */}
       <section className="flex shrink-0 items-center justify-center pb-4">
         <div
