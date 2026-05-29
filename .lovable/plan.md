@@ -1,18 +1,7 @@
-## Increase Generate Text prompt limit
+Change the `replaceMatching` state default from `false` to `true` in the favorites slot picker, and update the `closePicker` reset to also default back to `true`. This ensures every time the user opens a slot in the favorites editor, "Replace all matching slots" is automatically selected.
 
-The `Generate Text` action hits a Zod validator in `src/lib/ai.functions.ts` that caps `prompt` at 8000 characters. GPT-5.5 accepts far more, so the limit is artificially low.
+**File:** `src/routes/_authenticated/app.tsx`
 
-### Change
-
-In `src/lib/ai.functions.ts`, raise `prompt` max from `8000` → `100000` on:
-- `generateTextSchema.prompt`
-- `analyzeImageSchema.prompt`
-- `webSearchSchema.prompt`
-
-(Keeping all three consistent so the same fix applies to Analyze Image and Web Search dialogs, which share the same composer.)
-
-No client-side changes needed — the `Textarea` in `GenerateTextDialog.tsx` has no maxLength. No model/system-prompt changes.
-
-### Why 100k
-
-Comfortably covers long pasted context and attached-document concatenation, while still bounding payload size to protect the server function from absurd inputs.
+**Changes:**
+1. Line 46 — change `const [replaceMatching, setReplaceMatching] = useState(false);` to `useState(true);`
+2. Line 1775 — inside `closePicker`, change `setReplaceMatching(false);` to `setReplaceMatching(true);`
