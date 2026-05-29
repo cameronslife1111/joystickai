@@ -1628,9 +1628,10 @@ function AppPage() {
         aria-hidden="true"
         tabIndex={-1}
         inputMode="text"
-        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-0"
-        style={{ transform: "translateY(100%)" }}
+        autoComplete="off"
+        className="pointer-events-none fixed left-2 top-2 h-px w-px opacity-0"
       />
+
 
 
       {/* Orb — sized to fit any viewport (never causes scroll) */}
