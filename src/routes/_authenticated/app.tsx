@@ -506,6 +506,8 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    // Double tap: dismiss the keyboard that the first tap may have primed.
+    try { keyboardPrimerRef.current?.blur(); } catch {}
     setComposeText("");
     setComposing(true);
   }, []);
