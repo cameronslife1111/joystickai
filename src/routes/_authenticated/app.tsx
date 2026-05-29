@@ -690,8 +690,9 @@ function AppPage() {
   }, []);
 
   useOrbGestures(orbRef, {
-    // Synchronously prime focus inside the tap so iOS pops the keyboard for
-    // the single-tap edit view. On a double tap we blur it again.
+    // Synchronously prime focus inside the tap so iOS pops the keyboard. Focus
+    // then transfers to the edit textarea (single tap) or compose textarea
+    // (double tap) when it mounts, keeping the keyboard up.
     onTapCandidate: () => {
       try { keyboardPrimerRef.current?.focus(); } catch {}
     },
