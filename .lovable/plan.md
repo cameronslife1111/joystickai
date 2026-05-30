@@ -1,23 +1,40 @@
-## Goal
+## Plan: Auto-swipe-right after Jump to Top
 
-Two small changes to the main reader (`src/routes/_authenticated/app.tsx`):
+### Goal
+After the user selects "Jump to top" from the Jump-to overlay, automatically perform a swipe-right action to advance to the next favorite document. This saves the user from having to manually swipe right after jumping to the top.
 
-1. **Swipe right opens a linked document.** When the current sentence has a linked document, swiping right opens that linked document instead of cycling to the next favorite. If there's no linked document, swipe right keeps working exactly as it does today (favorites cycle, or all-docs fallback).
-2. **Move the "linked" pill to the top.** The little link chip that currently floats above the orb moves up underneath the document title in the header.
+### Changes
 
-## Change 1 — Swipe right opens linked doc
+#### 1. `src/routes/_authenticated/app.tsx` — modify `jumpTo` function
 
-In `onSwipeRight` (starts line 619), add an early check right after the `lockFavorites` repeat block: if `currentSentence?.linked_document_id` points at a document that exists in `docs`, call the existing `openLinkedDocument()` and return. That function already handles everything correctly (resumes the linked doc at its saved sentence, primes caches, speaks). Everything below that check — the favorites cycle and the all-docs fallback — stays untouched and runs whenever there's no linked document.
+The `jumpTo` callback (line 463) currently:
+1. Sets the sentence index
+2. Speaks the sentence
+3. Closes the jump overlay (`setJumpOpen(false)`)
 
-Note: `openLinkedDocument` already claims its own speech token, so the early branch will simply delegate to it rather than duplicating logic.
+Add a step: after `setJumpOpen(false)` and only when `target === 0` (i.e. "jump to top"), call `onSwipeRight()` to advance to the next document.
 
-## Change 2 — Move the linked pill under the title
+```text
+Before:
+  await setIndex(clamped);
+  speak(sentences[clamped].content, token);
+  setJumpOpen(false);
 
-- Remove the linked-document button that currently sits above the orb (lines ~1714–1727, the absolutely-positioned chip with `-top-10`).
-- Re-add it inside the header (after the title/counter block, lines ~1520–1536), rendered as a small centered pill directly beneath the document title. It keeps the same look (link icon + linked doc title, primary accent) and the same tap behavior (`onClick={() => void openLinkedDocument()}`), just positioned in normal flow under the title instead of floating over the orb.
+After:
+  await setIndex(clamped);
+  speak(sentences[clamped].content, token);
+  setJumpOpen(false);
+  if (clamped === 0) {
+    // Small delay so the "top" speech isn't immediately cut off by doc-switch speech
+    await new Promise((r) => setTimeout(r, 600));
+    await onSwipeRight();
+  }
+```
 
-## Technical notes
+The `onSwipeRight` callback already claims its own speech token and handles all doc-switching logic (linked docs, favorites cycle, all-docs fallback), so this simply delegates to it.
 
-- No backend, schema, or data changes. Pure frontend.
-- The linked-doc tap, the swipe-right gesture, and the indicator now all funnel through the same `openLinkedDocument()` callback, so behavior stays consistent.
-- Locked-favorites behavior: swiping right on a sentence with a linked doc will open the link (the link takes precedence over the "repeat current sentence" lock), matching the request that swipe right should always open a linked document when one exists.
+The `jumpTo` dependency array will need `onSwipeRight` added.
+
+### No other files touched.
+- No backend, schema, or data changes.
+- No UI changes — the flow is identical except the auto-advance happens after the jump overlay closes.
