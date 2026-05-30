@@ -9,21 +9,16 @@ import {
 } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { chatWithOrby, distillCallTranscript } from "@/lib/orby-call.functions";
-import {
-  isEndCallPhrase,
-  isMakePlanPhrase,
-  isReadDocPhrase,
-  isAddTextPhrase,
-  isMarkDeletePhrase,
-  isFindDocPhrase,
-} from "@/lib/call-phrases";
+import { chatWithOrby } from "@/lib/orby-call.functions";
+import { transcribeAudio } from "@/lib/orby-stt.functions";
+import { interpretCommand } from "@/lib/orby-call-intent.functions";
 import {
   resolveDocumentsByVoice,
   readDocumentsForCall,
   addTextToDocument,
   markSentencesForDeletion,
+  editSentence,
+  renameDocumentTitle,
 } from "@/lib/orby-call-docs.functions";
 
 export type CallStatus =
@@ -44,6 +39,24 @@ export type ReadingDoc = {
   sentences: { id: string; content: string; order_index: number }[];
 };
 
+/**
+ * Bridge implemented by the app screen so the call can drive the live view:
+ * open documents and jump the sentence cursor. Registered via
+ * registerCallController on mount.
+ */
+export type CallController = {
+  getActiveContext: () =>
+    | {
+        docId: string;
+        title: string;
+        currentIndex: number;
+        sentences: { id: string; content: string }[];
+      }
+    | null;
+  openDocumentById: (id: string) => Promise<{ title: string } | null>;
+  jumpToIndex: (index: number) => Promise<void>;
+};
+
 interface CallModeContextValue {
   inCall: boolean;
   status: CallStatus;
@@ -51,14 +64,14 @@ interface CallModeContextValue {
   partialUser: string;
   micMuted: boolean;
   startCall: () => Promise<void>;
-  endCall: (reason?: "user" | "phrase" | "error" | "plan") => Promise<void>;
+  endCall: (reason?: "user" | "phrase" | "error") => Promise<void>;
   toggleMicMute: () => void;
   overlayMinimized: boolean;
   setOverlayMinimized: (v: boolean) => void;
-  generatePlanFromConversation: () => Promise<void>;
   readingDocs: ReadingDoc[] | null;
   dismissReadingDocs: () => void;
   actionLabel: string | null;
+  registerCallController: (c: CallController | null) => void;
 }
 
 const Ctx = createContext<CallModeContextValue | null>(null);
@@ -83,6 +96,38 @@ function pickVoice(): SpeechSynthesisVoice | null {
   return prefer ?? null;
 }
 
+function pickMimeType(): string {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") return "audio/webm";
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const c of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(c)) return c;
+    } catch {}
+  }
+  return "audio/webm";
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+// VAD tuning.
+const VAD_THRESHOLD = 0.02; // RMS over which we consider the user speaking
+const SILENCE_MS = 750; // quiet time after speech that ends a segment
+const MAX_SEGMENT_MS = 15000; // hard cap on a single utterance
+
 export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const [inCall, setInCall] = useState(false);
   const [status, setStatus] = useState<CallStatus>("idle");
@@ -95,43 +140,54 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
 
   const dismissReadingDocs = useCallback(() => setReadingDocs(null), []);
 
+  // Server fns.
+  const callChat = useServerFn(chatWithOrby);
+  const transcribeFn = useServerFn(transcribeAudio);
+  const interpretFn = useServerFn(interpretCommand);
   const resolveDocsFn = useServerFn(resolveDocumentsByVoice);
   const readDocsFn = useServerFn(readDocumentsForCall);
   const addTextFn = useServerFn(addTextToDocument);
   const markFn = useServerFn(markSentencesForDeletion);
+  const editSentenceFn = useServerFn(editSentence);
+  const renameFn = useServerFn(renameDocumentTitle);
 
+  // Refs.
   const inCallRef = useRef(false);
   const micMutedRef = useRef(false);
   const statusRef = useRef<CallStatus>("idle");
-  const recogRef = useRef<any>(null);
-  const lastSpeechAtRef = useRef<number>(0);
-  const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendingRef = useRef(false);
   const wakeLockRef = useRef<any>(null);
+  const controllerRef = useRef<CallController | null>(null);
+  const messagesRef = useRef<CallMessage[]>([]);
+  const readingDocsRef = useRef<ReadingDoc[] | null>(null);
+  const endCallRef = useRef<(reason?: "user" | "phrase" | "error") => Promise<void>>(
+    async () => {},
+  );
 
-  const callChat = useServerFn(chatWithOrby);
-  const distillFn = useServerFn(distillCallTranscript);
+  // Audio capture refs.
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const mimeTypeRef = useRef<string>("audio/webm");
+  const rafRef = useRef<number | null>(null);
+  const voiceDetectedRef = useRef(false);
+  const lastVoiceAtRef = useRef(0);
+  const segmentStartRef = useRef(0);
+
+  const registerCallController = useCallback((c: CallController | null) => {
+    controllerRef.current = c;
+  }, []);
 
   // Keep refs in sync.
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
   useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
   useEffect(() => { statusRef.current = status; }, [status]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { readingDocsRef.current = readingDocs; }, [readingDocs]);
 
-  const clearPauseTimer = () => {
-    if (pauseTimerRef.current) {
-      clearTimeout(pauseTimerRef.current);
-      pauseTimerRef.current = null;
-    }
-  };
-  const clearRestartTimer = () => {
-    if (restartTimerRef.current) {
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-    }
-  };
-
-  // ---- TTS ----
+  // ---- TTS (output stays on-device) ----
   const speakAsync = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) {
@@ -154,476 +210,438 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ---- Recognition (webkitSpeechRecognition) ----
-  const startRecognition = useCallback(() => {
+  // ---- Recording / VAD ----
+  const stopRecorder = useCallback((discard: boolean) => {
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    if (!rec) return;
+    try {
+      if (discard) rec.ondataavailable = null;
+      rec.onstop = discard ? null : rec.onstop;
+      if (rec.state !== "inactive") rec.stop();
+    } catch {}
+  }, []);
+
+  // Forward declaration via ref to avoid TDZ in callbacks.
+  const processSegmentRef = useRef<(blob: Blob) => Promise<void>>(async () => {});
+
+  const armRecorder = useCallback(() => {
     if (!inCallRef.current) return;
-    if (typeof window === "undefined") return;
-    const SR =
-      (window as any).webkitSpeechRecognition ||
-      (window as any).SpeechRecognition;
-    if (!SR) return;
-    if (recogRef.current) return; // already running
+    if (micMutedRef.current) return;
+    if (statusRef.current !== "listening") return;
+    if (recorderRef.current) return;
+    const stream = streamRef.current;
+    if (!stream) return;
 
     try {
-      const rec = new SR();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-
-      rec.onstart = () => {
-        if (statusRef.current === "listening" || statusRef.current === "idle") {
-          setStatus("listening");
-        }
+      const rec = new MediaRecorder(stream, { mimeType: mimeTypeRef.current });
+      chunksRef.current = [];
+      voiceDetectedRef.current = false;
+      lastVoiceAtRef.current = 0;
+      segmentStartRef.current = Date.now();
+      rec.ondataavailable = (e: BlobEvent) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
-
-      rec.onresult = (e: any) => {
-        if (micMutedRef.current) return;
-        let interim = "";
-        let finalText = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const res = e.results[i];
-          const txt = res[0]?.transcript ?? "";
-          if (res.isFinal) finalText += txt + " ";
-          else interim += txt + " ";
+      rec.onstop = () => {
+        const hadVoice = voiceDetectedRef.current;
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
+        chunksRef.current = [];
+        if (!hadVoice || blob.size < 1200) {
+          // Just noise — re-arm and keep listening.
+          if (inCallRef.current && statusRef.current === "listening") {
+            armRecorder();
+          }
+          return;
         }
-        lastSpeechAtRef.current = Date.now();
-        if (interim) setPartialUser(interim.trim());
-        if (finalText.trim()) {
-          setPartialUser(finalText.trim());
-          schedulePauseCommit();
-        } else if (interim.trim()) {
-          schedulePauseCommit();
-        }
+        void processSegmentRef.current(blob);
       };
-
-      rec.onerror = (_e: any) => {
-        // Common: "no-speech", "aborted", "network". Just let onend restart.
-      };
-
-      rec.onend = () => {
-        recogRef.current = null;
-        // If still in call and not speaking/thinking, auto-restart shortly.
-        if (
-          inCallRef.current &&
-          (statusRef.current === "listening" || statusRef.current === "idle")
-        ) {
-          clearRestartTimer();
-          restartTimerRef.current = setTimeout(() => startRecognition(), 250);
-        }
-      };
-
-      recogRef.current = rec;
+      recorderRef.current = rec;
       rec.start();
-    } catch {
-      recogRef.current = null;
+    } catch (e) {
+      console.warn("[call] arm recorder failed", e);
+      recorderRef.current = null;
     }
   }, []);
 
-  const stopRecognition = useCallback(() => {
-    clearRestartTimer();
-    clearPauseTimer();
-    const r = recogRef.current;
-    if (r) {
-      try { r.onend = null; r.onresult = null; r.onerror = null; } catch {}
-      try { r.stop(); } catch {}
-      try { r.abort(); } catch {}
-      recogRef.current = null;
+  const vadTick = useCallback(() => {
+    if (!inCallRef.current) return;
+    const analyser = analyserRef.current;
+    if (analyser && statusRef.current === "listening" && recorderRef.current && !micMutedRef.current) {
+      const buf = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      const now = Date.now();
+      if (rms > VAD_THRESHOLD) {
+        voiceDetectedRef.current = true;
+        lastVoiceAtRef.current = now;
+        if (!partialUserRef.current) setPartialUser("…");
+      } else if (
+        voiceDetectedRef.current &&
+        lastVoiceAtRef.current &&
+        now - lastVoiceAtRef.current > SILENCE_MS
+      ) {
+        // End of utterance.
+        stopRecorder(false);
+      }
+      // Hard cap.
+      if (
+        voiceDetectedRef.current &&
+        segmentStartRef.current &&
+        now - segmentStartRef.current > MAX_SEGMENT_MS
+      ) {
+        stopRecorder(false);
+      }
     }
-  }, []);
+    rafRef.current = requestAnimationFrame(vadTick);
+  }, [stopRecorder]);
 
-  // Pause-detection: commit when user has been quiet ~1.2s after their last
-  // recognized result.
-  const schedulePauseCommit = () => {
-    clearPauseTimer();
-    pauseTimerRef.current = setTimeout(() => {
-      const text = (partialUserRef.current || "").trim();
-      if (!text) return;
-      void commitUtterance(text);
-    }, 3200);
-  };
-
-  // We need a ref mirror of partialUser to read inside timer callbacks.
   const partialUserRef = useRef("");
   useEffect(() => { partialUserRef.current = partialUser; }, [partialUser]);
 
-  // Forward-references to endCall / generatePlan, populated after their
-  // useCallback declarations below. Using refs avoids TDZ issues.
-  const endCallRef = useRef<(reason?: "user" | "phrase" | "error" | "plan") => Promise<void>>(
-    async () => {},
+  const backToListening = useCallback(() => {
+    if (!inCallRef.current) return;
+    setStatus("listening");
+    setPartialUser("");
+    // Allow the status ref effect to flush before arming.
+    setTimeout(() => {
+      if (inCallRef.current && statusRef.current === "listening") armRecorder();
+    }, 0);
+  }, [armRecorder]);
+
+  // ---- Document resolution helper ----
+  const resolveDoc = useCallback(
+    async (query: string, purpose: "read" | "add" | "mark", minConf = 0.4) => {
+      const recent = messagesRef.current
+        .slice(-6)
+        .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+        .join("\n");
+      const { matches } = await resolveDocsFn({
+        data: { utterance: query, recentTranscript: recent, expectMultiple: false, purpose },
+      });
+      return matches.find((m) => m.confidence >= minConf) ?? null;
+    },
+    [resolveDocsFn],
   );
-  const generatePlanRef = useRef<(msgs: CallMessage[]) => Promise<void>>(async () => {});
 
-  // ---- Turn-taking ----
-  const commitUtterance = useCallback(
+  // ---- Command handling ----
+  const handleTranscript = useCallback(
     async (text: string) => {
-      if (!inCallRef.current || sendingRef.current) return;
-      sendingRef.current = true;
+      const userMsg: CallMessage = { role: "user", content: text };
+      setMessages((prev) => [...prev, userMsg]);
+      setPartialUser("");
+
+      const active = controllerRef.current?.getActiveContext?.() ?? null;
+      const recent = messagesRef.current
+        .slice(-6)
+        .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+        .join("\n");
+
+      let cmd;
       try {
-        setPartialUser("");
+        cmd = await interpretFn({
+          data: {
+            utterance: text,
+            recentTranscript: recent,
+            activeDocTitle: active?.title,
+            activeDocIndex: active?.currentIndex,
+            activeSentences: active?.sentences.map((s, i) => ({ index: i, content: s.content })),
+          },
+        });
+      } catch (e) {
+        console.warn("[call] interpret error", e);
+        cmd = null;
+      }
 
-        // Append user message first so plan generation later includes it.
-        const userMsg: CallMessage = { role: "user", content: text };
-        setMessages((prev) => [...prev, userMsg]);
+      const say = async (reply: string) => {
+        if (!reply) return;
+        setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        if (!inCallRef.current) return;
+        setStatus("speaking");
+        await speakAsync(reply);
+      };
 
-        // Phrase shortcuts.
-        if (isEndCallPhrase(text)) {
-          stopRecognition();
+      const action = cmd?.action ?? "chat";
+
+      try {
+        if (action === "end_call") {
+          stopRecorder(true);
           setStatus("speaking");
           await speakAsync("Okay, talk to you later.");
           await endCallRef.current("phrase");
           return;
         }
 
-        if (isMakePlanPhrase(text)) {
-          stopRecognition();
-          setStatus("speaking");
-          await speakAsync("Got it, I'll generate that plan now.");
-          await generatePlanRef.current([...messagesRef.current, userMsg]);
-          await endCallRef.current("plan");
-          return;
-        }
-
-        // ----- Find / name a document (no read, no edit) -----
-        if (isFindDocPhrase(text)) {
-          stopRecognition();
+        if (action === "jump") {
+          if (!active) {
+            await say("Open a document first, then I can jump around it.");
+          } else if (cmd?.sentenceIndex == null) {
+            await say("Which sentence should I jump to?");
+          } else {
+            const total = active.sentences.length;
+            const idx = Math.max(0, Math.min(cmd.sentenceIndex, Math.max(0, total - 1)));
+            await controllerRef.current?.jumpToIndex(idx);
+            await say(`Jumped to sentence ${idx + 1}.`);
+          }
+        } else if (action === "open_doc") {
+          setStatus("thinking");
+          setActionLabel("Finding document…");
+          const match = cmd?.docQuery ? await resolveDoc(cmd.docQuery, "read") : null;
+          setActionLabel(null);
+          if (!match) {
+            await say("I couldn't find that document. What's the title?");
+          } else {
+            await controllerRef.current?.openDocumentById(match.id);
+            await say(`Opening ${match.title}.`);
+          }
+        } else if (action === "find_doc") {
           setStatus("thinking");
           setActionLabel("Looking that up…");
-          try {
-            const recent = messagesRef.current
-              .slice(-6)
-              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-              .join("\n");
-            const { matches } = await resolveDocsFn({
-              data: {
-                utterance: text,
-                recentTranscript: recent,
-                expectMultiple: true,
-                purpose: "read",
-              },
-            });
-            const confident = matches
-              .filter((m) => m.confidence >= 0.35)
-              .slice(0, 3);
-            let reply: string;
-            if (confident.length === 0) {
-              reply =
-                "I don't see a document that matches. Want to describe what it's about?";
-            } else if (confident.length === 1) {
-              reply = `The title you may be referring to is "${confident[0].title}". Want me to read it or add to it?`;
-            } else {
-              const list = confident.map((m) => `"${m.title}"`).join(", ");
-              reply = `It could be one of these: ${list}. Which one did you mean?`;
-            }
-            setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-            setStatus("speaking");
-            await speakAsync(reply);
-          } catch (e: any) {
-            console.warn("[call] find doc error", e);
-            setStatus("speaking");
-            await speakAsync("Sorry, I had trouble looking that up.");
-          } finally {
-            setActionLabel(null);
-          }
-          if (!inCallRef.current) return;
-          setStatus("listening");
-          startRecognition();
-          return;
-        }
-
-        // ----- Read document(s) -----
-        if (isReadDocPhrase(text)) {
-          stopRecognition();
+          const match = cmd?.docQuery
+            ? await resolveDoc(cmd.docQuery, "read", 0.3)
+            : null;
+          setActionLabel(null);
+          await say(
+            match
+              ? `The title you may be referring to is "${match.title}".`
+              : "I don't see a document that matches. Can you describe what it's about?",
+          );
+        } else if (action === "read_doc") {
           setStatus("reading");
           setActionLabel("Finding document…");
-          try {
-            const recent = messagesRef.current
-              .slice(-6)
-              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-              .join("\n");
-            const looksMultiple =
-              /\b(those|these|both|all|multiple|two|three|and)\b/i.test(text);
-            const { matches } = await resolveDocsFn({
-              data: {
-                utterance: text,
-                recentTranscript: recent,
-                expectMultiple: looksMultiple,
-                purpose: "read",
-              },
-            });
-            const confident = matches.filter((m) => m.confidence >= 0.4);
-            if (confident.length === 0) {
-              setActionLabel(null);
-              setStatus("speaking");
-              await speakAsync("I couldn't find a matching document. What's the title?");
-            } else {
-              setActionLabel(
-                `Reading ${confident.map((m) => `"${m.title}"`).join(", ")}…`,
-              );
-              const { docs } = await readDocsFn({
-                data: { documentIds: confident.map((m) => m.id) },
-              });
-              setReadingDocs(docs);
-              // Inject as assistant context so follow-ups can reference it.
-              const contextMsg: CallMessage = {
-                role: "assistant",
-                content: docs
-                  .map(
-                    (d) =>
-                      `[document: "${d.title}"]\n` +
-                      d.sentences.map((s, i) => `${i + 1}. ${s.content}`).join("\n"),
-                  )
-                  .join("\n\n"),
-              };
-              setMessages((prev) => [...prev, contextMsg]);
-              setStatus("speaking");
-              const titles = docs.map((d) => d.title).join(" and ");
-              await speakAsync(
-                docs.length === 1
-                  ? `Got it. I've read ${titles}. What's your question?`
-                  : `Got it. I've read ${titles}. What's your question?`,
-              );
+          let docId: string | null = null;
+          let docTitle: string | null = null;
+          if (cmd?.useActiveDoc && active) {
+            docId = active.docId;
+            docTitle = active.title;
+          } else if (cmd?.docQuery) {
+            const match = await resolveDoc(cmd.docQuery, "read");
+            if (match) {
+              docId = match.id;
+              docTitle = match.title;
             }
-          } catch (e: any) {
-            console.warn("[call] read doc error", e);
-            setStatus("speaking");
-            await speakAsync("Sorry, I had trouble reading that document.");
-          } finally {
-            setActionLabel(null);
           }
-          if (!inCallRef.current) return;
-          setStatus("listening");
-          startRecognition();
-          return;
-        }
-
-        // ----- Add text to document -----
-        if (isAddTextPhrase(text)) {
-          stopRecognition();
-          setStatus("adding");
-          setActionLabel("Finding document…");
-          try {
-            const recent = messagesRef.current
-              .slice(-6)
-              .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-              .join("\n");
-            const { matches } = await resolveDocsFn({
-              data: {
-                utterance: text,
-                recentTranscript: recent,
-                expectMultiple: false,
-                purpose: "add",
-              },
+          if (!docId) {
+            setActionLabel(null);
+            await say("Which document should I read? Tell me the title.");
+          } else {
+            setActionLabel(`Reading "${docTitle}"…`);
+            const { docs } = await readDocsFn({ data: { documentIds: [docId] } });
+            setReadingDocs(docs);
+            const contextMsg: CallMessage = {
+              role: "assistant",
+              content: docs
+                .map(
+                  (d) =>
+                    `[document: "${d.title}"]\n` +
+                    d.sentences.map((s, i) => `${i + 1}. ${s.content}`).join("\n"),
+                )
+                .join("\n\n"),
+            };
+            setMessages((prev) => [...prev, contextMsg]);
+            setActionLabel(null);
+            await say(`Got it. I've read ${docTitle}. What's your question?`);
+          }
+        } else if (action === "edit_sentence") {
+          if (!active) {
+            await say("Open the document first, then tell me which sentence to change.");
+          } else if (!cmd?.newText) {
+            await say("What should the new sentence say?");
+          } else {
+            const idx =
+              cmd.sentenceIndex != null
+                ? Math.max(0, Math.min(cmd.sentenceIndex, active.sentences.length - 1))
+                : active.currentIndex;
+            setStatus("adding");
+            const res = await editSentenceFn({
+              data: { documentId: active.docId, sentenceIndex: idx, newText: cmd.newText },
             });
-            const target = matches.find((m) => m.confidence >= 0.4);
-            if (!target) {
-              setStatus("speaking");
-              await speakAsync("Which document should I add that to?");
-            } else {
-              // Extract the text-to-add: strip the command framing using AI-like
-              // light heuristics — let the user's full utterance through; the
-              // sentence splitter handles structure.
-              const stripped = text
-                .replace(
-                  /\b(please|can you|could you|hey orby|orby)\b/gi,
-                  "",
-                )
-                .replace(
-                  new RegExp(
-                    `\\b(add|append|write|put|stick|save)\\b[\\s\\S]*?\\b(to|in|into)\\b\\s+(the\\s+|my\\s+)?${target.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b[\\s\\S]*?(document|doc|note)?`,
-                    "i",
-                  ),
-                  "",
-                )
-                .replace(/^[\s,:.-]+|[\s,:.-]+$/g, "")
-                .trim();
-              const toAdd = stripped || text;
-              setActionLabel(`Adding to "${target.title}"…`);
-              const { inserted } = await addTextFn({
-                data: { documentId: target.id, text: toAdd },
-              });
-              setStatus("speaking");
-              await speakAsync(
-                inserted > 0
-                  ? `Added to ${target.title}.`
-                  : `I couldn't find anything to add.`,
-              );
-            }
-          } catch (e: any) {
-            console.warn("[call] add text error", e);
-            setStatus("speaking");
-            await speakAsync("Sorry, I couldn't add that.");
-          } finally {
-            setActionLabel(null);
+            await controllerRef.current?.openDocumentById(active.docId);
+            await say(
+              res.updated
+                ? `Updated sentence ${(res.sentenceIndex ?? idx) + 1} in ${active.title}.`
+                : "I couldn't find that sentence to change.",
+            );
           }
-          if (!inCallRef.current) return;
-          setStatus("listening");
-          startRecognition();
-          return;
-        }
-
-        // ----- Mark sentences for deletion -----
-        if (isMarkDeletePhrase(text)) {
-          stopRecognition();
-          setStatus("marking");
-          setActionLabel("Finding sentences…");
-          try {
-            // Prefer the most-recently-read doc if any, else resolve from utterance.
-            let targetId: string | null = readingDocs?.[0]?.id ?? null;
-            let targetTitle: string | null = readingDocs?.[0]?.title ?? null;
-            if (!targetId) {
-              const recent = messagesRef.current
-                .slice(-6)
-                .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-                .join("\n");
-              const { matches } = await resolveDocsFn({
-                data: {
-                  utterance: text,
-                  recentTranscript: recent,
-                  expectMultiple: false,
-                  purpose: "mark",
-                },
-              });
-              const target = matches.find((m) => m.confidence >= 0.4);
-              if (target) {
-                targetId = target.id;
-                targetTitle = target.title;
+        } else if (action === "add_text") {
+          if (!cmd?.newText) {
+            await say("What would you like me to add?");
+          } else {
+            setStatus("adding");
+            setActionLabel("Finding document…");
+            let docId: string | null = null;
+            let docTitle: string | null = null;
+            if (cmd.useActiveDoc && active) {
+              docId = active.docId;
+              docTitle = active.title;
+            } else if (cmd.docQuery) {
+              const match = await resolveDoc(cmd.docQuery, "add");
+              if (match) {
+                docId = match.id;
+                docTitle = match.title;
               }
+            } else if (active) {
+              docId = active.docId;
+              docTitle = active.title;
             }
-            if (!targetId) {
-              setStatus("speaking");
-              await speakAsync("Which document are those sentences in?");
+            setActionLabel(null);
+            if (!docId) {
+              await say("Which document should I add that to?");
             } else {
-              const { marked } = await markFn({
-                data: { documentId: targetId, utterance: text },
+              const { inserted } = await addTextFn({
+                data: { documentId: docId, text: cmd.newText },
               });
-              setStatus("speaking");
-              await speakAsync(
-                marked > 0
-                  ? `Marked ${marked} sentence${marked === 1 ? "" : "s"} in ${targetTitle ?? "that document"} for deletion.`
-                  : `I couldn't find a matching sentence to mark.`,
+              if (active && docId === active.docId) {
+                await controllerRef.current?.openDocumentById(docId);
+              }
+              await say(
+                inserted > 0
+                  ? `Added that to ${docTitle}.`
+                  : "I couldn't find anything to add.",
               );
             }
-          } catch (e: any) {
-            console.warn("[call] mark delete error", e);
-            setStatus("speaking");
-            await speakAsync("Sorry, I couldn't mark that.");
-          } finally {
-            setActionLabel(null);
           }
-          if (!inCallRef.current) return;
-          setStatus("listening");
-          startRecognition();
+        } else if (action === "mark_delete") {
+          setStatus("marking");
+          let docId: string | null = null;
+          let docTitle: string | null = null;
+          if (cmd?.useActiveDoc && active) {
+            docId = active.docId;
+            docTitle = active.title;
+          } else if (cmd?.docQuery) {
+            const match = await resolveDoc(cmd.docQuery, "mark");
+            if (match) {
+              docId = match.id;
+              docTitle = match.title;
+            }
+          } else if (readingDocsRef.current?.[0]) {
+            docId = readingDocsRef.current[0].id;
+            docTitle = readingDocsRef.current[0].title;
+          } else if (active) {
+            docId = active.docId;
+            docTitle = active.title;
+          }
+          if (!docId) {
+            await say("Which document are those sentences in?");
+          } else {
+            const { marked } = await markFn({ data: { documentId: docId, utterance: text } });
+            await say(
+              marked > 0
+                ? `Marked ${marked} sentence${marked === 1 ? "" : "s"} in ${docTitle} for deletion.`
+                : "I couldn't find a matching sentence to mark.",
+            );
+          }
+        } else if (action === "rename_title") {
+          if (!cmd?.newText) {
+            await say("What should the new title be?");
+          } else {
+            setStatus("adding");
+            setActionLabel("Finding document…");
+            let docId: string | null = null;
+            if (cmd.useActiveDoc && active) {
+              docId = active.docId;
+            } else if (cmd.docQuery) {
+              const match = await resolveDoc(cmd.docQuery, "read");
+              if (match) docId = match.id;
+            } else if (active) {
+              docId = active.docId;
+            }
+            setActionLabel(null);
+            if (!docId) {
+              await say("Which document should I rename?");
+            } else {
+              const res = await renameFn({ data: { documentId: docId, newTitle: cmd.newText } });
+              if (active && docId === active.docId) {
+                await controllerRef.current?.openDocumentById(docId);
+              }
+              await say(
+                res.oldTitle
+                  ? `Renamed "${res.oldTitle}" to "${res.newTitle}".`
+                  : `Renamed it to "${res.newTitle}".`,
+              );
+            }
+          }
+        } else {
+          // Normal conversation.
+          setStatus("thinking");
+          let reply = "";
+          try {
+            const res = await callChat({
+              data: { messages: [...messagesRef.current, userMsg] },
+            });
+            reply = (res?.text ?? "").trim();
+          } catch (e) {
+            reply = "Sorry, I didn't catch that. Could you say it again?";
+            console.warn("[call] chat error", e);
+          }
+          await say(reply);
+        }
+      } catch (e) {
+        console.warn("[call] action error", e);
+        setStatus("speaking");
+        await speakAsync("Sorry, something went wrong with that.");
+      } finally {
+        setActionLabel(null);
+      }
+
+      if (!inCallRef.current) return;
+      backToListening();
+    },
+    [
+      interpretFn,
+      callChat,
+      speakAsync,
+      stopRecorder,
+      backToListening,
+      resolveDoc,
+      readDocsFn,
+      addTextFn,
+      markFn,
+      editSentenceFn,
+      renameFn,
+    ],
+  );
+
+  // process a recorded segment: transcribe → handle.
+  const processSegment = useCallback(
+    async (blob: Blob) => {
+      if (!inCallRef.current || sendingRef.current) return;
+      sendingRef.current = true;
+      try {
+        setStatus("thinking");
+        let text = "";
+        try {
+          const base64 = await blobToBase64(blob);
+          const res = await transcribeFn({
+            data: { audioBase64: base64, mimeType: mimeTypeRef.current },
+          });
+          text = (res?.text ?? "").trim();
+        } catch (e) {
+          console.warn("[call] transcription error", e);
+        }
+        if (!inCallRef.current) return;
+        if (!text || text.replace(/[^a-z0-9]/gi, "").length < 2) {
+          backToListening();
           return;
         }
-
-
-        // Normal AI turn.
-        setStatus("thinking");
-        stopRecognition();
-        let reply = "";
-        try {
-          const res = await callChat({
-            data: { messages: [...messagesRef.current, userMsg] },
-          });
-          reply = (res?.text ?? "").trim();
-        } catch (e: any) {
-          reply = "Sorry, I didn't catch that. Could you say it again?";
-          console.warn("[call] chat error", e);
-        }
-        if (!inCallRef.current) return;
-        if (reply) {
-          setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-          setStatus("speaking");
-          await speakAsync(reply);
-        }
-        if (!inCallRef.current) return;
-        setStatus("listening");
-        startRecognition();
+        await handleTranscript(text);
       } finally {
         sendingRef.current = false;
       }
     },
-    [callChat, speakAsync, startRecognition, stopRecognition, resolveDocsFn, readDocsFn, addTextFn, markFn, readingDocs],
+    [transcribeFn, handleTranscript, backToListening],
   );
-
-  // Mirror messages so commitUtterance can read latest without re-binding.
-  const messagesRef = useRef<CallMessage[]>([]);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-
-  // ---- Plan generation from full transcript ----
-  const generatePlanFromConversationInternal = useCallback(
-    async (msgs: CallMessage[]) => {
-      try {
-        const { data: u } = await supabase.auth.getUser();
-        if (!u.user) {
-          toast.error("Sign in first");
-          return;
-        }
-        const transcript = msgs
-          .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-          .join("\n");
-        // Voice transcripts include Orby's filler/questions and the user's
-        // intents tangled together. Distill into a clean enumerated request
-        // brief BEFORE handing it to plan-compose so the planner doesn't try
-        // to interpret the conversation itself as the plan.
-        const cappedTranscript =
-          transcript.length > 16000 ? transcript.slice(-16000) : transcript;
-        let userRequest: string;
-        let distilledOk = false;
-        try {
-          const res = await distillFn({ data: { transcript: cappedTranscript } });
-          const brief = (res?.request ?? "").trim();
-          if (brief) {
-            userRequest =
-              "Plan request distilled from a voice call with Orby:\n\n" + brief;
-            distilledOk = true;
-          } else {
-            throw new Error("empty brief");
-          }
-        } catch {
-          userRequest =
-            "Turn the following voice conversation between the user and Orby into a concrete plan. " +
-            "Capture every concrete intent, decision, or task the user expressed.\n\n" +
-            "===== Conversation transcript =====\n" +
-            transcript;
-        }
-        const { data: row, error } = await supabase
-          .from("plans")
-          .insert({
-            user_id: u.user.id,
-            status: "composing",
-            user_request: userRequest,
-            attached_document_ids: [],
-          })
-          .select()
-          .single();
-        if (error || !row) throw new Error(error?.message || "Failed to create plan");
-        void supabase.functions.invoke("plan-compose", { body: { plan_id: row.id } });
-        toast(
-          distilledOk
-            ? "Orby is generating your plan from the call…"
-            : "Orby is generating your plan (using raw transcript)…",
-          { duration: 4000 },
-        );
-      } catch (e: any) {
-        toast.error(e?.message ?? "Couldn't generate plan");
-      }
-    },
-    [distillFn],
-  );
-
-
-  const generatePlanFromConversation = useCallback(async () => {
-    await generatePlanFromConversationInternal(messagesRef.current);
-  }, [generatePlanFromConversationInternal]);
+  useEffect(() => { processSegmentRef.current = processSegment; }, [processSegment]);
 
   // ---- Wake lock (best effort) ----
   const requestWakeLock = useCallback(async () => {
     try {
       const wl = (navigator as any).wakeLock;
-      if (wl?.request) {
-        wakeLockRef.current = await wl.request("screen");
-      }
+      if (wl?.request) wakeLockRef.current = await wl.request("screen");
     } catch {}
   }, []);
   const releaseWakeLock = useCallback(async () => {
@@ -631,99 +649,142 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
     wakeLockRef.current = null;
   }, []);
 
+  // ---- Teardown audio ----
+  const teardownAudio = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    stopRecorder(true);
+    try { analyserRef.current?.disconnect(); } catch {}
+    analyserRef.current = null;
+    try { void audioCtxRef.current?.close(); } catch {}
+    audioCtxRef.current = null;
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => { try { t.stop(); } catch {} });
+    }
+    streamRef.current = null;
+  }, [stopRecorder]);
+
   // ---- Public: start / end ----
   const startCall = useCallback(async () => {
     if (inCallRef.current) return;
 
-    // Browser support check.
-    const hasSR =
-      typeof window !== "undefined" &&
-      ((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition);
+    const hasMR = typeof window !== "undefined" && typeof MediaRecorder !== "undefined";
     const hasTTS = typeof window !== "undefined" && "speechSynthesis" in window;
-    if (!hasSR || !hasTTS) {
+    const hasGUM =
+      typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+    if (!hasMR || !hasTTS || !hasGUM) {
       toast.error(
         "Voice calls aren't supported in this browser. Try Safari on iPhone or Chrome on desktop.",
       );
       return;
     }
 
-    // Pre-warm mic permission. On iOS this MUST be from a user gesture (caller
-    // must invoke startCall directly from a tap handler).
+    // Open a persistent mic stream (must be from a user gesture on iOS).
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
-      // We don't need the stream itself — SpeechRecognition opens its own.
-      stream.getTracks().forEach((t) => t.stop());
-    } catch (e) {
+    } catch {
       toast.error("Microphone access denied");
       return;
+    }
+    streamRef.current = stream;
+    mimeTypeRef.current = pickMimeType();
+
+    // Audio graph for VAD.
+    try {
+      const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const ctx: AudioContext = new AC();
+      audioCtxRef.current = ctx;
+      if (ctx.state === "suspended") { try { await ctx.resume(); } catch {} }
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      src.connect(analyser);
+      analyserRef.current = analyser;
+    } catch (e) {
+      console.warn("[call] audio graph failed", e);
     }
 
     setInCall(true);
     setMessages([]);
     setPartialUser("");
     setMicMuted(false);
-    setOverlayMinimized(false);
+    // Start already minimized so the user sees the live app + yellow orb.
+    setOverlayMinimized(true);
     setStatus("speaking");
 
     void requestWakeLock();
 
-    // Greeting — must speak inside the same gesture chain to unlock iOS TTS.
-    const greeting = "Hey, I'm listening. What's on your mind?";
+    // Greeting — inside the gesture chain to unlock iOS TTS.
+    const greeting = "I'm here.";
     setMessages([{ role: "assistant", content: greeting }]);
     await speakAsync(greeting);
     if (!inCallRef.current) return;
-    setStatus("listening");
-    startRecognition();
-  }, [speakAsync, startRecognition, requestWakeLock]);
+
+    // Start the VAD loop and begin listening.
+    rafRef.current = requestAnimationFrame(vadTick);
+    backToListening();
+  }, [speakAsync, requestWakeLock, vadTick, backToListening]);
 
   const endCall = useCallback(
-    async (_reason?: "user" | "phrase" | "error" | "plan") => {
+    async (_reason?: "user" | "phrase" | "error") => {
       if (!inCallRef.current) return;
       setStatus("ending");
-      stopRecognition();
+      teardownAudio();
       try { window.speechSynthesis?.cancel(); } catch {}
       await releaseWakeLock();
       setInCall(false);
       setStatus("idle");
       setPartialUser("");
+      setReadingDocs(null);
+      setActionLabel(null);
       setOverlayMinimized(false);
     },
-    [releaseWakeLock, stopRecognition],
+    [releaseWakeLock, teardownAudio],
   );
+  useEffect(() => { endCallRef.current = endCall; }, [endCall]);
 
   const toggleMicMute = useCallback(() => {
-    setMicMuted((m) => !m);
-  }, []);
-
-  // Wire forward refs now that endCall / generatePlan are defined.
-  useEffect(() => { endCallRef.current = endCall; }, [endCall]);
-  useEffect(() => {
-    generatePlanRef.current = generatePlanFromConversationInternal;
-  }, [generatePlanFromConversationInternal]);
+    setMicMuted((m) => {
+      const next = !m;
+      if (next) {
+        // Drop any in-flight segment.
+        stopRecorder(true);
+      } else if (inCallRef.current && statusRef.current === "listening") {
+        setTimeout(() => armRecorder(), 0);
+      }
+      return next;
+    });
+  }, [stopRecorder, armRecorder]);
 
   // Cleanup on unmount.
   useEffect(() => {
     return () => {
-      stopRecognition();
+      teardownAudio();
       try { window.speechSynthesis?.cancel(); } catch {}
       void releaseWakeLock();
     };
-  }, [releaseWakeLock, stopRecognition]);
+  }, [releaseWakeLock, teardownAudio]);
 
-  // Resume audio context / re-arm recognition on visibility return.
+  // Re-arm on visibility return.
   useEffect(() => {
     const onVis = () => {
-      if (!inCallRef.current) return;
-      if (document.hidden) return;
-      if (statusRef.current === "listening" && !recogRef.current) {
-        startRecognition();
+      if (!inCallRef.current || document.hidden) return;
+      if (audioCtxRef.current?.state === "suspended") {
+        void audioCtxRef.current.resume();
+      }
+      if (statusRef.current === "listening" && !recorderRef.current && !micMutedRef.current) {
+        armRecorder();
       }
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [startRecognition]);
+  }, [armRecorder]);
 
   const value = useMemo<CallModeContextValue>(
     () => ({
@@ -737,10 +798,10 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       toggleMicMute,
       overlayMinimized,
       setOverlayMinimized,
-      generatePlanFromConversation,
       readingDocs,
       dismissReadingDocs,
       actionLabel,
+      registerCallController,
     }),
     [
       inCall,
@@ -752,10 +813,10 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       endCall,
       toggleMicMute,
       overlayMinimized,
-      generatePlanFromConversation,
       readingDocs,
       dismissReadingDocs,
       actionLabel,
+      registerCallController,
     ],
   );
 

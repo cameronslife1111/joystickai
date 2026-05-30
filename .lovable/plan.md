@@ -1,38 +1,79 @@
-## Problem
+## Goal
 
-When you write a "New idea" and tap **Send to…**, the sentences ARE saved to the database correctly (verified against your live data — no rows are lost). But the app shows only one sentence at a time, and after sending you stay parked on your previous sentence. So newly added ideas land out of view (top/bottom/elsewhere) and feel "completely missing." Two secondary bugs make it worse:
+Transform the Orby live call into a hands-free controller for the app. It opens already minimized (main app visible, orb yellow), listens via OpenAI Whisper for fast natural turns, and can act on the user's documents and sentences by voice — never generating plans anymore.
 
-1. Inserting above the current position shifts everything down, but `current_sentence_index` is never adjusted — so positions drift.
-2. After sending, the target list's sentence count and reading position don't refresh until you fully leave and reopen the document.
+## 1. Remove plan generation from call mode
 
-## Fix
+- Strip plan logic from `CallModeContext`: remove `generatePlanFromConversation`, `generatePlanFromConversationInternal`, `generatePlanRef`, the `distillCallTranscript` import/use, the `isMakePlanPhrase` branch, and the `"plan"` end-call reason.
+- `CallOverlay`: remove the "Make plan" yellow button and its handler.
+- `call-phrases.ts`: remove `PLAN_PATTERNS` / `isMakePlanPhrase`.
+- Update `chatWithOrby`'s system prompt (in `orby-call.functions.ts`) to drop all "make a plan" instructions; keep `distillCallTranscript` server fn in the file (it's still used elsewhere for the separate plan composer) but no longer call it from the call.
+- Net effect: the call no longer knows about plans. The standalone plan composer (`PlanComposerDialog`, etc.) is untouched.
 
-All changes are in `src/routes/_authenticated/app.tsx`, in the `sendIdea` function (and a small toast/refresh tweak). No database changes — the DB functions already work correctly.
+## 2. Start the call already minimized
 
-### 1. Jump to the new idea when sending to the document you're viewing
-After the insert succeeds, set the active document's `current_sentence_index` to the first inserted sentence (`insertAt`), persist it to the database, update the `documents` cache, and refetch sentences. Result: the moment you send, the screen shows the idea you just wrote — proof it landed.
+- `startCall`: set `overlayMinimized` to `true` right away so the user sees the main app (orb + their current sentence) with the existing yellow "On a call with Orby" pill at top. The orb already turns yellow via the `orb-call` class while `inCall`.
+- Keep the greeting spoken inside the start gesture (needed to unlock iOS audio), but speak a shorter line (e.g. "I'm here.").
+- The expanded overlay still works when the user taps the pill; the in-overlay reading panel stays available.
 
-### 2. Point a different document at the new idea
-When sending to a list you're NOT currently viewing, update that document's `current_sentence_index` to `insertAt` in the database and in the `documents` cache, and prime/refetch its `["sentences", targetDocId]` cache. So when you open it later, it opens exactly on the new content instead of an old position.
+## 3. Switch speech-to-text to OpenAI Whisper (faster, natural turns)
 
-### 3. Always refresh counts and position live
-Make `sendIdea` await an invalidation of both `["sentences", targetDocId]` and `["documents"]` so the header counter (the "X / N") and any list counts update immediately without navigating away.
+Replace `webkitSpeechRecognition` with mic capture + Whisper transcription:
 
-### 4. Confirm what landed (trust)
-After insert, read back the target document's new sentence count and show a clear toast: e.g. `Added 3 to "{title}" — 47 sentences total`. This confirms the save every time.
+- Client: capture mic with `MediaRecorder`, and use a Web Audio `AnalyserNode` for silence/VAD detection. Buffer audio while the user speaks; when silence is detected (~600–800ms, tunable — far shorter than today's 3200ms pause), stop the current segment, package the audio (webm/opus), and send it to a new server function for transcription. Then immediately re-arm for the next segment.
+- New server fn `transcribeAudio` in `src/lib/orby-stt.functions.ts` (`createServerFn`, `requireSupabaseAuth`): accepts the audio blob (base64), forwards to OpenAI `POST /v1/audio/transcriptions` with `model: gpt-4o-transcribe` (Whisper-family) using `OPENAI_API_KEY`, returns `{ text }`. Reject empty/very-short clips.
+- While Orby is speaking (TTS) or processing, pause capture so it doesn't transcribe its own voice; resume after.
+- Output stays the browser `speechSynthesis` TTS (`speakAsync`) exactly as today.
+- Show interim "Listening…/Thinking…" via existing `status`/`actionLabel`.
 
-### 5. Resume on the right sentence
-Currently after sending it re-speaks the OLD sentence. Change it so, when sending to the active doc, it speaks/shows the newly inserted sentence (the one at `insertAt`).
+## 4. LLM intent router (replaces brittle regex matching)
 
-## Technical details
+Add `interpretCommand` server fn in `src/lib/orby-call-intent.functions.ts`. After each transcript, send it (plus the active-document context and recent turns) to the model and get back a structured action:
 
-- `insertAt` is already computed correctly for all four positions (top / bottom / after current / after a specific sentence). We reuse it as the jump target.
-- For the active document: after `supabase.rpc("insert_sentences_at", …)`, call `supabase.from("documents").update({ current_sentence_index: insertAt }).eq("id", targetDocId)`, `qc.setQueryData(["documents"], …)` to reflect it, then `await qc.invalidateQueries(["sentences", targetDocId])` and `["documents"]`.
-- For a non-active target: same `current_sentence_index` update + documents cache update; refetch its sentences cache so the next open is correct.
-- Toast count: `await supabase.from("sentences").select("id", { count: "exact", head: true }).eq("document_id", targetDocId)`.
-- Keep the existing iOS-safe synchronous `speak()` call inside the user gesture; just change which sentence it speaks.
-- No changes to `insert_sentences_at` / `compact_sentence_indexes` — they are correct and lossless.
+```text
+{ action: "jump" | "open_doc" | "find_doc" | "read_doc"
+        | "edit_sentence" | "add_text" | "mark_delete"
+        | "rename_title" | "chat" | "end_call",
+  ...action-specific fields (target text, doc hint, sentence hint, new text) }
+```
 
-## Verification
+The router resolves document references with the existing `resolveDocumentsByVoice` fuzzy matcher and resolves sentence references against the active doc's sentences (by ordinal "sentence 4", or by meaning "the one about X"). `chat` falls through to `chatWithOrby` for normal conversation. This is far more robust than `call-phrases.ts` regex; that file's remaining matchers can be retired.
 
-After implementing, I'll confirm: (a) sending to the current list jumps the view to the new idea; (b) sending to another list, then opening it, lands on the new idea; (c) the header counter updates immediately; (d) the toast reports the correct new total.
+## 5. Bridge the call to the live app (jump / open)
+
+The call runs in `CallModeContext`; the active document + sentence index live in `app.tsx`. Add a lightweight controller bridge:
+
+- `CallModeContext` exposes `registerCallController(controller)` and an internal ref.
+- `app.tsx` registers a controller in an effect exposing: `getActiveContext()` (active doc id, title, current index, sentence list), `openDocumentById(id)`, and `jumpToIndex(i)` (reusing its existing `setActiveDocId` + `setIndex` logic so it persists `current_sentence_index` and refreshes the view/speech).
+- Voice "jump to / move to sentence …" → resolve index → `jumpToIndex`. "Open the document titled …" → resolve doc → `openDocumentById`. The main app view updates live while minimized, and Orby confirms aloud.
+
+## 6. Document/sentence actions (all confirm the target aloud)
+
+Server functions in `orby-call-docs.functions.ts` (extend existing):
+
+- `addTextToDocument` (exists) — keep; always reply "Added to ‹title›." Reuse `insert_sentences_at`.
+- `markSentencesForDeletion` (exists) — keep; sets `pending_delete`.
+- `editSentence` (new) — "change this sentence to say …": resolve target sentence (active doc / context) via LLM, update `content`, reply with the title + which sentence.
+- `renameDocumentTitle` (new) — "rename this document to …" / "change the title to …": resolve doc, update `documents.title`, reply with old→new title.
+- `readDocumentsForCall` (exists) — "read … and tell me …": load as assistant context so the follow-up answer uses it; keeps the overlay reading panel.
+- `resolveDocumentsByVoice` (exists) — powers "what's the name of the document about …": Orby answers "The title you may be referring to is ‹title›."
+
+After every mutating action, Orby **speaks the document it touched** ("Added that to ‹Morning Routine›.") so the user can correct a wrong title, and the relevant React Query caches (`["documents"]`, `["sentences", docId]`) are invalidated so counts/positions update without leaving the page.
+
+## 7. Tighten timing & polish
+
+- Replace the 3200ms pause commit with VAD-driven segmentation (~700ms silence) for natural back-and-forth.
+- Guard against transcribing Orby's own TTS (capture paused during `speaking`).
+- Keep wake-lock, mic-mute, visibility re-arm, and cleanup behavior.
+
+## Technical notes
+
+- New files: `src/lib/orby-stt.functions.ts`, `src/lib/orby-call-intent.functions.ts`. Extend: `src/lib/orby-call-docs.functions.ts`, `src/contexts/CallModeContext.tsx`, `src/components/CallOverlay.tsx`, `src/routes/_authenticated/app.tsx`, `src/lib/orby-call.functions.ts`.
+- All new server fns use `createServerFn` + `requireSupabaseAuth` (RLS scopes to the user). `OPENAI_API_KEY` is already present and read inside handlers.
+- `attachSupabaseAuth` is already wired in `src/start.ts` (existing protected fns work), so no auth-middleware changes needed.
+- No database schema changes required.
+- Browser support: Whisper path needs `MediaRecorder` + `getUserMedia` (already requested today) + Web Audio; keep a clear unsupported-browser toast.
+
+## Out of scope
+
+- The separate plan composer / scheduled plans feature stays exactly as-is; we only remove plan generation *from the live call*.
