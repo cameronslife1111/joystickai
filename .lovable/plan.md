@@ -1,38 +1,26 @@
 ## Goal
 
-When you open Favorites, tap a slot, and pick a document to fill it, Orby should automatically:
-1. Save the slot (unchanged — already works)
-2. Close the picker AND the Favorites overlay
-3. Switch to the document you just selected
-4. Re-trigger the speech function to read that document's current sentence aloud
-
-This removes the two manual steps you do today (closing Favorites, then pressing repeat).
+Keep the whole plan flow exactly as it is — the approval dialog still pops up, the toasts still fire — but remove the manual "Approve and Run" tap. As soon as Orby finishes composing a plan and it becomes a real proposal (status `proposed` with at least one step), it auto-approves and starts running.
 
 ## Where the change lives
 
-`src/routes/_authenticated/app.tsx`, inside the slot picker's `pickDoc` function (around line 1871). Today it only saves favorites and closes the small picker:
-
-```text
-pickDoc(docId):
-  - build next favorites array
-  - saveFavorites(next)
-  - closePicker()   // only closes the picker, leaves Favorites grid open
-```
+`src/components/PlanApprovalDialog.tsx`. This dialog already polls/subscribes to the plan and already contains the exact `approve()` logic (set status to `approved`, invoke `plan-step`, invalidate queries, show the "Running in the background" toast, call `onApproved`). It's used by both `app.tsx` and `AIPlansScreen.tsx`, so changing it here covers every entry point.
 
 ## What changes
 
-Update `pickDoc` so that after saving the favorites it also navigates to the picked doc, closes everything, and speaks — mirroring the existing search-overlay `pickDoc` (lines 1977–1998) which already does iOS-safe synchronous speech inside the tap gesture.
+Add a one-shot auto-approve effect inside `PlanApprovalDialog`:
 
-New behavior for `pickDoc(docId)`:
-1. Build and `saveFavorites(next)` (unchanged).
-2. If not muted and `speechSynthesis` is available, synchronously (inside the tap) cancel current speech and speak the picked document's current sentence — read from the cached `["sentences", docId]` query at the doc's `current_sentence_index`, cleaned with `stripEmoji` (same pattern as the search overlay).
-3. `setActiveDocId(docId)` so the main view switches to that document.
-4. `closePicker()` and `setFavoritesOpen(false)` so both the picker and the Favorites grid close, returning to the sentence view.
+- Track whether we've already auto-approved this plan with a `useRef` keyed off `planId` (so re-renders, polling, and realtime updates don't fire it twice).
+- In a `useEffect` watching `plan?.status` and the steps, when `open` is true and `status === "proposed"` and `steps.length > 0` and we haven't auto-approved this plan yet, call the existing `approve()` function automatically.
+- Reset the "already approved" ref whenever `planId` changes.
 
-The "Clear slot" and "Replace all matching slots" behaviors stay exactly as they are.
+Everything else stays untouched:
+- The dialog still opens and shows "Planning…" while composing.
+- `refused` (proposed with 0 steps) and `failed` plans do NOT auto-approve — they keep showing their message and the Close button, exactly as today.
+- The "Approve and Run" button can stay in the markup as a harmless fallback (it just won't normally be reached), or be left as-is.
+- The "Running in the background — safe to close the app" toast and the composer's "Orby is planning…" toast both still fire, so you still get the toaster notifications when a plan starts.
 
 ## Technical notes
 
-- Speech must be triggered synchronously within the click handler (no awaiting before it) for iOS Safari, so I'll fire the utterance before/independently of the `await saveFavorites`, exactly like the search overlay does.
-- If the picked doc's sentences aren't cached yet, speech is skipped gracefully (same as the existing search overlay), but the doc still becomes active so the normal on-load speech/repeat path applies.
-- No backend, schema, or other component changes needed.
+- No backend, edge function, or schema changes. The same `plans` status transition (`proposed` → `approved`) and the same `plan-step` invocation are used; we're just triggering them automatically instead of on a button press.
+- Guarding with a per-`planId` ref prevents duplicate `plan-step` invocations from the polling interval and the realtime subscription both updating the cache.
