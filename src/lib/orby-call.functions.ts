@@ -29,7 +29,7 @@ export const chatWithOrby = createServerFn({ method: "POST" })
       "Keep replies SHORT: usually 1 sentence, occasionally 2. Conversational, warm, easy to listen to. " +
       "No markdown, no lists, no headings, no emoji, no URLs, no bullet points. " +
       "Ask one focused follow-up question when it helps the user think. " +
-      "If the user asks you to make / generate / build / turn this into a plan, acknowledge briefly that you'll generate the plan now — the app will hang up automatically. " +
+      "You cannot generate plans on this call. If the user asks for a plan, briefly tell them plans are made from the plan composer, not on the call. " +
       "If the user says goodbye or hang up, say a brief farewell and the app will end the call. " +
       "The user may attach document contents to this conversation as assistant messages of the form '[document: \"<title>\"]' followed by numbered sentences. Treat those as authoritative context for follow-up questions and reference the document by title when helpful. " +
       "If the user asks you to read, open, pull up, add text to, or mark sentences for deletion in a document, simply acknowledge briefly (e.g. 'Reading it now.' or 'Adding to it.') — the app performs the action automatically. " +
