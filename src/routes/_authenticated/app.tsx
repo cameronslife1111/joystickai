@@ -469,6 +469,66 @@ function AppPage() {
     setJumpOpen(false);
   }, [sentences, setIndex, speak, claimSpeech]);
 
+  // ---- Call mode bridge ----
+  // Expose live view state + actions so the voice call can drive the app.
+  const callBridgeRef = useRef({ activeDoc, sentences, currentIdx });
+  callBridgeRef.current = { activeDoc, sentences, currentIdx };
+
+  useEffect(() => {
+    registerCallController({
+      getActiveContext: () => {
+        const { activeDoc: ad, sentences: ss, currentIdx: ci } = callBridgeRef.current;
+        if (!ad) return null;
+        return {
+          docId: ad.id,
+          title: ad.title,
+          currentIndex: ci,
+          sentences: (ss ?? []).map((s) => ({ id: s.id, content: s.content })),
+        };
+      },
+      openDocumentById: async (id: string) => {
+        const token = claimSpeech();
+        const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+          supabase
+            .from("documents")
+            .select("current_sentence_index, title")
+            .eq("id", id)
+            .maybeSingle(),
+          supabase
+            .from("sentences")
+            .select("*")
+            .eq("document_id", id)
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: true }),
+        ]);
+        const list = (rows ?? []) as Sentence[];
+        qc.setQueryData<Sentence[]>(["sentences", id], list);
+        const savedIdx = freshDoc?.current_sentence_index ?? 0;
+        const clamped = list.length === 0 ? 0 : Math.max(0, Math.min(savedIdx, list.length - 1));
+        qc.setQueryData<Doc[]>(["documents"], (prev) =>
+          prev?.map((d) => (d.id === id ? { ...d, current_sentence_index: clamped } : d)) ?? prev,
+        );
+        setActiveDocId(id);
+        // Suppress the speech token so opening a doc during a call stays silent.
+        if (token === speechTokenRef.current) speechTokenRef.current++;
+        return freshDoc?.title ? { title: freshDoc.title } : null;
+      },
+      jumpToIndex: async (index: number) => {
+        const { activeDoc: ad, sentences: ss } = callBridgeRef.current;
+        if (!ad || !ss || ss.length === 0) return;
+        const clamped = Math.max(0, Math.min(index, ss.length - 1));
+        qc.setQueryData<Doc[]>(["documents"], (prev) =>
+          prev?.map((d) => (d.id === ad.id ? { ...d, current_sentence_index: clamped } : d)) ?? prev,
+        );
+        await supabase.from("documents")
+          .update({ current_sentence_index: clamped })
+          .eq("id", ad.id);
+      },
+    });
+    return () => registerCallController(null);
+  }, [registerCallController, qc, claimSpeech]);
+
+
   const moveSentence = useCallback(async (target: number) => {
     if (!activeDocId || !sentences || sentences.length === 0) return;
     const from = currentIdx;
