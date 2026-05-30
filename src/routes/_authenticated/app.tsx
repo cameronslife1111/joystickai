@@ -1869,6 +1869,24 @@ function AppPage() {
               setReplaceMatching(true);
             };
             const pickDoc = async (docId: string) => {
+              // iOS-safe: speak synchronously inside the tap gesture if unmuted.
+              if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+                try {
+                  const picked = docs?.find((d) => d.id === docId);
+                  const cached = qc.getQueryData<Sentence[]>(["sentences", docId]);
+                  const idx = picked?.current_sentence_index ?? 0;
+                  const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
+                  if (text) {
+                    const clean = stripEmoji(text);
+                    if (clean) {
+                      window.speechSynthesis.cancel();
+                      const u = new SpeechSynthesisUtterance(clean);
+                      u.rate = 1; u.pitch = 1;
+                      window.speechSynthesis.speak(u);
+                    }
+                  }
+                } catch {}
+              }
               const next = [...favorites];
               while (next.length < 50) next.push(null);
               if (replaceMatching && targetId) {
@@ -1878,8 +1896,10 @@ function AppPage() {
               } else {
                 next[pickerSlot!] = docId;
               }
-              await saveFavorites(next);
+              setActiveDocId(docId);
               closePicker();
+              setFavoritesOpen(false);
+              await saveFavorites(next);
             };
             return (
             <div
