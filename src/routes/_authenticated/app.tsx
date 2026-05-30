@@ -467,6 +467,12 @@ function AppPage() {
     await setIndex(clamped);
     speak(sentences[clamped].content, token);
     setJumpOpen(false);
+    // Jump to top means the user is done with this doc — auto swipe-right
+    // to advance to the next favorite, saving a manual gesture.
+    if (clamped === 0) {
+      await new Promise((r) => setTimeout(r, 600));
+      await onSwipeRightRef.current?.();
+    }
   }, [sentences, setIndex, speak, claimSpeech]);
 
   // ---- Call mode bridge ----
