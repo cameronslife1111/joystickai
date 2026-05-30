@@ -295,7 +295,7 @@ export function PlanComposerDialog({ open, onOpenChange, onPlanProposed }: Props
             disabled={!canSubmit}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            {busy ? "Planning…" : "Generate Plan"}
+            {busy ? "Submitting…" : "Submit Plan"}
           </button>
         </div>
         <ScheduleEditorDialog
