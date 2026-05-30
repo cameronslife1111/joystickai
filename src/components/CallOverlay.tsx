@@ -165,19 +165,7 @@ export function CallOverlay() {
           {micMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
         </button>
 
-        <button
-          type="button"
-          onClick={async () => {
-            await generatePlanFromConversation();
-            await endCall("plan");
-          }}
-          disabled={messages.length < 2}
-          className="flex h-14 items-center gap-2 rounded-full bg-yellow-400 px-5 text-sm font-semibold text-black shadow-md transition active:scale-95 disabled:opacity-40"
-          aria-label="Generate plan from call"
-        >
-          <FileText className="h-5 w-5" />
-          Make plan
-        </button>
+
 
         <button
           type="button"
