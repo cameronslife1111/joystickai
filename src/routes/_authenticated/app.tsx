@@ -618,6 +618,14 @@ function AppPage() {
 
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
+
+    // If the current sentence links to a document, swipe right opens it.
+    const linkedId = currentSentence?.linked_document_id;
+    if (linkedId && docs.some((d) => d.id === linkedId)) {
+      await openLinkedDocument();
+      return;
+    }
+
     if (lockFavorites) {
       // List cycling locked — repeat current sentence instead of advancing.
       const token = claimSpeech();
