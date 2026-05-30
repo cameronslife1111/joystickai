@@ -1,26 +1,23 @@
 ## Goal
 
-Keep the whole plan flow exactly as it is — the approval dialog still pops up, the toasts still fire — but remove the manual "Approve and Run" tap. As soon as Orby finishes composing a plan and it becomes a real proposal (status `proposed` with at least one step), it auto-approves and starts running.
+Two small changes to the main reader (`src/routes/_authenticated/app.tsx`):
 
-## Where the change lives
+1. **Swipe right opens a linked document.** When the current sentence has a linked document, swiping right opens that linked document instead of cycling to the next favorite. If there's no linked document, swipe right keeps working exactly as it does today (favorites cycle, or all-docs fallback).
+2. **Move the "linked" pill to the top.** The little link chip that currently floats above the orb moves up underneath the document title in the header.
 
-`src/components/PlanApprovalDialog.tsx`. This dialog already polls/subscribes to the plan and already contains the exact `approve()` logic (set status to `approved`, invoke `plan-step`, invalidate queries, show the "Running in the background" toast, call `onApproved`). It's used by both `app.tsx` and `AIPlansScreen.tsx`, so changing it here covers every entry point.
+## Change 1 — Swipe right opens linked doc
 
-## What changes
+In `onSwipeRight` (starts line 619), add an early check right after the `lockFavorites` repeat block: if `currentSentence?.linked_document_id` points at a document that exists in `docs`, call the existing `openLinkedDocument()` and return. That function already handles everything correctly (resumes the linked doc at its saved sentence, primes caches, speaks). Everything below that check — the favorites cycle and the all-docs fallback — stays untouched and runs whenever there's no linked document.
 
-Add a one-shot auto-approve effect inside `PlanApprovalDialog`:
+Note: `openLinkedDocument` already claims its own speech token, so the early branch will simply delegate to it rather than duplicating logic.
 
-- Track whether we've already auto-approved this plan with a `useRef` keyed off `planId` (so re-renders, polling, and realtime updates don't fire it twice).
-- In a `useEffect` watching `plan?.status` and the steps, when `open` is true and `status === "proposed"` and `steps.length > 0` and we haven't auto-approved this plan yet, call the existing `approve()` function automatically.
-- Reset the "already approved" ref whenever `planId` changes.
+## Change 2 — Move the linked pill under the title
 
-Everything else stays untouched:
-- The dialog still opens and shows "Planning…" while composing.
-- `refused` (proposed with 0 steps) and `failed` plans do NOT auto-approve — they keep showing their message and the Close button, exactly as today.
-- The "Approve and Run" button can stay in the markup as a harmless fallback (it just won't normally be reached), or be left as-is.
-- The "Running in the background — safe to close the app" toast and the composer's "Orby is planning…" toast both still fire, so you still get the toaster notifications when a plan starts.
+- Remove the linked-document button that currently sits above the orb (lines ~1714–1727, the absolutely-positioned chip with `-top-10`).
+- Re-add it inside the header (after the title/counter block, lines ~1520–1536), rendered as a small centered pill directly beneath the document title. It keeps the same look (link icon + linked doc title, primary accent) and the same tap behavior (`onClick={() => void openLinkedDocument()}`), just positioned in normal flow under the title instead of floating over the orb.
 
 ## Technical notes
 
-- No backend, edge function, or schema changes. The same `plans` status transition (`proposed` → `approved`) and the same `plan-step` invocation are used; we're just triggering them automatically instead of on a button press.
-- Guarding with a per-`planId` ref prevents duplicate `plan-step` invocations from the polling interval and the realtime subscription both updating the cache.
+- No backend, schema, or data changes. Pure frontend.
+- The linked-doc tap, the swipe-right gesture, and the indicator now all funnel through the same `openLinkedDocument()` callback, so behavior stays consistent.
+- Locked-favorites behavior: swiping right on a sentence with a linked doc will open the link (the link takes precedence over the "repeat current sentence" lock), matching the request that swipe right should always open a linked document when one exists.

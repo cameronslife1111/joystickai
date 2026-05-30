@@ -616,8 +616,67 @@ function AppPage() {
     });
   }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
 
+  const openLinkedDocument = useCallback(async () => {
+    const targetId = currentSentence?.linked_document_id;
+    if (!targetId) return;
+    const exists = docs?.some((d) => d.id === targetId);
+    if (!exists) {
+      toast.error("Linked document not found");
+      return;
+    }
+
+    // Mirror onSwipeRight: resume the target doc at its own saved sentence.
+    // Do NOT call setIndex here — it would write to the SOURCE doc's row
+    // (activeDoc is still stale until setActiveDocId flushes), wiping the
+    // user's position on the doc they're coming from.
+    const token = claimSpeech();
+
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+
+    setActiveDocId(targetId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [currentSentence, docs, claimSpeech, speak, qc]);
+
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
+
+    // If the current sentence links to a document, swipe right opens it.
+    const linkedId = currentSentence?.linked_document_id;
+    if (linkedId && docs.some((d) => d.id === linkedId)) {
+      await openLinkedDocument();
+      return;
+    }
+
     if (lockFavorites) {
       // List cycling locked — repeat current sentence instead of advancing.
       const token = claimSpeech();
@@ -701,7 +760,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, sentences, currentIdx]);
+  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, sentences, currentIdx, currentSentence, openLinkedDocument]);
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
@@ -1199,56 +1258,7 @@ function AppPage() {
     }
   }, [parseChecklists, docs, qc]);
 
-  const openLinkedDocument = useCallback(async () => {
-    const targetId = currentSentence?.linked_document_id;
-    if (!targetId) return;
-    const exists = docs?.some((d) => d.id === targetId);
-    if (!exists) {
-      toast.error("Linked document not found");
-      return;
-    }
-
-    // Mirror onSwipeRight: resume the target doc at its own saved sentence.
-    // Do NOT call setIndex here — it would write to the SOURCE doc's row
-    // (activeDoc is still stale until setActiveDocId flushes), wiping the
-    // user's position on the doc they're coming from.
-    const token = claimSpeech();
-
-    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
-      supabase
-        .from("documents")
-        .select("current_sentence_index, title")
-        .eq("id", targetId)
-        .maybeSingle(),
-      supabase
-        .from("sentences")
-        .select("*")
-        .eq("document_id", targetId)
-        .order("order_index", { ascending: true })
-        .order("created_at", { ascending: true }),
-    ]);
-    if (token !== speechTokenRef.current) return;
-
-    const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
-    const clamped = list.length === 0
-      ? 0
-      : Math.max(0, Math.min(savedIdx, list.length - 1));
-    const resolved = list[clamped];
-
-    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
-    qc.setQueryData<Doc[]>(["documents"], (prev) =>
-      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
-    );
-    if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
-    }
-
-    setActiveDocId(targetId);
-    if (resolved?.content) speak(resolved.content, token);
-  }, [currentSentence, docs, claimSpeech, speak, qc]);
+  // openLinkedDocument is defined above (before onSwipeRight) so swipe-right can call it.
 
   const handleExportAll = useCallback(async () => {
     try {
@@ -1533,6 +1543,22 @@ function AppPage() {
             </>
           )}
         </div>
+        {!composing && currentSentence?.linked_document_id && (() => {
+          const linkedDocTitle = docs?.find((d) => d.id === currentSentence.linked_document_id)?.title ?? null;
+          return (
+            <div className="mt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void openLinkedDocument()}
+                className="flex max-w-[80vw] items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
+                style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+              >
+                <LinkIcon className="h-3 w-3 shrink-0" />
+                <span className="truncate">{linkedDocTitle ?? "Linked"}</span>
+              </button>
+            </div>
+          );
+        })()}
       </header>
 
       {/* Sentence */}
@@ -1711,20 +1737,7 @@ function AppPage() {
             height: "min(55vw, 28svh, 220px)",
           }}
         >
-          {currentSentence?.linked_document_id && (() => {
-            const linkedDocTitle = docs?.find((d) => d.id === currentSentence.linked_document_id)?.title ?? null;
-            return (
-              <button
-                type="button"
-                onClick={() => void openLinkedDocument()}
-                className="absolute left-1/2 -top-10 z-10 flex max-w-[80vw] -translate-x-1/2 items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
-                style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-              >
-                <LinkIcon className="h-3 w-3 shrink-0" />
-                <span className="truncate">{linkedDocTitle ?? "Linked"}</span>
-              </button>
-            );
-          })()}
+          {/* Linked-document pill moved to the header, under the title. */}
           <Orb
             ref={orbRef}
             state={orbState}
