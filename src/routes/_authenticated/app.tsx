@@ -673,6 +673,8 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [currentSentence, docs, claimSpeech, speak, qc]);
 
+  const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
+
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
 
