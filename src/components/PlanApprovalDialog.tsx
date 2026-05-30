@@ -63,19 +63,6 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
   const refused = status === "proposed" && steps.length === 0;
   const failed = status === "failed";
 
-  // Auto-approve: as soon as a real proposal is ready, approve and run it
-  // automatically (one-shot per plan). The dialog and toasts still fire.
-  const autoApprovedRef = useRef<string | null>(null);
-  useEffect(() => {
-    autoApprovedRef.current = null;
-  }, [planId]);
-  useEffect(() => {
-    if (!open || !planId) return;
-    if (status === "proposed" && steps.length > 0 && autoApprovedRef.current !== planId) {
-      autoApprovedRef.current = planId;
-      void approve();
-    }
-  }, [open, planId, status, steps.length]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onOpenChange(false); }}>
