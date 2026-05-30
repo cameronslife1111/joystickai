@@ -467,6 +467,12 @@ function AppPage() {
     await setIndex(clamped);
     speak(sentences[clamped].content, token);
     setJumpOpen(false);
+    // Jump to top means the user is done with this doc — auto swipe-right
+    // to advance to the next favorite, saving a manual gesture.
+    if (clamped === 0) {
+      await new Promise((r) => setTimeout(r, 600));
+      await onSwipeRightRef.current?.();
+    }
   }, [sentences, setIndex, speak, claimSpeech]);
 
   // ---- Call mode bridge ----
@@ -667,6 +673,8 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [currentSentence, docs, claimSpeech, speak, qc]);
 
+  const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
+
   const onSwipeRight = useCallback(async () => {
     if (!docs || !activeDoc) return;
 
@@ -761,6 +769,9 @@ function AppPage() {
 
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, sentences, currentIdx, currentSentence, openLinkedDocument]);
+  onSwipeRightRef.current = onSwipeRight;
+
+
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
