@@ -769,6 +769,9 @@ function AppPage() {
 
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, sentences, currentIdx, currentSentence, openLinkedDocument]);
+  onSwipeRightRef.current = onSwipeRight;
+
+
 
   const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
 
