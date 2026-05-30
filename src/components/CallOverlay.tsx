@@ -14,7 +14,6 @@ export function CallOverlay() {
     toggleMicMute,
     overlayMinimized,
     setOverlayMinimized,
-    generatePlanFromConversation,
     readingDocs,
     dismissReadingDocs,
     actionLabel,
