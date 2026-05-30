@@ -143,11 +143,17 @@ function AppPage() {
     },
   );
 
-  // Watch composing plans → toast user when ready to review
-  useComposingPlansWatcher(currentUserId, (planId) => {
-    setPlanApprovalId(planId);
-    setPlanApprovalOpen(true);
-  });
+  // Watch composing plans → auto-approve & start; toast confirms
+  useComposingPlansWatcher(
+    currentUserId,
+    // Auto-approved plan started → "View" opens the AI Plans screen
+    () => setPlansScreenOpen(true),
+    // Refused/failed → open the plan for review
+    (planId) => {
+      setPlanApprovalId(planId);
+      setPlanApprovalOpen(true);
+    },
+  );
 
 
   // Apply theme
