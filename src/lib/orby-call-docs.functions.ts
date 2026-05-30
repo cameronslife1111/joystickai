@@ -215,3 +215,62 @@ export const markSentencesForDeletion = createServerFn({ method: "POST" })
     if (upErr) throw new Error(upErr.message);
     return { marked: ids.length };
   });
+
+// ----- edit (replace) a sentence's text -----
+const editSchema = z.object({
+  documentId: z.string().uuid(),
+  sentenceIndex: z.number().int().min(0),
+  newText: z.string().min(1).max(8000),
+});
+
+export const editSentence = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => editSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: sents, error } = await supabase
+      .from("sentences")
+      .select("id, content, order_index")
+      .eq("document_id", data.documentId)
+      .order("order_index", { ascending: true });
+    if (error) throw new Error(error.message);
+    if (!sents || sents.length === 0) return { updated: false };
+
+    const idx = Math.min(data.sentenceIndex, sents.length - 1);
+    const target = sents[idx];
+    if (!target) return { updated: false };
+
+    const { error: upErr } = await supabase
+      .from("sentences")
+      .update({ content: data.newText.trim() })
+      .eq("id", target.id);
+    if (upErr) throw new Error(upErr.message);
+    return { updated: true, sentenceIndex: idx };
+  });
+
+// ----- rename a document title -----
+const renameSchema = z.object({
+  documentId: z.string().uuid(),
+  newTitle: z.string().min(1).max(300),
+});
+
+export const renameDocumentTitle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => renameSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { data: doc, error: getErr } = await supabase
+      .from("documents")
+      .select("title")
+      .eq("id", data.documentId)
+      .maybeSingle();
+    if (getErr) throw new Error(getErr.message);
+
+    const newTitle = data.newTitle.trim();
+    const { error } = await supabase
+      .from("documents")
+      .update({ title: newTitle })
+      .eq("id", data.documentId);
+    if (error) throw new Error(error.message);
+    return { oldTitle: doc?.title ?? null, newTitle };
+  });
