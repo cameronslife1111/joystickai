@@ -82,7 +82,7 @@ function AppPage() {
   const callAi = useServerFn(aiContinue);
 
   // Call mode (live voice conversation with Orby)
-  const { inCall, overlayMinimized, setOverlayMinimized, endCall } = useCallMode();
+  const { inCall, overlayMinimized, setOverlayMinimized, endCall, registerCallController } = useCallMode();
   const inCallRef = useRef(false);
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
   useEffect(() => {
