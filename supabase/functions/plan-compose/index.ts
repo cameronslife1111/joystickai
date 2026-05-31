@@ -66,7 +66,8 @@ Critical rules:
   - {{step_2.result.text}}   -> the text field of step 2's result
 - find_* tools return ARRAYS of matches (best match first). Subsequent steps almost always want {{step_N.result[0].id}}.
 - create_document and add_sentence return objects with at least an "id" field.
-- Plan as few steps as possible. Combine where reasonable.
+- BULK / "ALL MATCHING" REQUESTS: When the user asks you to act on EVERY document matching a description (e.g. "all the docs that start with Ricky - Prompt", "every meme prompt doc", "all documents about X"), enumerate the matching titles DIRECTLY from the ALL DOCUMENTS (id — title) list in the WORKSPACE SNAPSHOT and emit one step per match (e.g. one add_sentence per matching title, with the literal title text inlined). The ALL DOCUMENTS list contains the user's complete document set — there is NO five-result limit when you read titles from the snapshot, so match loosely (prefix/substring/keywords) and include EVERY doc that fits, not just a few. Do NOT call find_document_by_title for this — it only returns the 5 best matches and cannot enumerate. Only if the matching set is clearly larger than what the snapshot shows, use find_documents_by_title (plural) which returns all matches.
+- Plan as few steps as possible. Combine where reasonable — BUT for bulk "act on all matching docs" requests, one step per matching document is correct and expected (do not artificially limit the count).
 
 Return your output as JSON with this exact shape:
 {
