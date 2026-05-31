@@ -237,6 +237,43 @@ const TOOL_HANDLERS: Record<string, any> = {
     });
     return scored.slice(0, 5).map(({ d }) => ({ id: d.id, title: d.title }));
   },
+  async find_documents_by_title(args, { user_id, admin }) {
+    const query = String(args.query ?? "").trim();
+    const rawLimit = Number(args.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 100;
+    const qTokens = tokenize(query);
+    // Pull a generous working set so bulk enumeration sees every match.
+    let docs: any[] = [];
+    if (qTokens.length > 0) {
+      const orFilter = qTokens.map((t) => `title.ilike.%${t}%`).join(",");
+      const { data } = await admin
+        .from("documents")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .or(orFilter)
+        .order("updated_at", { ascending: false })
+        .limit(2000);
+      docs = data ?? [];
+    }
+    if (docs.length === 0) {
+      const { data } = await admin
+        .from("documents")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .order("updated_at", { ascending: false })
+        .limit(2000);
+      docs = data ?? [];
+    }
+    if (docs.length === 0) return [];
+    const scored = docs
+      .map((d: any) => ({ d, score: scoreCandidate(String(d.title ?? ""), query, qTokens) }))
+      .filter(({ score }) => score > 0);
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
+    });
+    return scored.slice(0, limit).map(({ d }) => ({ id: d.id, title: d.title }));
+  },
   async read_document(args, { user_id, admin }) {
     const { data: doc } = await admin
       .from("documents")
