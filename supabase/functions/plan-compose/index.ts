@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
     // Full list of documents (id + title)
     const { data: allDocs } = await admin
       .from("documents").select("id, title, updated_at")
-      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(200);
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(2000);
     const docList = allDocs ?? [];
 
     // Token-based relevance scoring so we inline the docs the user plausibly
