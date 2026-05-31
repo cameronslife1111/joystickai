@@ -7,9 +7,17 @@ export type ToolDef = {
 export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_document_by_title",
-    description: "Find documents owned by the user whose title fuzzily matches the query. Tokenized and scored — tolerates loose/approximate wording, never requires exact title. Returns up to 5 results, best match first. PREFER picking the id directly from the WORKSPACE SNAPSHOT over calling this tool.",
+    description: "Find documents owned by the user whose title fuzzily matches the query. Tokenized and scored — tolerates loose/approximate wording, never requires exact title. Returns up to 5 results, best match first. Use this to locate a SINGLE target document. For acting on EVERY document matching a description, use find_documents_by_title instead, or enumerate from the WORKSPACE SNAPSHOT. PREFER picking the id directly from the WORKSPACE SNAPSHOT over calling this tool.",
     args: {
       query: { type: "string", description: "Rough description of the document — title fragments, keywords, or topic", required: true },
+    },
+  },
+  {
+    name: "find_documents_by_title",
+    description: "Find ALL documents owned by the user whose title matches the query (prefix / substring / keywords). Unlike find_document_by_title (which returns only the 5 best matches), this returns EVERY match — use it for bulk operations like 'add all docs starting with X to another doc'. Returns an array of { id, title }, best match first. PREFER enumerating titles directly from the WORKSPACE SNAPSHOT's ALL DOCUMENTS list when they are visible there; only call this when the matching set may exceed what the snapshot shows.",
+    args: {
+      query: { type: "string", description: "Title prefix, fragment, or keywords shared by the documents to enumerate", required: true },
+      limit: { type: "number", description: "Optional max number of results (default 100)", required: false },
     },
   },
   {
