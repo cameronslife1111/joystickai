@@ -1,24 +1,28 @@
+# Auto-approve scheduled plans
+
 ## Goal
+Scheduled plans (both the automatic cron fires and the manual "Run now" button) should skip the `proposed` approval step and run automatically, exactly like regular plans.
 
-Move five menu buttons to new positions without changing any of their functions. Only the `slots` mapping in `src/routes/_authenticated/app.tsx` (lines 1502–1531) changes.
+## Why it's currently broken
+- `supabase/functions/plan-compose/index.ts` always sets a freshly composed plan to `status: "proposed"`.
+- The cron path (`plan-scheduler-tick.ts`) auto-approves afterward via a post-compose refetch, but the manual run-now path (`runScheduleNow` in `plan-schedules.functions.ts`) does not — it depends on the in-browser watcher, so a scheduled plan stays stuck at `proposed` when nobody's watching.
 
-## Requested moves
+## Fix (single, centralized change)
+Every scheduled plan row already carries a non-null `schedule_id`. Use that as the signal.
 
-- Swap **Search docs** (slot 11) ↔ **Plan mode** (slot 20)
-- **Swap slot** (slot 23) → slot 24
-- **Media gallery** (slot 10) → slot 23
-- **Sign out** (slot 24) → slot 10
+In `supabase/functions/plan-compose/index.ts`, at the final success update (around lines 347–355):
+- Load `schedule_id` from the plan (already selected via `select("*")`).
+- If `plan.schedule_id` is set **and** `steps.length > 0`, set `status: "approved"` and `approved_at: new Date().toISOString()` instead of `"proposed"`.
+- Otherwise keep the existing `"proposed"` behavior (this preserves the normal approval flow for non-scheduled plans, and still surfaces refusals where `steps` is empty so the user sees them).
 
-## Change (single edit)
+This makes auto-approval work regardless of which path invoked compose, and removes reliance on the fragile post-compose refetch.
 
-Update these lines in the `slots` array (`filled[N]` = slot N+1):
+## Cleanup
+- In `src/routes/api/public/plan-scheduler-tick.ts`, the post-compose auto-approve block (lines ~106–119) becomes redundant since the plan is already `approved`. Leave it as a harmless safety net, or simplify the comment — no behavior change needed.
 
-```text
-filled[9]  = grid[14]; // 10 Sign out        (was Media Gallery)
-filled[10] = grid[20]; // 11 Plan mode       (was Search docs)
-filled[19] = grid[11]; // 20 Search docs     (was Plan mode)
-filled[22] = grid[16]; // 23 Media Gallery   (was Swap slot)
-filled[23] = grid[23]; // 24 Swap slot       (was Sign out)
-```
+## Result
+- Cron-fired and manually-run scheduled plans go straight to `approved`, then the existing `plan-tick` cron picks them up and executes steps — no user approval prompt.
+- Refusals (no steps) and non-scheduled plans are unchanged.
 
-All other slots stay the same. No button logic, no `fn` handlers, and no backend touched — purely a position remap.
+## Technical detail
+`steps` is validated earlier in the function; the only change is the conditional `status`/`approved_at` in the success-path `.update(...)` call on the `plans` table.

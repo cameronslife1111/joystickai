@@ -344,10 +344,16 @@ Deno.serve(async (req) => {
     const summary = typeof parsed.summary === "string" ? parsed.summary : "";
     const explanation = typeof parsed.explanation === "string" ? parsed.explanation : null;
 
+    // Scheduled plans (those originating from a plan_schedule) auto-approve so
+    // they run without a manual approval step — matching how regular plans
+    // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
+    const isScheduled = !!(plan as any).schedule_id && steps.length > 0;
+
     await admin
       .from("plans")
       .update({
-        status: "proposed",
+        status: isScheduled ? "approved" : "proposed",
+        ...(isScheduled ? { approved_at: new Date().toISOString() } : {}),
         plan_summary: explanation ? `${summary}\n\n${explanation}` : summary,
         steps,
         total_steps: steps.length,
