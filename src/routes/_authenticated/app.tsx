@@ -1510,8 +1510,8 @@ function AppPage() {
     filled[6] = grid[12];  // 7  Copy sentence
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
-    filled[9] = grid[16];  // 10 Media Gallery
-    filled[10] = grid[11]; // 11 Search docs
+    filled[9] = grid[14];  // 10 Sign out
+    filled[10] = grid[20]; // 11 Plan mode
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = grid[2];  // 13 Gen text
     filled[13] = grid[3];  // 14 Analyze img
@@ -1520,11 +1520,11 @@ function AppPage() {
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
     filled[18] = grid[19]; // 19 Open link
-    filled[19] = grid[20]; // 20 Plan mode
+    filled[19] = grid[11]; // 20 Search docs
     filled[20] = grid[21]; // 21 AI Plans
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
-    filled[22] = grid[23]; // 23 Swap slot
-    filled[23] = grid[14]; // 24 Sign out
+    filled[22] = grid[16]; // 23 Media Gallery
+    filled[23] = grid[23]; // 24 Swap slot
 
 
     return filled;
