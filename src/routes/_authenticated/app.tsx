@@ -301,6 +301,20 @@ function AppPage() {
     );
   }, [qc, favorites, muted]);
 
+  const savePinnedDoc = useCallback(async (docId: string | null) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), pinned_document_id: docId,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, pinned_document_id: docId, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
+
+
 
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
   useEffect(() => {
