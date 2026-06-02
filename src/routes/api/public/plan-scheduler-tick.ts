@@ -50,10 +50,9 @@ async function fireSchedule(
     return { id: schedule.id, outcome: "deferred_spacing" };
   }
 
-  // Create the plans row, then invoke plan-compose. Status starts as
-  // 'composing'; plan-compose flips it to 'proposed'. Because this came from
-  // a user-approved schedule, we auto-bump 'proposed' → 'approved' once the
-  // compose finishes (handled below).
+  // Create the plans row. Status starts as 'composing'; plan-compose flips it
+  // to 'approved' on its own for scheduled plans (it reads schedule_id), so we
+  // do NOT need to synchronously wait for compose here.
   const scheduledFor = schedule.next_run_at ?? new Date().toISOString();
   const { data: plan, error: pErr } = await supabaseAdmin
     .from("plans")
@@ -76,49 +75,9 @@ async function fireSchedule(
     return { id: schedule.id, outcome: `insert_failed:${pErr?.message ?? "unknown"}` };
   }
 
-  // Synchronously call plan-compose so we can auto-approve once steps exist.
-  // Pass internal_secret so the function accepts a user-on-behalf call.
-  // plan-compose currently expects a JWT — but we pass service-role auth +
-  // body.user_id; the function reads user_id from body when there's no JWT.
-  // (If plan-compose ever stops accepting that, switch to direct insert of
-  //  pre-baked steps; the runner doesn't care which path created them.)
-  const SUPABASE_URL = process.env.SUPABASE_URL!;
-  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const PLAN_TICK_SECRET = process.env.PLAN_TICK_SECRET!;
-  try {
-    await fetch(`${SUPABASE_URL}/functions/v1/plan-compose`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        apikey: SERVICE_ROLE_KEY,
-      },
-      body: JSON.stringify({
-        plan_id: plan.id,
-        user_id: userId,
-        internal_secret: PLAN_TICK_SECRET,
-      }),
-    });
-  } catch (err) {
-    console.error("plan-compose invocation failed", err);
-  }
-
-  // After compose: if it produced steps, auto-approve. If it refused
-  // (steps = []), leave it as 'proposed' so the user sees it in the list.
-  const { data: refreshed } = await supabaseAdmin
-    .from("plans")
-    .select("status, steps")
-    .eq("id", plan.id)
-    .single();
-  const hasSteps = Array.isArray(refreshed?.steps) && refreshed!.steps.length > 0;
-  if (refreshed?.status === "proposed" && hasSteps) {
-    await supabaseAdmin
-      .from("plans")
-      .update({ status: "approved", approved_at: new Date().toISOString() })
-      .eq("id", plan.id);
-  }
-
-  // Advance schedule: compute next_run_at from now, bump run_count, clear claim.
+  // Advance the schedule IMMEDIATELY — before the slow compose call — so a
+  // compose timeout can never leave next_run_at stuck in the past and cause
+  // the schedule to re-fire every stale-claim window.
   const newRunCount = (schedule.run_count ?? 0) + 1;
   const advancedSpec: ScheduleSpec = { ...toSpec(schedule), run_count: newRunCount };
   const next = nextRunAt(advancedSpec);
@@ -133,6 +92,26 @@ async function fireSchedule(
       run_count: newRunCount,
     })
     .eq("id", schedule.id);
+
+  // Fire-and-forget the composer. plan-compose auto-approves scheduled plans,
+  // and the plan-tick cron executes the steps once approved. We pass
+  // internal_secret + body.user_id so the function accepts the service-role call.
+  const SUPABASE_URL = process.env.SUPABASE_URL!;
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const PLAN_TICK_SECRET = process.env.PLAN_TICK_SECRET!;
+  void fetch(`${SUPABASE_URL}/functions/v1/plan-compose`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+    body: JSON.stringify({
+      plan_id: plan.id,
+      user_id: userId,
+      internal_secret: PLAN_TICK_SECRET,
+    }),
+  }).catch((err) => console.error("plan-compose invocation failed", err));
 
   return { id: schedule.id, outcome: "fired", plan_id: plan.id };
 }

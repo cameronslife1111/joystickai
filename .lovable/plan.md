@@ -1,45 +1,47 @@
-# Slot 19 → Pinned Document button (📌)
 
-## Goal
-Replace the slot 19 menu button (currently ↗️ "Open link") with a 📌 **Pin** button.
+## The bug
 
-- **Single press** → immediately opens the pinned document right where the user is, resumes at the doc's saved sentence, and triggers speech — exactly like opening a linked doc / favorite.
-- **Long press** → opens a document picker so the user can choose which single document to pin.
+Your "every 2 hours" schedule fired a new plan roughly **every 5–6 minutes**. The database confirms it: ~30 plans were created back-to-back, all stamped with the same frozen `scheduled_for` of `2026-06-01 16:07:00`, and the schedule's `next_run_at` is still stuck at that same past time with `run_count` still at `0`.
 
-All existing "open link" behaviors stay untouched: swipe-right on the orb still opens a sentence's linked doc, and the little link chip under the title still works. We are only removing the redundant "Open link" *menu* button and reusing that slot for the pin.
+This is **not** caused by the Run button. It's a flaw in the background scheduler.
 
-## What stays the same
-- `openLinkedDocument()`, swipe-right link handling, and the linked-doc chip button (lines ~631–680, ~1563–1578) — all unchanged.
-- All other slot positions stay where they are.
+## Root cause
 
-## Changes
+The scheduler tick (`plan-scheduler-tick.ts`) does this for each due schedule, in order:
 
-### 1. Store the pinned document (backend)
-Add a `pinned_document_id uuid` column (nullable) to the `user_preferences` table via migration. No new RLS needed — the existing own-row policies already cover it.
+```text
+1. Claim the schedule
+2. Insert a new plan
+3. Synchronously WAIT for plan-compose to finish   <-- slow LLM call
+4. Re-fetch the plan and auto-approve it
+5. FINALLY advance next_run_at + run_count + release claim
+```
 
-### 2. Load & save the pin (`app.tsx`)
-- Extend the `user_preferences` query (lines ~218–227) to also select `pinned_document_id` and expose a `pinnedDocId` value.
-- Add a `savePinnedDoc(docId)` callback that upserts `pinned_document_id` and optimistically updates the query cache (mirrors `saveLockFavorites`).
+Step 3 calls the AI composer and waits for it. That call is slow and frequently exceeds the serverless function's time limit. When the function is killed mid-flight, step 5 **never runs** — so `next_run_at` is never moved forward.
 
-### 3. Open-pinned-document logic
-Add an `openPinnedDocument()` callback modeled on the existing favorite/linked-doc open flow:
-- If no pin is set, show a toast: "Long-press the pin button to choose a document."
-- If the pinned doc no longer exists, clear the pin and toast an error.
-- Otherwise: claim speech, fetch the target doc's saved index + ordered sentences, prime the caches, `setActiveDocId(pinnedDocId)`, and speak the resolved sentence — identical pattern to `openLinkedDocument` (lines 631–680).
+Because `next_run_at` stays in the past, every scheduler tick keeps seeing the schedule as "due" and fires it again. The only thing throttling it is the 5-minute "stale claim" window — which is exactly the ~5-minute cadence you saw.
 
-### 4. Replace the slot 19 menu entry
-- In the menu grid array, change the ↗️ "Open link" item (line ~1474) to a 📌 item titled "Pinned doc".
-  - Its `fn` (single press) calls `openPinnedDocument()` then closes the menu.
-  - Add an optional `onLongPress` handler on this item that opens a new pin-picker overlay.
-- `grid[19]` already maps to slot 19 (`filled[18] = grid[19]`), so no slot remapping is required.
+Two supporting facts confirm this:
+- `run_count` is still `0` (the advance update never persisted).
+- Steps 3–4 are now redundant anyway: `plan-compose` was already updated to auto-approve scheduled plans on its own, so the scheduler doesn't need to wait around for it.
 
-### 5. Long-press support on menu buttons
-The menu buttons are currently plain `<button onClick={slot.fn}>` (lines ~1806–1831). Add optional `onLongPress` support:
-- Extend the slot item type with an optional `onLongPress?: () => void`.
-- On each grid `<button>`, attach pointer/touch handlers that start a ~500ms timer on press-down; if it fires, call `onLongPress` and suppress the subsequent click; otherwise the normal `onClick` runs. (Same timing approach already used by `use-orb-gestures`.)
+## The fix
 
-### 6. Pin-picker overlay
-Add a lightweight document-picker overlay (new `pinPickerOpen` state) reusing the existing doc-list UI pattern (like the favorites slot picker / search list, lines ~1993). Selecting a document calls `savePinnedDoc(doc.id)`, closes the picker, and shows a confirmation toast. Include a "Remove pin" option when one is already set.
+Reorder `fireSchedule` in `src/routes/api/public/plan-scheduler-tick.ts` so the schedule is advanced up front and the slow compose call can no longer block it:
 
-## Result
-Slot 19 becomes 📌. A single tap jumps straight to the pinned document with speech; a long press lets the user pick/change/clear which document is pinned. Everything is persisted in user preferences, and all prior link-opening features remain intact.
+1. After claiming and inserting the plan, **immediately** advance the schedule: set `next_run_at` to the next computed run time, bump `run_count`, set `last_run_at`, set `last_plan_id`, and release the claim. This happens before any compose work, so a timeout can't leave the schedule stuck.
+2. Change the `plan-compose` invocation to **fire-and-forget** (don't `await` it), matching how the manual "Run now" path already works.
+3. **Remove** the now-redundant synchronous re-fetch + auto-approve block, since `plan-compose` already auto-approves scheduled plans by itself.
+
+Net effect: each schedule fires exactly once per its real cadence (every 2 hours in your case), the composer runs in the background, and a slow/timed-out compose can never cause repeat firings.
+
+## Cleaning up the stuck schedule
+
+The affected schedule (currently disabled, `next_run_at` frozen at `2026-06-01 16:07`) should also be reset so it doesn't immediately fire a backlog if re-enabled. I'll recompute its `next_run_at` forward from now as part of the fix.
+
+## Technical notes
+
+- File touched: `src/routes/api/public/plan-scheduler-tick.ts` (the `fireSchedule` function).
+- No schema changes required.
+- The 5-minute stale-claim window stays as a safety net for genuinely crashed ticks; advancing `next_run_at` up front is what stops the runaway loop.
+- `runScheduleNow` (the Run button) is left unchanged — it correctly creates a single one-off plan without touching `next_run_at`.
