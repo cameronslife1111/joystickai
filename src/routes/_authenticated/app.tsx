@@ -694,6 +694,56 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [currentSentence, docs, claimSpeech, speak, qc]);
 
+  const openPinnedDocument = useCallback(async () => {
+    if (!pinnedDocId) {
+      toast("No document pinned", { description: "Long-press the pin button to choose one." });
+      return;
+    }
+    const exists = docs?.some((d) => d.id === pinnedDocId);
+    if (!exists) {
+      toast.error("Pinned document not found");
+      void savePinnedDoc(null);
+      return;
+    }
+
+    const token = claimSpeech();
+
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", pinnedDocId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", pinnedDocId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", pinnedDocId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === pinnedDocId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", pinnedDocId);
+    }
+
+    setActiveDocId(pinnedDocId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
+
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
