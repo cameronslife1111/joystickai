@@ -1939,6 +1939,83 @@ function AppPage() {
         </div>
       )}
 
+      {/* Pin document picker overlay */}
+      {pinPickerOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setPinPickerOpen(false)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">📌 Pin a document</div>
+              <button
+                onClick={() => setPinPickerOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <Input
+              autoFocus
+              value={pinPickerQuery}
+              onChange={(e) => setPinPickerQuery(e.target.value)}
+              placeholder="Search documents…"
+              className="mb-3"
+            />
+            {pinnedDocId && (
+              <button
+                onClick={() => {
+                  void savePinnedDoc(null);
+                  setPinPickerOpen(false);
+                  toast.success("Pin removed");
+                }}
+                className="mb-2 w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/10"
+              >
+                Remove current pin
+              </button>
+            )}
+            <div className="-mx-1 flex-1 overflow-y-auto px-1">
+              {(() => {
+                const q = pinPickerQuery.trim().toLowerCase();
+                const list = sortDocsByTitle([...(docs ?? [])]).filter(
+                  (d) => !q || (d.title ?? "").toLowerCase().includes(q),
+                );
+                if (list.length === 0) {
+                  return <p className="py-8 text-center text-sm text-muted-foreground">No documents.</p>;
+                }
+                return (
+                  <ul className="flex flex-col gap-1">
+                    {list.map((d) => (
+                      <li key={d.id}>
+                        <button
+                          onClick={() => {
+                            void savePinnedDoc(d.id);
+                            setPinPickerOpen(false);
+                            toast.success(`Pinned "${d.title || "Untitled"}"`);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left transition ${
+                            d.id === pinnedDocId
+                              ? "border-primary/50 bg-primary/10"
+                              : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10"
+                          }`}
+                        >
+                          <span className="truncate text-sm">{d.title || "Untitled"}</span>
+                          {d.id === pinnedDocId && <span className="ml-auto text-xs text-primary">📌</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {/* Favorites editor overlay */}
       {favoritesOpen && (
         <div
