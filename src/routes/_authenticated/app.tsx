@@ -1538,10 +1538,12 @@ function AppPage() {
       setMenuOpen(false);
       setLinkPickerOpen(true);
     }},
-    { e: "↗️", t: "Open link", fn: () => {
-      if (!currentSentence?.linked_document_id) { toast.error("This sentence has no linked document"); return; }
+    { e: "📌", t: "Pinned doc", fn: () => {
       setMenuOpen(false);
-      void openLinkedDocument();
+      void openPinnedDocument();
+    }, onLongPress: () => {
+      setPinPickerQuery("");
+      setPinPickerOpen(true);
     }},
     { e: "🧠", t: "Plan mode", fn: () => {
       setMenuOpen(false);
