@@ -32,6 +32,65 @@ export const Route = createFileRoute("/_authenticated/app")({
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
 type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; pending_delete?: boolean };
 
+type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
+
+function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longFiredRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const onPointerDown = () => {
+    if (!slot?.onLongPress) return;
+    longFiredRef.current = false;
+    timerRef.current = setTimeout(() => {
+      longFiredRef.current = true;
+      slot.onLongPress?.();
+    }, 500);
+  };
+
+  return (
+    <button
+      onClick={() => {
+        if (longFiredRef.current) {
+          longFiredRef.current = false;
+          return;
+        }
+        slot?.fn();
+      }}
+      onPointerDown={onPointerDown}
+      onPointerUp={clearTimer}
+      onPointerLeave={clearTimer}
+      onPointerCancel={clearTimer}
+      disabled={!slot}
+      className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
+    >
+      <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
+        {index + 1}
+      </span>
+      {slot ? (
+        <div className="flex h-full flex-col items-center justify-center gap-0.5">
+          <div className="text-xl">{slot.e}</div>
+          <div className="text-[10px] leading-tight">{slot.t}</div>
+        </div>
+      ) : null}
+      {slot?.badge && slot.badge > 0 ? (
+        <span
+          className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
+          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+        >
+          {slot.badge > 99 ? "99+" : slot.badge}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -42,6 +101,8 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [pinPickerOpen, setPinPickerOpen] = useState(false);
+  const [pinPickerQuery, setPinPickerQuery] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
   const [replaceMatching, setReplaceMatching] = useState(true);
   const [jumpOpen, setJumpOpen] = useState(false);
@@ -216,20 +277,21 @@ function AppPage() {
   // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme, lock_favorites")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
   const lockFavorites = prefs?.lock_favorites ?? false;
+  const pinnedDocId = prefs?.pinned_document_id ?? null;
 
 
   // Hydrate theme from saved preference once it loads.
@@ -299,6 +361,20 @@ function AppPage() {
       { onConflict: "user_id" },
     );
   }, [qc, favorites, muted]);
+
+  const savePinnedDoc = useCallback(async (docId: string | null) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), pinned_document_id: docId,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, pinned_document_id: docId, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
+
 
 
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
@@ -678,6 +754,56 @@ function AppPage() {
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
   }, [currentSentence, docs, claimSpeech, speak, qc]);
+
+  const openPinnedDocument = useCallback(async () => {
+    if (!pinnedDocId) {
+      toast("No document pinned", { description: "Long-press the pin button to choose one." });
+      return;
+    }
+    const exists = docs?.some((d) => d.id === pinnedDocId);
+    if (!exists) {
+      toast.error("Pinned document not found");
+      void savePinnedDoc(null);
+      return;
+    }
+
+    const token = claimSpeech();
+
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", pinnedDocId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", pinnedDocId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", pinnedDocId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === pinnedDocId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", pinnedDocId);
+    }
+
+    setActiveDocId(pinnedDocId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
 
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -1471,10 +1597,12 @@ function AppPage() {
       setMenuOpen(false);
       setLinkPickerOpen(true);
     }},
-    { e: "↗️", t: "Open link", fn: () => {
-      if (!currentSentence?.linked_document_id) { toast.error("This sentence has no linked document"); return; }
+    { e: "📌", t: "Pinned doc", fn: () => {
       setMenuOpen(false);
-      void openLinkedDocument();
+      void openPinnedDocument();
+    }, onLongPress: () => {
+      setPinPickerQuery("");
+      setPinPickerOpen(true);
     }},
     { e: "🧠", t: "Plan mode", fn: () => {
       setMenuOpen(false);
@@ -1495,12 +1623,12 @@ function AppPage() {
       },
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, swapSlot]);
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, swapSlot]);
 
 
   // Arrange menu buttons into the requested 4x6 grid slots
   const slots = useMemo(() => {
-    const filled: Array<{ e: string; t: string; fn: () => void; badge?: number } | null> = Array(24).fill(null);
+    const filled: Array<{ e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null> = Array(24).fill(null);
     filled[0] = grid[0];   // 1  Theme
     filled[1] = grid[6];   // 2  Rename
     filled[2] = grid[5];   // 3  New doc
@@ -1804,35 +1932,89 @@ function AppPage() {
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {slots.map((slot, i) => (
-                <button
-                  key={i}
-                  onClick={slot ? slot.fn : undefined}
-                  disabled={!slot}
-                  className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
-                >
-                  <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  {slot ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-0.5">
-                      <div className="text-xl">{slot.e}</div>
-                      <div className="text-[10px] leading-tight">{slot.t}</div>
-                    </div>
-                  ) : null}
-                  {slot?.badge && slot.badge > 0 ? (
-                    <span
-                      className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
-                      style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                    >
-                      {slot.badge > 99 ? "99+" : slot.badge}
-                    </span>
-                  ) : null}
-                </button>
+                <MenuGridButton key={i} index={i} slot={slot} />
               ))}
             </div>
           </div>
         </div>
       )}
+
+      {/* Pin document picker overlay */}
+      {pinPickerOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setPinPickerOpen(false)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-md flex-col rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between px-2">
+              <div className="font-display text-lg">📌 Pin a document</div>
+              <button
+                onClick={() => setPinPickerOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+            <Input
+              autoFocus
+              value={pinPickerQuery}
+              onChange={(e) => setPinPickerQuery(e.target.value)}
+              placeholder="Search documents…"
+              className="mb-3"
+            />
+            {pinnedDocId && (
+              <button
+                onClick={() => {
+                  void savePinnedDoc(null);
+                  setPinPickerOpen(false);
+                  toast.success("Pin removed");
+                }}
+                className="mb-2 w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/10"
+              >
+                Remove current pin
+              </button>
+            )}
+            <div className="-mx-1 flex-1 overflow-y-auto px-1">
+              {(() => {
+                const q = pinPickerQuery.trim().toLowerCase();
+                const list = sortDocsByTitle([...(docs ?? [])]).filter(
+                  (d) => !q || (d.title ?? "").toLowerCase().includes(q),
+                );
+                if (list.length === 0) {
+                  return <p className="py-8 text-center text-sm text-muted-foreground">No documents.</p>;
+                }
+                return (
+                  <ul className="flex flex-col gap-1">
+                    {list.map((d) => (
+                      <li key={d.id}>
+                        <button
+                          onClick={() => {
+                            void savePinnedDoc(d.id);
+                            setPinPickerOpen(false);
+                            toast.success(`Pinned "${d.title || "Untitled"}"`);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left transition ${
+                            d.id === pinnedDocId
+                              ? "border-primary/50 bg-primary/10"
+                              : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10"
+                          }`}
+                        >
+                          <span className="truncate text-sm">{d.title || "Untitled"}</span>
+                          {d.id === pinnedDocId && <span className="ml-auto text-xs text-primary">📌</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Favorites editor overlay */}
       {favoritesOpen && (
