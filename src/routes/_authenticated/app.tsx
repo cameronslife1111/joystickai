@@ -42,6 +42,8 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [pinPickerOpen, setPinPickerOpen] = useState(false);
+  const [pinPickerQuery, setPinPickerQuery] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
   const [replaceMatching, setReplaceMatching] = useState(true);
   const [jumpOpen, setJumpOpen] = useState(false);
