@@ -32,6 +32,65 @@ export const Route = createFileRoute("/_authenticated/app")({
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
 type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; pending_delete?: boolean };
 
+type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
+
+function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longFiredRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const onPointerDown = () => {
+    if (!slot?.onLongPress) return;
+    longFiredRef.current = false;
+    timerRef.current = setTimeout(() => {
+      longFiredRef.current = true;
+      slot.onLongPress?.();
+    }, 500);
+  };
+
+  return (
+    <button
+      onClick={() => {
+        if (longFiredRef.current) {
+          longFiredRef.current = false;
+          return;
+        }
+        slot?.fn();
+      }}
+      onPointerDown={onPointerDown}
+      onPointerUp={clearTimer}
+      onPointerLeave={clearTimer}
+      onPointerCancel={clearTimer}
+      disabled={!slot}
+      className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
+    >
+      <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
+        {index + 1}
+      </span>
+      {slot ? (
+        <div className="flex h-full flex-col items-center justify-center gap-0.5">
+          <div className="text-xl">{slot.e}</div>
+          <div className="text-[10px] leading-tight">{slot.t}</div>
+        </div>
+      ) : null}
+      {slot?.badge && slot.badge > 0 ? (
+        <span
+          className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
+          style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+        >
+          {slot.badge > 99 ? "99+" : slot.badge}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
