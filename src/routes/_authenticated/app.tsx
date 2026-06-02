@@ -1873,30 +1873,7 @@ function AppPage() {
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {slots.map((slot, i) => (
-                <button
-                  key={i}
-                  onClick={slot ? slot.fn : undefined}
-                  disabled={!slot}
-                  className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
-                >
-                  <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  {slot ? (
-                    <div className="flex h-full flex-col items-center justify-center gap-0.5">
-                      <div className="text-xl">{slot.e}</div>
-                      <div className="text-[10px] leading-tight">{slot.t}</div>
-                    </div>
-                  ) : null}
-                  {slot?.badge && slot.badge > 0 ? (
-                    <span
-                      className="absolute right-1 top-1 min-w-[18px] rounded-full px-1 text-[9px] font-semibold leading-[16px] text-white"
-                      style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
-                    >
-                      {slot.badge > 99 ? "99+" : slot.badge}
-                    </span>
-                  ) : null}
-                </button>
+                <MenuGridButton key={i} index={i} slot={slot} />
               ))}
             </div>
           </div>
