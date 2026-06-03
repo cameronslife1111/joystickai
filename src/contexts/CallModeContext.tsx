@@ -482,8 +482,15 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
       (audioEl as any).playsInline = true;
+      audioEl.style.display = "none";
+      document.body.appendChild(audioEl);
       audioElRef.current = audioEl;
-      pc.ontrack = (e) => { if (audioElRef.current) audioElRef.current.srcObject = e.streams[0]; };
+      pc.ontrack = (e) => {
+        if (audioElRef.current) {
+          audioElRef.current.srcObject = e.streams[0];
+          void audioElRef.current.play().catch(() => {});
+        }
+      };
 
       micStream.getTracks().forEach((t) => pc.addTrack(t, micStream));
 
