@@ -29,10 +29,12 @@ export function CallOverlay() {
 
   const statusLabel =
     actionLabel ??
-    (status === "speaking"
-      ? "Orby is speaking…"
-      : status === "thinking"
-        ? "Thinking…"
+    (status === "connecting"
+      ? "Connecting…"
+      : status === "speaking"
+        ? "Orby is speaking…"
+        : status === "thinking"
+          ? "Thinking…"
         : status === "reading"
           ? "Reading…"
           : status === "adding"
