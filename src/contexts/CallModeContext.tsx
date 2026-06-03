@@ -300,7 +300,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: "Something went wrong." };
       }
     },
-    [resolveDoc, readDocsFn, addTextFn, markFn, editSentenceFn, renameFn],
+    [resolveDoc, readDocsFn, addTextFn, markFn, editSentenceFn, renameFn, webSearchFn],
   );
 
   // ---- Send an event over the data channel ----
