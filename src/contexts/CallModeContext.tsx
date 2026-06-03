@@ -102,6 +102,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const markFn = useServerFn(markSentencesForDeletion);
   const editSentenceFn = useServerFn(editSentence);
   const renameFn = useServerFn(renameDocumentTitle);
+  const webSearchFn = useServerFn(webSearchForCall);
 
   // Refs.
   const inCallRef = useRef(false);
