@@ -10,6 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createRealtimeCallSession } from "@/lib/orby-realtime.functions";
+import { webSearchForCall } from "@/lib/orby-call.functions";
 import {
   resolveDocumentsByVoice,
   readDocumentsForCall,
