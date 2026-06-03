@@ -138,6 +138,22 @@ const tools = [
   },
   {
     type: "function",
+    name: "web_search",
+    description:
+      "Search the live web for current information and get back a concise spoken-friendly answer. Use when the user asks to search the web, look something up online, or wants up-to-date facts you don't already know.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "A clear, self-contained search query based on what the user asked.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    type: "function",
     name: "end_call",
     description: "End the live call. Call this after a brief farewell when the user is done.",
     parameters: { type: "object", properties: {} },
