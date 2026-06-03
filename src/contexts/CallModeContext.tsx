@@ -10,6 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createRealtimeCallSession } from "@/lib/orby-realtime.functions";
+import { webSearchForCall } from "@/lib/orby-call.functions";
 import {
   resolveDocumentsByVoice,
   readDocumentsForCall,
@@ -101,6 +102,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
   const markFn = useServerFn(markSentencesForDeletion);
   const editSentenceFn = useServerFn(editSentence);
   const renameFn = useServerFn(renameDocumentTitle);
+  const webSearchFn = useServerFn(webSearchForCall);
 
   // Refs.
   const inCallRef = useRef(false);
@@ -270,6 +272,20 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
             }
             return { ok: true, oldTitle: res.oldTitle, newTitle: res.newTitle };
           }
+          case "web_search": {
+            if (!args?.query) return { ok: false, error: "What should I search for?" };
+            setStatus("thinking");
+            setActionLabel("Searching the web…");
+            try {
+              const res = await webSearchFn({ data: { query: String(args.query) } });
+              setActionLabel(null);
+              if (!res.ok) return { ok: false, error: res.error };
+              return { ok: true, text: res.text };
+            } catch {
+              setActionLabel(null);
+              return { ok: false, error: "The web search failed." };
+            }
+          }
           case "end_call": {
             // Defer so the model's farewell audio can play first.
             setTimeout(() => { void endCallRef.current("phrase"); }, 1500);
@@ -284,7 +300,7 @@ export function CallModeProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: "Something went wrong." };
       }
     },
-    [resolveDoc, readDocsFn, addTextFn, markFn, editSentenceFn, renameFn],
+    [resolveDoc, readDocsFn, addTextFn, markFn, editSentenceFn, renameFn, webSearchFn],
   );
 
   // ---- Send an event over the data channel ----

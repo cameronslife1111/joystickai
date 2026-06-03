@@ -83,3 +83,73 @@ export const distillCallTranscript = createServerFn({ method: "POST" })
     return { request: (text ?? "").trim() };
   });
 
+const webSearchCallSchema = z.object({
+  query: z.string().min(1).max(2000),
+});
+
+/**
+ * Live-call web search. Runs a Perplexity query and returns concise,
+ * speech-friendly prose that Orby reads aloud on the call. No document writing.
+ */
+export const webSearchForCall = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => webSearchCallSchema.parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.PERPLEXITY_API_KEY;
+    if (!apiKey) {
+      return { ok: false as const, error: "Web search isn't configured." };
+    }
+
+    try {
+      const res = await fetch("https://api.perplexity.ai/v1/agent", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          preset: "pro-search",
+          input: data.query.trim(),
+          tools: [{ type: "web_search" }],
+          instructions:
+            "You are Orby, on a live voice call. The user asked you to look something up on the web. " +
+            "Use web_search to find current, accurate information, then answer as if speaking out loud. " +
+            "Keep it SHORT and conversational — usually 2 to 4 sentences. " +
+            "Plain text only: no markdown, no lists, no headings, no citation markers like [1], and do not read out raw URLs. " +
+            "Lead with the answer; only add a detail or two if it's genuinely useful.",
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.warn("[webSearchForCall] perplexity error", res.status, errText.slice(0, 300));
+        return { ok: false as const, error: "The web search failed." };
+      }
+
+      const result: any = await res.json();
+      let text = "";
+      if (Array.isArray(result?.output)) {
+        for (const item of result.output) {
+          if (item?.type === "message" && Array.isArray(item.content)) {
+            for (const c of item.content) {
+              if (c?.type === "output_text" && typeof c.text === "string") {
+                text += c.text;
+              }
+            }
+          }
+        }
+      }
+      text = text
+        .replace(/\[\d+(?:,\s*\d+)*\]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!text) return { ok: false as const, error: "I couldn't find anything on that." };
+      return { ok: true as const, text };
+    } catch (e) {
+      console.warn("[webSearchForCall] failed", e);
+      return { ok: false as const, error: "The web search failed." };
+    }
+  });
+
+

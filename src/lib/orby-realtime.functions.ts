@@ -19,6 +19,7 @@ const ORBY_INSTRUCTIONS =
   "You can act on the user's documents using your tools. Use them whenever the user asks to open, read, find, add to, edit, rename a document, mark sentences for deletion, or jump to a sentence. " +
   "When you need a document by description or title, call the matching tool with what the user said — the app fuzzy-matches it, so you don't need an exact title. " +
   "After you read a document with the read_document tool, you receive its numbered sentences; use them to answer follow-up questions and to choose sentence indexes for jump or edit actions. " +
+  "When the user asks you to look something up online, search the web, or wants current/up-to-date information you don't already know, call the web_search tool with a clear query, then summarize what it returns in your own words, naturally and briefly. " +
   "When a tool succeeds, confirm briefly and naturally out loud (for example 'Opening it now' or 'Added that'). If a tool can't find the document, ask the user to clarify the title. " +
   "If the user says goodbye, wants to hang up, or is clearly done, call the end_call tool after a brief farewell. " +
   "Keep the energy alive and responsive — react quickly, don't over-explain, and let the user interrupt you at any time.";
@@ -133,6 +134,22 @@ const tools = [
         use_active: { type: "boolean" },
       },
       required: ["new_title"],
+    },
+  },
+  {
+    type: "function",
+    name: "web_search",
+    description:
+      "Search the live web for current information and get back a concise spoken-friendly answer. Use when the user asks to search the web, look something up online, or wants up-to-date facts you don't already know.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "A clear, self-contained search query based on what the user asked.",
+        },
+      },
+      required: ["query"],
     },
   },
   {
