@@ -1474,21 +1474,13 @@ function AppPage() {
         void saveMuted(next);
       },
     },
-    { e: "✨", t: "Gen text", fn: () => {
+    { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setGenerateTextOpen(true);
+      setChatOpen(true);
     }},
-    { e: "👁️", t: "Analyze img", fn: () => {
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setMenuOpen(false);
-      setAnalyzeImageOpen(true);
-    }},
-    { e: "🌐", t: "Web search", fn: () => {
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setMenuOpen(false);
-      setWebSearchOpen(true);
-    }},
+    // Slots 14 & 15 (Analyze img / Web search) folded into Chat — kept inert to preserve grid indices.
+    { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
+    { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
