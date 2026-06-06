@@ -8,9 +8,7 @@ import { Orb } from "@/components/Orb";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
-import { GenerateTextDialog } from "@/components/GenerateTextDialog";
-import { AnalyzeImageDialog } from "@/components/AnalyzeImageDialog";
-import { WebSearchDialog } from "@/components/WebSearchDialog";
+import { ChatDialog } from "@/components/ChatDialog";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
@@ -110,9 +108,7 @@ function AppPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [composing, setComposing] = useState(false);
-  const [generateTextOpen, setGenerateTextOpen] = useState(false);
-  const [analyzeImageOpen, setAnalyzeImageOpen] = useState(false);
-  const [webSearchOpen, setWebSearchOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
@@ -496,9 +492,7 @@ function AppPage() {
     composing ||
     sendOpen ||
     linkPickerOpen ||
-    generateTextOpen ||
-    analyzeImageOpen ||
-    webSearchOpen ||
+    chatOpen ||
     planComposerOpen ||
     planApprovalOpen ||
     plansScreenOpen;
@@ -1480,21 +1474,13 @@ function AppPage() {
         void saveMuted(next);
       },
     },
-    { e: "✨", t: "Gen text", fn: () => {
+    { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setGenerateTextOpen(true);
+      setChatOpen(true);
     }},
-    { e: "👁️", t: "Analyze img", fn: () => {
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setMenuOpen(false);
-      setAnalyzeImageOpen(true);
-    }},
-    { e: "🌐", t: "Web search", fn: () => {
-      if (!activeDocId) { toast.error("Open a document first"); return; }
-      setMenuOpen(false);
-      setWebSearchOpen(true);
-    }},
+    // Slots 14 & 15 (Analyze img / Web search) folded into Chat — kept inert to preserve grid indices.
+    { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
+    { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
     { e: "➕", t: "New doc", fn: async () => {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) return;
@@ -1641,9 +1627,9 @@ function AppPage() {
     filled[9] = grid[14];  // 10 Sign out
     filled[10] = grid[20]; // 11 Plan mode
     filled[11] = grid[9];  // 12 Jump to
-    filled[12] = grid[2];  // 13 Gen text
-    filled[13] = grid[3];  // 14 Analyze img
-    filled[14] = grid[4];  // 15 Web search
+    filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
+    filled[13] = null;     // 14 (folded into Chat)
+    filled[14] = null;     // 15 (folded into Chat)
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
@@ -2525,30 +2511,12 @@ function AppPage() {
           if (f) void handleImportFile(f);
         }}
       />
-      {activeDocId && (
-        <GenerateTextDialog
-          open={generateTextOpen}
-          onOpenChange={setGenerateTextOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
-      {activeDocId && (
-        <AnalyzeImageDialog
-          open={analyzeImageOpen}
-          onOpenChange={setAnalyzeImageOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
-      {activeDocId && (
-        <WebSearchDialog
-          open={webSearchOpen}
-          onOpenChange={setWebSearchOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
+      <ChatDialog
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        currentDocumentId={activeDocId}
+        documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+      />
       {currentSentence && (
         <LinkDocumentDialog
           open={linkPickerOpen}
