@@ -492,9 +492,7 @@ function AppPage() {
     composing ||
     sendOpen ||
     linkPickerOpen ||
-    generateTextOpen ||
-    analyzeImageOpen ||
-    webSearchOpen ||
+    chatOpen ||
     planComposerOpen ||
     planApprovalOpen ||
     plansScreenOpen;
