@@ -213,6 +213,33 @@ function AppPage() {
     },
   );
 
+  // A document suggestion was tapped → create a composing plan (the watcher
+  // above auto-approves, runs, and logs it like a manual submission).
+  const runSuggestion = useCallback(async (request: string) => {
+    if (!activeDocId) return;
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) { toast.error("Sign in first"); return; }
+      const { data: row, error } = await supabase
+        .from("plans")
+        .insert({
+          user_id: u.user.id,
+          status: "composing",
+          user_request: request,
+          attached_document_ids: [activeDocId],
+        })
+        .select()
+        .single();
+      if (error || !row) throw new Error(error?.message || "Failed to create plan");
+      void supabase.functions.invoke("plan-compose", { body: { plan_id: row.id } });
+      toast("Orby is planning your suggestion…", { duration: 3000 });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to start plan");
+    }
+  }, [activeDocId]);
+
+
+
 
   // Apply theme
   useEffect(() => {
