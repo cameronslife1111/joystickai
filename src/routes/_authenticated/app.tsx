@@ -1689,6 +1689,17 @@ function AppPage() {
           style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
       </div>
 
+      {/* Per-document plan suggestions (top-left orb: gray → yellow when ready) */}
+      {!composing && (
+        <DocSuggestionsOrb
+          documentId={activeDocId}
+          documentTitle={activeDoc?.title ?? null}
+          onPickSuggestion={(request) => void runSuggestion(request)}
+        />
+      )}
+
+
+
       {/* Top: doc title */}
       <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
