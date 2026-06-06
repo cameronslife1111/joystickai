@@ -1523,6 +1523,9 @@ function AppPage() {
     { e: "🔃", t: "Jump to", fn: () => {
       setMenuOpen(false);
       setJumpOpen(true);
+    }, onLongPress: () => {
+      setMenuOpen(false);
+      void jumpTo(0);
     }},
     { e: "↕️", t: "Move sentence", fn: () => {
       setMenuOpen(false);
