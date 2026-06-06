@@ -49,7 +49,7 @@ export function DocSuggestionsOrb({ documentId, documentTitle, onPickSuggestion 
             className={cn(
               "relative grid h-10 w-10 place-items-center rounded-full border backdrop-blur transition active:scale-95",
               ready
-                ? "border-yellow-400/60 bg-yellow-400/15 text-yellow-300 shadow-[0_0_24px_-6px_theme(colors.yellow.400)]"
+                ? "border-yellow-400/60 bg-yellow-400/15 text-yellow-300 shadow-[0_0_24px_-6px_rgba(250,204,21,0.7)]"
                 : "border-border bg-card/80 text-muted-foreground",
             )}
           >
