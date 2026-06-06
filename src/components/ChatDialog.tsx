@@ -243,7 +243,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
             <DialogTitle className="text-base">Chat</DialogTitle>
             <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
               <PopoverTrigger asChild>
-                <Button size="icon" variant="ghost" aria-label="Chat settings">
+                <Button size="icon" variant="ghost" aria-label="Chat settings" className="mr-8">
                   <SettingsIcon className="h-5 w-5" />
                 </Button>
               </PopoverTrigger>
