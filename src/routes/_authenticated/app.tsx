@@ -2525,30 +2525,12 @@ function AppPage() {
           if (f) void handleImportFile(f);
         }}
       />
-      {activeDocId && (
-        <GenerateTextDialog
-          open={generateTextOpen}
-          onOpenChange={setGenerateTextOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
-      {activeDocId && (
-        <AnalyzeImageDialog
-          open={analyzeImageOpen}
-          onOpenChange={setAnalyzeImageOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
-      {activeDocId && (
-        <WebSearchDialog
-          open={webSearchOpen}
-          onOpenChange={setWebSearchOpen}
-          currentDocumentId={activeDocId}
-          documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
-        />
-      )}
+      <ChatDialog
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        currentDocumentId={activeDocId}
+        documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+      />
       {currentSentence && (
         <LinkDocumentDialog
           open={linkPickerOpen}
