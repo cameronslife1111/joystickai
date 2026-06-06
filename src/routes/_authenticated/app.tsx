@@ -15,6 +15,7 @@ import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
 import { PlanComposerDialog } from "@/components/PlanComposerDialog";
+import { DocSuggestionsOrb } from "@/components/DocSuggestionsOrb";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
@@ -211,6 +212,33 @@ function AppPage() {
       setPlanApprovalOpen(true);
     },
   );
+
+  // A document suggestion was tapped → create a composing plan (the watcher
+  // above auto-approves, runs, and logs it like a manual submission).
+  const runSuggestion = useCallback(async (request: string) => {
+    if (!activeDocId) return;
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) { toast.error("Sign in first"); return; }
+      const { data: row, error } = await supabase
+        .from("plans")
+        .insert({
+          user_id: u.user.id,
+          status: "composing",
+          user_request: request,
+          attached_document_ids: [activeDocId],
+        })
+        .select()
+        .single();
+      if (error || !row) throw new Error(error?.message || "Failed to create plan");
+      void supabase.functions.invoke("plan-compose", { body: { plan_id: row.id } });
+      toast("Orby is planning your suggestion…", { duration: 3000 });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to start plan");
+    }
+  }, [activeDocId]);
+
+
 
 
   // Apply theme
@@ -1660,6 +1688,17 @@ function AppPage() {
         <div className="absolute left-1/2 top-1/2 h-[60vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
           style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
       </div>
+
+      {/* Per-document plan suggestions (top-left orb: gray → yellow when ready) */}
+      {!composing && (
+        <DocSuggestionsOrb
+          documentId={activeDocId}
+          documentTitle={activeDoc?.title ?? null}
+          onPickSuggestion={(request) => void runSuggestion(request)}
+        />
+      )}
+
+
 
       {/* Top: doc title */}
       <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
