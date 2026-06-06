@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -200,6 +201,16 @@ export function AIPlansScreen({ onClose }: Props) {
         open={!!approvalId}
         onOpenChange={(v: boolean) => { if (!v) setApprovalId(null); }}
       />
+
+      {/* Back to Orby — floating bottom-left */}
+      <button
+        onClick={onClose}
+        aria-label="Back to Orby"
+        className="fixed left-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-foreground/10 bg-card/90 text-foreground shadow-lg backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+        style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+      >
+        <ArrowLeft className="h-5 w-5" />
+      </button>
     </div>
   );
 }
