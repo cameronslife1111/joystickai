@@ -1603,7 +1603,7 @@ function AppPage() {
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
     {
-      e: lockFavorites ? "🔒" : "🔓",
+      e: lockFavorites ? "⛔️" : "🔓",
       t: lockFavorites ? "List locked" : "List unlocked",
       fn: () => {
         const next = !lockFavorites;
