@@ -1587,6 +1587,7 @@ function AppPage() {
       setLinkPickerOpen(true);
     }},
     { e: "📌", t: "Pinned doc", fn: () => {
+      if (lockFavorites) { toast.error("List is locked"); return; }
       setMenuOpen(false);
       void openPinnedDocument();
     }, onLongPress: () => {
@@ -1602,7 +1603,7 @@ function AppPage() {
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
     {
-      e: lockFavorites ? "🔒" : "🔓",
+      e: lockFavorites ? "⛔️" : "🔓",
       t: lockFavorites ? "List locked" : "List unlocked",
       fn: () => {
         const next = !lockFavorites;
@@ -2196,6 +2197,7 @@ function AppPage() {
           )
         );
         const pickDoc = (doc: Doc) => {
+          if (lockFavorites) { toast.error("List is locked"); return; }
           // iOS-safe: speak synchronously inside the tap gesture if unmuted.
           if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
