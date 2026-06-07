@@ -2197,6 +2197,7 @@ function AppPage() {
           )
         );
         const pickDoc = (doc: Doc) => {
+          if (lockFavorites) { toast.error("List is locked"); return; }
           // iOS-safe: speak synchronously inside the tap gesture if unmuted.
           if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
