@@ -1587,6 +1587,7 @@ function AppPage() {
       setLinkPickerOpen(true);
     }},
     { e: "📌", t: "Pinned doc", fn: () => {
+      if (lockFavorites) { toast.error("List is locked"); return; }
       setMenuOpen(false);
       void openPinnedDocument();
     }, onLongPress: () => {
