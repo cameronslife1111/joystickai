@@ -1423,9 +1423,14 @@ function AppPage() {
       const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+      let h = now.getHours();
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      const stamp = `${months[now.getMonth()]}_${now.getDate()}_${h}${String(now.getMinutes()).padStart(2, "0")}${ampm}`;
       a.href = url;
-      a.download = `joystick-export-${today}.txt`;
+      a.download = `orby_export_${stamp}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
