@@ -83,9 +83,11 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
             <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
           ) : docs.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No documents yet.</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No matches.</p>
           ) : (
             <ul className="flex flex-col gap-1">
-              {docs.map((d) => {
+              {filtered.map((d) => {
                 const checked = selected.includes(d.id);
                 return (
                   <li key={d.id}>
