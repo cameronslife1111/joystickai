@@ -1,20 +1,15 @@
-All changes are in `src/routes/_authenticated/app.tsx`. The list-lock state is `lockFavorites`.
+# Add document search to the Attach documents sheet
 
-## 1. Block opening a doc from Search docs when locked
-In the `pickDoc` handler inside the Search-docs overlay (~line 2198), add a guard at the very top:
-- If `lockFavorites` is true, show `toast.error("List is locked")` and `return` immediately.
-- This runs before the speech and `setActiveDocId` logic, so the search box still opens and filters normally — tapping a result just shows the toast and does nothing else. The overlay stays open so they can keep searching.
+When the user opens the chat (slot 13), then taps **Attach documents** (from settings or the composer row), they get the `DocumentPickerSheet`. I'll add a search input at the top so they can filter documents by title before selecting. Multi-select already works and stays unchanged.
 
-## 2. Change the lock button emoji when locked
-In the grid entry for the lock/unlock button (~line 1604-1612):
-- Change `e: lockFavorites ? "🔒" : "🔓"` to use a distinct locked icon, e.g. `lockFavorites ? "⛔️" : "🔓"`, so locked vs. unlocked is visually obvious.
-- Label text (`List locked` / `List unlocked`) stays as is.
+## Changes (`src/components/DocumentPickerSheet.tsx`)
 
-## 3. Block the Pinned doc button when locked
-In the "📌 Pinned doc" grid entry (~line 1589), update the `fn`:
-- If `lockFavorites` is true, show `toast.error("List is locked")` and `return` (do not call `openPinnedDocument`).
-- The long-press (choose a pinned doc) behavior is left unchanged unless you'd prefer it blocked too — by default I'll leave long-press working since it doesn't navigate to another list.
+1. Add a `query` state string and a search `Input` directly under the sheet header, with a placeholder like "Search documents…". Clear it whenever the sheet opens.
+2. Derive a `filtered` list from `docs` by case-insensitive match of `query` against the document title.
+3. Render `filtered` instead of `docs` in the list, and show a "No matches" empty state when a search yields nothing (keep the existing "No documents yet." state for when there are truly no docs).
+4. Keep the Done button and selection behavior exactly as is — selecting/deselecting multiple documents continues to work, including documents that get filtered out (their selection is preserved).
 
 ## Notes
-- No backend/database changes needed; everything keys off the existing `lockFavorites` preference.
-- Toast copy used consistently: "List is locked".
+
+- Uses the existing `Input` component (`@/components/ui/input`); no backend or query changes.
+- The search only filters the visible list; it does not affect which selected IDs are returned on Done.
