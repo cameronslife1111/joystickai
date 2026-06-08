@@ -21,3 +21,6 @@ verify_jwt = false
 [functions.plan-step]
 verify_jwt = false
 
+[functions.plan-retry]
+verify_jwt = false
+

@@ -1,55 +1,79 @@
-# Fix: App won't load on cellular networks
+# Fix & Retry a Failed Plan (resume from the failed step)
 
-## What's actually happening
+## Goal
 
-Your phone can reach the **Lovable origin** (the app shell HTML/JS loads fine on cellular — that's why you see the orb and the menu). But the browser's direct requests to the **backend host** (`*.supabase.co`) stall on your mobile carrier and never complete.
+On the AI Plans → History tab, when a user opens a **failed** plan, add a **"Fix & Retry from this step"** button inside the existing "What went wrong" box. It opens a clean, mobile-optimized popup where the user can add an optional note (e.g. "don't use more than 10 reference images"). On submit, Orby re-reads the error + note, intelligently repairs the failed step (and any remaining steps), and resumes the plan **from exactly where it failed** — no starting over.
 
-Two things combine to make it look "stuck forever":
+## Why this design
 
-1. The login check reads the saved session from local storage **without a network call**, so you get into the app even though the backend is unreachable — that's why you're not bounced to the login page.
-2. Every data request (your list title, sentences, preferences) talks to the backend host **directly from the browser**, with **no timeout, no retry, and no error message**. When those stall on cellular, the app just sits on "—" and "Hold the orb…" indefinitely.
+The plan runner (`plan-step`) executes each step's tool with fixed, pre-composed arguments — there is no LLM reasoning per step. So simply re-running the same step would fail the same way (e.g. the 16-image remix). To make Orby "understand the mistake," the retry must re-involve the planner LLM. We do this **without touching completed steps**: steps already done stay locked with their results intact; the planner only regenerates the failed step onward, given the error and the user's note. `current_step` stays put, so execution resumes at the failed index.
 
-So the carrier is choking the browser→backend connection specifically, while the browser→Lovable connection works.
+## How it works (flow)
 
-## The fix (definitive + resilient)
+```text
+Failed plan (current_step = K of N)
+        │  user taps "Fix & Retry", adds optional note
+        ▼
+plan-retry edge function
+  • keep steps[0..K-1] (completed, results preserved)
+  • send planner: original request + completed-step summaries
+    + failed step + error_message + user note
+  • planner returns corrected steps for index K..end
+  • splice: steps = [...locked, ...newTail]
+  • reset: status='approved', step_claim_at=null,
+    error_message=null, completed_at=null,
+    consecutive_no_progress=0, retry_count += 1, retry_note=note
+        ▼
+plan-tick cron (already running) picks up the 'approved' plan
+and resumes execution at step K with the repaired args
+```
 
-Route backend requests through the **same Lovable origin that already works on your carrier**, instead of letting the browser hit the backend host directly. The Lovable server then forwards them to the backend from inside the cloud network (which always has a clean connection). On top of that, add timeouts, retries, and a real error/retry screen so the app can never silently hang.
+## Backend changes
 
-### 1. Same-origin backend proxy (the core fix)
+### 1. Migration — add audit columns to `plans`
+```sql
+ALTER TABLE public.plans
+  ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS retry_note text;
+```
+(Existing grants/RLS on `plans` already cover these columns; no new grants needed.)
 
-Add a catch-all server route `src/routes/api/public/sb/$.ts` that forwards any request to the real backend:
+### 2. New edge function `supabase/functions/plan-retry/index.ts`
+Modeled on `plan-compose` (same auth: user JWT **or** internal secret; same workspace-snapshot builder so the planner can still resolve doc/media ids). Differences:
+- Loads the plan; rejects unless `status === 'failed'` and `user_id` matches.
+- Computes `K = current_step`. Locks `steps[0..K-1]`.
+- Builds a **repair prompt**: original `user_request`, a compact listing of locked steps (`index, tool, description, short result preview`) noting their results are referencable via `{{step_<index>.result...}}`, the failed step (tool + args + `description`), the `error_message`, and the user's note (clearly labeled as a hard constraint).
+- Planner returns a corrected tail. We validate each step's tool against `TOOL_CATALOG` and normalize (`status:'pending', result:null, error:null`) exactly like `plan-compose`.
+- Splice `steps = [...locked, ...newTail]`; update `total_steps`, keep `current_step = K`, set `status='approved'`, `approved_at=now()`, clear `error_message`/`error_lovable_prompt`/`completed_at`, reset `step_claim_at=null` and `consecutive_no_progress=0`, increment `retry_count`, store `retry_note`.
+- The planner is instructed: completed steps 0..K-1 are LOCKED — do not re-emit them; produce only replacement steps starting at index K; you MAY reference any locked step's result by its absolute index; honor the user's note as an absolute constraint.
 
-- Accepts `GET / POST / PATCH / DELETE / HEAD / OPTIONS`.
-- Forwards the path + query string to `${SUPABASE_URL}/<rest>` (e.g. `/api/public/sb/rest/v1/documents?...` → backend `/rest/v1/documents?...`).
-- Passes through the caller's own headers (`apikey`, `authorization`, `content-type`, `prefer`, `range`, etc.) and body unchanged.
-- Returns the upstream status, body, and key response headers (`content-type`, `content-range` for pagination).
+### 3. `supabase/config.toml`
+Add:
+```toml
+[functions.plan-retry]
+verify_jwt = false
+```
+(Auth is enforced inside the function, mirroring `plan-compose`/`plan-step`.)
 
-Security: the proxy **only forwards the credentials the browser already sends** (your normal logged-in token + the public key). It does **not** use the service-role key, so row-level security still applies exactly as today — no new access is granted. It only forwards to the one configured backend host.
+## Frontend changes
 
-### 2. Client request redirector
+### 4. New component `src/components/PlanRetryDialog.tsx`
+A compact `Dialog` (reuses existing `@/components/ui/dialog`, `textarea`, `button`) optimized for mobile (`w-[calc(100vw-2rem)] max-w-md`, scrollable):
+- Read-only context: "Failed at step K of N" + the error message.
+- A `Textarea` labeled "Add a note for Orby (optional) — what went wrong or what to avoid".
+- "Retry plan" primary button + "Cancel". On submit: `supabase.functions.invoke("plan-retry", { body: { plan_id, note } })`, show loading state, `toast.success("Retrying from step K")`, invalidate `["plans"]` + `["plan", planId, "detail"]`, close both dialogs. On error, `toast.error` and keep the dialog open.
 
-Add `src/lib/sb-proxy.client.ts`, imported once (for its side effect) at the top of `src/routes/__root.tsx`. On the client it wraps the browser's `fetch` so that any request aimed at the backend host is rewritten to go through `/api/public/sb/...` on the current origin instead. It also:
+### 5. `src/components/PlanDetailDialog.tsx`
+Inside the existing `plan.status === "failed"` section (the "What went wrong" box), add a **"Fix & Retry from this step"** primary button next to the existing "Copy fix prompt" button. Clicking sets local state to open `PlanRetryDialog` with `planId`, the failed step number (`current_step + 1`), `total_steps`, and `error_message`. Keep the layout clean: buttons wrap in a `flex flex-wrap gap-2` row.
 
-- Adds a **20s timeout** (via `AbortController`) so a stalled request fails fast instead of hanging forever.
-- **Retries** transient network failures a couple of times with a short backoff.
+No change needed to `AIPlansScreen.tsx` — failed history rows already open `PlanDetailDialog`.
 
-This automatically covers data reads, writes, token refresh, and storage — without touching the auto-generated backend client file.
+## Edge cases handled
+- **Only failed plans** can be retried (status guard server-side + button only rendered for failed).
+- **Locked completed work is never re-run or duplicated** — `current_step` is preserved and prior step results stay available for `{{step_N}}` references.
+- **Resume is automatic** — setting `status='approved'` + clearing the claim lets the existing `plan-tick` cron pick it up; no new scheduler needed.
+- **Validation** — unknown tools or malformed planner output throw and leave the plan `failed` with a fresh error message (same safety net as `plan-compose`), so a bad retry never corrupts the plan.
+- **Auditability** — `retry_count` / `retry_note` recorded on the plan.
 
-### 3. Query resilience
-
-In `src/router.tsx`, give the data layer sane defaults: retry failed requests with exponential backoff, automatically refetch when the connection comes back (`refetchOnReconnect`), and keep retrying even if the browser briefly reports "offline." This means once your signal stabilizes, the app self-heals instead of staying blank.
-
-### 4. Never-blank fallback UI
-
-On the main app screen (`src/routes/_authenticated/app.tsx`), when the documents request errors out, show a small **"Couldn't reach the server — Retry"** message with a button instead of the permanent empty shell, so you always have a way to recover and can tell loading from failure.
-
-## Notes / limits
-
-- Live realtime updates run over a websocket, which this proxy doesn't cover; if any realtime feature also struggles on cellular we can address it separately. All normal loading, saving, and AI calls are covered.
-- No database or schema changes. The auto-generated backend client file is left untouched.
-
-## How we'll verify
-
-- Confirm the app builds and still loads normally on Wi-Fi (data flows through the new proxy path).
-- Confirm requests in the network panel now go to `/api/public/sb/...` on the app's own domain rather than directly to the backend host.
-- You then re-test on cellular — it should load the same as Wi-Fi.
+## Verification
+After implementation: deploy `plan-retry`, run the migration, then invoke `plan-retry` against a known failed plan id via the server to confirm it returns `{ ok: true }` and the plan flips to `approved` with `current_step` unchanged; confirm the popup renders cleanly at mobile width in the preview.

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { PlanRetryDialog } from "./PlanRetryDialog";
 
 interface Props {
   open: boolean;
@@ -21,6 +23,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
+  const [retryOpen, setRetryOpen] = useState(false);
   const { data: plan } = useQuery({
     queryKey: ["plan", planId, "detail"],
     enabled: !!planId && open,
@@ -94,18 +97,26 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
           <section className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 min-w-0">
             <div className="text-xs uppercase tracking-wider text-destructive">What went wrong</div>
             <p className="text-sm whitespace-pre-wrap break-all">{plan.error_message}</p>
-            {plan.error_lovable_prompt && (
+            <div className="flex flex-wrap gap-2 pt-1">
               <button
-                onClick={async () => {
-                  const ok = await copyToClipboard(plan.error_lovable_prompt ?? "");
-                  if (ok) toast.success("Copied fix prompt to clipboard");
-                  else toast.error("Failed to copy");
-                }}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                onClick={() => setRetryOpen(true)}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Copy fix prompt for Lovable
+                Fix &amp; retry from this step
               </button>
-            )}
+              {plan.error_lovable_prompt && (
+                <button
+                  onClick={async () => {
+                    const ok = await copyToClipboard(plan.error_lovable_prompt ?? "");
+                    if (ok) toast.success("Copied fix prompt to clipboard");
+                    else toast.error("Failed to copy");
+                  }}
+                  className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Copy fix prompt for Lovable
+                </button>
+              )}
+            </div>
           </section>
         )}
 
@@ -118,6 +129,17 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
           </button>
         )}
       </DialogContent>
+
+      <PlanRetryDialog
+        open={retryOpen}
+        onOpenChange={setRetryOpen}
+        planId={planId}
+        failedStepNumber={(plan.current_step ?? 0) + 1}
+        totalSteps={plan.total_steps ?? steps.length}
+        errorMessage={plan.error_message ?? null}
+        onRetried={() => onOpenChange(false)}
+      />
     </Dialog>
   );
 }
+
