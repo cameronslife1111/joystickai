@@ -284,9 +284,15 @@ Deno.serve(async (req) => {
       return `  [index ${i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}\n    result: ${preview}`;
     }).join("\n");
 
+    // ---- Steps we are intentionally REWINDING (they completed before, but we
+    //      back up a couple of steps and re-run them for consistency). ----
+    const rewoundListing = rewound.map((s: any, i: number) =>
+      `  [absolute index ${startIndex + i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}`,
+    ).join("\n");
+
     const failedDescription = failedStep
-      ? `FAILED STEP (absolute index ${K} — your first replacement step takes this index):\n  tool: ${failedStep.tool}\n  description: ${String(failedStep.description ?? "")}\n  args: ${JSON.stringify(failedStep.args ?? {}, null, 2)}`
-      : `The plan failed without a clearly identified failing step. Repair from index ${K} onward.`;
+      ? `FAILED STEP (absolute index ${K}):\n  tool: ${failedStep.tool}\n  description: ${String(failedStep.description ?? "")}\n  args: ${JSON.stringify(failedStep.args ?? {}, null, 2)}`
+      : `The plan failed without a clearly identified failing step. Repair from index ${startIndex} onward.`;
 
     const remainingAfterFailed = allSteps.slice(K + 1).map((s: any, i: number) =>
       `  [original index ${K + 1 + i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}`,
@@ -295,8 +301,11 @@ Deno.serve(async (req) => {
     const repairUserPrompt = [
       `ORIGINAL USER REQUEST:\n${plan.user_request}`,
       "",
-      `COMPLETED (LOCKED) STEPS — indices 0..${K - 1} (DO NOT re-emit these; reference their results by these indices):`,
+      `COMPLETED (LOCKED) STEPS — indices 0..${startIndex - 1} (DO NOT re-emit these; reference their results by these indices):`,
       lockedListing || "  (none)",
+      "",
+      `REWOUND STEPS — indices ${startIndex}..${K - 1} (these completed successfully before, but we are intentionally backing up to re-run them so the plan restarts a couple of steps earlier for consistency — RE-EMIT/repair these as your first replacement steps):`,
+      rewoundListing || "  (none)",
       "",
       failedDescription,
       "",
@@ -309,7 +318,7 @@ Deno.serve(async (req) => {
         ? `USER NOTE (ABSOLUTE CONSTRAINT — obey exactly):\n${userNote}`
         : "USER NOTE: (none provided)",
       "",
-      `Produce replacement steps starting at absolute index ${K}.`,
+      `Produce replacement steps starting at absolute index ${startIndex} (the first REWOUND step). Re-emit the rewound steps, the failed step (repaired), and all remaining steps.`,
     ].join("\n");
 
     const effectiveSystemPrompt = userContext
