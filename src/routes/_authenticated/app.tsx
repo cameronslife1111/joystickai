@@ -1681,6 +1681,8 @@ function AppPage() {
         const next = !lockFavorites;
         setMenuOpen(false);
         void saveLockFavorites(next);
+        // Remember which list is being locked so a reload returns to it.
+        void saveLockedDoc(next ? activeDocId : null);
         toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
       },
     },
