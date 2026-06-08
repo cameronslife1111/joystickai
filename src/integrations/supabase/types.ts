@@ -245,6 +245,8 @@ export type Database = {
           origin_sentence_index: number | null
           plan_summary: string | null
           result_summary: string | null
+          retry_count: number
+          retry_note: string | null
           schedule_id: string | null
           scheduled_for: string | null
           status: string
@@ -272,6 +274,8 @@ export type Database = {
           origin_sentence_index?: number | null
           plan_summary?: string | null
           result_summary?: string | null
+          retry_count?: number
+          retry_note?: string | null
           schedule_id?: string | null
           scheduled_for?: string | null
           status: string
@@ -299,6 +303,8 @@ export type Database = {
           origin_sentence_index?: number | null
           plan_summary?: string | null
           result_summary?: string | null
+          retry_count?: number
+          retry_note?: string | null
           schedule_id?: string | null
           scheduled_for?: string | null
           status?: string
