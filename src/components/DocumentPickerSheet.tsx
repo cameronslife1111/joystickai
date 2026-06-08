@@ -18,9 +18,13 @@ type Doc = { id: string; title: string; sentence_count: number };
 
 export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    if (open) setSelected(initialSelectedIds);
+    if (open) {
+      setSelected(initialSelectedIds);
+      setQuery("");
+    }
   }, [open, initialSelectedIds]);
 
   const { data: docs = [], isLoading } = useQuery({
