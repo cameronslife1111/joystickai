@@ -28,6 +28,7 @@ const STATUS_COLOR: Record<string, string> = {
   approved: "bg-blue-500/20 text-blue-300",
   running: "bg-blue-500/20 text-blue-300",
   awaiting_media: "bg-blue-500/20 text-blue-300",
+  retrying: "bg-blue-500/20 text-blue-300",
   completed: "bg-green-500/20 text-green-300",
   failed: "bg-red-500/20 text-red-300",
   cancelled: "bg-muted text-muted-foreground",
@@ -35,7 +36,7 @@ const STATUS_COLOR: Record<string, string> = {
   proposed: "bg-yellow-500/20 text-yellow-300",
 };
 
-const ACTIVE_STATUSES = new Set(["proposed", "composing", "approved", "running", "awaiting_media"]);
+const ACTIVE_STATUSES = new Set(["proposed", "composing", "approved", "running", "awaiting_media", "retrying"]);
 const HISTORY_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 function timeAgo(iso: string): string {
