@@ -872,7 +872,14 @@ function AppPage() {
     }
 
     if (lockFavorites) {
-      // List cycling locked — repeat current sentence instead of advancing.
+      // List cycling locked. The only way off the locked list is following a
+      // linked step (handled above). If we've followed links onto another doc
+      // and this step has no further link, swipe right returns to the locked
+      // list. On the locked list itself, repeat the current sentence.
+      if (lockedDocId && activeDocId !== lockedDocId && docs.some((d) => d.id === lockedDocId)) {
+        await goToDocument(lockedDocId);
+        return;
+      }
       const token = claimSpeech();
       const text = sentences?.[currentIdx]?.content;
       if (text) speak(text, token);
