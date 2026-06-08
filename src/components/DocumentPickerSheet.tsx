@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 
@@ -17,9 +18,13 @@ type Doc = { id: string; title: string; sentence_count: number };
 
 export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    if (open) setSelected(initialSelectedIds);
+    if (open) {
+      setSelected(initialSelectedIds);
+      setQuery("");
+    }
   }, [open, initialSelectedIds]);
 
   const { data: docs = [], isLoading } = useQuery({
@@ -55,20 +60,34 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   };
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return docs;
+    return docs.filter((d) => (d.title || "Untitled").toLowerCase().includes(q));
+  }, [docs, query]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="flex h-[80vh] flex-col">
         <SheetHeader>
           <SheetTitle>Attach documents</SheetTitle>
         </SheetHeader>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search documents…"
+          className="mt-2"
+        />
         <div className="-mx-6 flex-1 overflow-y-auto px-6 py-2">
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
           ) : docs.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No documents yet.</p>
+          ) : filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No matches.</p>
           ) : (
             <ul className="flex flex-col gap-1">
-              {docs.map((d) => {
+              {filtered.map((d) => {
                 const checked = selected.includes(d.id);
                 return (
                   <li key={d.id}>
