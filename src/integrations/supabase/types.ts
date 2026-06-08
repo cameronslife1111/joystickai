@@ -377,6 +377,7 @@ export type Database = {
           id: string
           last_favorite_slot: number | null
           lock_favorites: boolean
+          locked_document_id: string | null
           muted: boolean
           pinned_document_id: string | null
           theme: string
@@ -390,6 +391,7 @@ export type Database = {
           id?: string
           last_favorite_slot?: number | null
           lock_favorites?: boolean
+          locked_document_id?: string | null
           muted?: boolean
           pinned_document_id?: string | null
           theme?: string
@@ -403,6 +405,7 @@ export type Database = {
           id?: string
           last_favorite_slot?: number | null
           lock_favorites?: boolean
+          locked_document_id?: string | null
           muted?: boolean
           pinned_document_id?: string | null
           theme?: string
