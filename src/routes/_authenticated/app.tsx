@@ -371,6 +371,18 @@ function AppPage() {
     );
   }, [qc, favorites, muted]);
 
+  const saveLockedDoc = useCallback(async (docId: string | null) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), locked_document_id: docId,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, locked_document_id: docId, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
 
 
 
