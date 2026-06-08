@@ -6,7 +6,7 @@ import { createOpenAiProvider } from "./ai-gateway";
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(8000),
+  content: z.string().min(1).max(50000),
 });
 
 const chatSchema = z.object({

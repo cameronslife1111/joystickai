@@ -7,7 +7,7 @@ const cadenceEnum = z.enum(["once", "hourly", "daily", "weekly", "monthly", "yea
 
 const scheduleInputSchema = z.object({
   title: z.string().min(1).max(120),
-  user_request: z.string().min(1).max(8000),
+  user_request: z.string().min(1).max(50000),
   attached_document_ids: z.array(z.string().uuid()).max(10).default([]),
   cadence: cadenceEnum,
   interval_n: z.number().int().min(1).max(365).default(1),
