@@ -389,6 +389,14 @@ function AppPage() {
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
   useEffect(() => {
     if (!docs || prefs === undefined || activeDocId) return;
+    // If the user is locked onto a list, always restore to that exact document.
+    if (prefs?.lock_favorites) {
+      const lockedId = prefs?.locked_document_id ?? null;
+      if (lockedId && docs.some((d) => d.id === lockedId)) {
+        setActiveDocId(lockedId);
+        return;
+      }
+    }
     const lastSlot = prefs?.last_favorite_slot ?? null;
     const favs = prefs?.favorites ?? [];
     const lastDocId = typeof lastSlot === "number" && lastSlot >= 0 && lastSlot < favs.length
