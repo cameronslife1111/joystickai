@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
         approved_at: new Date().toISOString(),
         steps: mergedSteps,
         total_steps: mergedSteps.length,
-        current_step: K,
+        current_step: startIndex,
         step_claim_at: null,
         consecutive_no_progress: 0,
         error_message: null,
@@ -378,18 +378,34 @@ Deno.serve(async (req) => {
       })
       .eq("id", plan_id)
       .eq("user_id", user.id);
+  };
 
-    return json({ ok: true, resumed_from_step: K + 1, total_steps: mergedSteps.length, summary });
-  } catch (err: any) {
-    // Leave the plan failed but refresh the error so the user can see why the retry didn't work.
-    await admin
-      .from("plans")
-      .update({
-        status: "failed",
-        error_message: `Retry failed: ${String(err?.message ?? err ?? "unknown error")}`,
-      })
-      .eq("id", plan_id)
-      .eq("user_id", user.id);
-    return json({ error: String(err?.message ?? err) }, 500);
+  // Run the repair in the background so the user can leave the screen. The plan
+  // shows as "retrying" until the repair completes and flips it to "approved".
+  const repairWithGuard = async () => {
+    try {
+      await runRepair();
+    } catch (err: any) {
+      // Leave the plan failed but refresh the error so the user can see why the retry didn't work.
+      await admin
+        .from("plans")
+        .update({
+          status: "failed",
+          error_message: `Retry failed: ${String(err?.message ?? err ?? "unknown error")}`,
+        })
+        .eq("id", plan_id)
+        .eq("user_id", user.id);
+    }
+  };
+
+  // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime.
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(repairWithGuard());
+  } else {
+    // Fallback (local/dev): fire-and-forget without awaiting.
+    repairWithGuard();
   }
+
+  return json({ ok: true, background: true, resumed_from_step: startIndex + 1 });
 });
