@@ -23,6 +23,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
+  const [retryOpen, setRetryOpen] = useState(false);
   const { data: plan } = useQuery({
     queryKey: ["plan", planId, "detail"],
     enabled: !!planId && open,
