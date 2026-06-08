@@ -221,7 +221,7 @@ function AppPage() {
   }, [theme]);
 
   // Load docs
-  const { data: docs } = useQuery({
+  const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
     queryKey: ["documents"],
     queryFn: async (): Promise<Doc[]> => {
       const { data, error } = await supabase
