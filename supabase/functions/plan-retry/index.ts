@@ -126,10 +126,30 @@ Deno.serve(async (req) => {
 
   const allSteps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
   const K = Math.max(0, Math.min(plan.current_step ?? 0, allSteps.length));
-  const locked = allSteps.slice(0, K);
+  // Rewind a couple of steps before the failure so the plan re-runs them for
+  // consistency, then continues through the failed step and everything after.
+  const BACKUP_STEPS = 2;
+  const startIndex = Math.max(0, K - BACKUP_STEPS);
+  const locked = allSteps.slice(0, startIndex);
+  const rewound = allSteps.slice(startIndex, K); // completed steps we intentionally re-run
   const failedStep = allSteps[K] ?? null;
 
-  try {
+  // Mark the plan as "retrying" immediately so the user sees progress and can
+  // leave the screen. plan-tick ignores this status, so the stale failed step
+  // is never executed while we compose the repair below.
+  await admin
+    .from("plans")
+    .update({
+      status: "retrying",
+      retry_note: userNote || null,
+      error_message: null,
+      error_lovable_prompt: null,
+      step_claim_at: null,
+    })
+    .eq("id", plan_id)
+    .eq("user_id", user.id);
+
+  const runRepair = async () => {
     // ---- Build a WORKSPACE SNAPSHOT (same approach as plan-compose) so the
     //      repair planner can resolve doc/media references naturally. ----
     const { data: allDocs } = await admin
@@ -264,9 +284,15 @@ Deno.serve(async (req) => {
       return `  [index ${i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}\n    result: ${preview}`;
     }).join("\n");
 
+    // ---- Steps we are intentionally REWINDING (they completed before, but we
+    //      back up a couple of steps and re-run them for consistency). ----
+    const rewoundListing = rewound.map((s: any, i: number) =>
+      `  [absolute index ${startIndex + i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}`,
+    ).join("\n");
+
     const failedDescription = failedStep
-      ? `FAILED STEP (absolute index ${K} — your first replacement step takes this index):\n  tool: ${failedStep.tool}\n  description: ${String(failedStep.description ?? "")}\n  args: ${JSON.stringify(failedStep.args ?? {}, null, 2)}`
-      : `The plan failed without a clearly identified failing step. Repair from index ${K} onward.`;
+      ? `FAILED STEP (absolute index ${K}):\n  tool: ${failedStep.tool}\n  description: ${String(failedStep.description ?? "")}\n  args: ${JSON.stringify(failedStep.args ?? {}, null, 2)}`
+      : `The plan failed without a clearly identified failing step. Repair from index ${startIndex} onward.`;
 
     const remainingAfterFailed = allSteps.slice(K + 1).map((s: any, i: number) =>
       `  [original index ${K + 1 + i}] tool=${s.tool} — ${String(s.description ?? "").slice(0, 160)}`,
@@ -275,8 +301,11 @@ Deno.serve(async (req) => {
     const repairUserPrompt = [
       `ORIGINAL USER REQUEST:\n${plan.user_request}`,
       "",
-      `COMPLETED (LOCKED) STEPS — indices 0..${K - 1} (DO NOT re-emit these; reference their results by these indices):`,
+      `COMPLETED (LOCKED) STEPS — indices 0..${startIndex - 1} (DO NOT re-emit these; reference their results by these indices):`,
       lockedListing || "  (none)",
+      "",
+      `REWOUND STEPS — indices ${startIndex}..${K - 1} (these completed successfully before, but we are intentionally backing up to re-run them so the plan restarts a couple of steps earlier for consistency — RE-EMIT/repair these as your first replacement steps):`,
+      rewoundListing || "  (none)",
       "",
       failedDescription,
       "",
@@ -289,7 +318,7 @@ Deno.serve(async (req) => {
         ? `USER NOTE (ABSOLUTE CONSTRAINT — obey exactly):\n${userNote}`
         : "USER NOTE: (none provided)",
       "",
-      `Produce replacement steps starting at absolute index ${K}.`,
+      `Produce replacement steps starting at absolute index ${startIndex} (the first REWOUND step). Re-emit the rewound steps, the failed step (repaired), and all remaining steps.`,
     ].join("\n");
 
     const effectiveSystemPrompt = userContext
@@ -335,7 +364,7 @@ Deno.serve(async (req) => {
         approved_at: new Date().toISOString(),
         steps: mergedSteps,
         total_steps: mergedSteps.length,
-        current_step: K,
+        current_step: startIndex,
         step_claim_at: null,
         consecutive_no_progress: 0,
         error_message: null,
@@ -349,18 +378,34 @@ Deno.serve(async (req) => {
       })
       .eq("id", plan_id)
       .eq("user_id", user.id);
+  };
 
-    return json({ ok: true, resumed_from_step: K + 1, total_steps: mergedSteps.length, summary });
-  } catch (err: any) {
-    // Leave the plan failed but refresh the error so the user can see why the retry didn't work.
-    await admin
-      .from("plans")
-      .update({
-        status: "failed",
-        error_message: `Retry failed: ${String(err?.message ?? err ?? "unknown error")}`,
-      })
-      .eq("id", plan_id)
-      .eq("user_id", user.id);
-    return json({ error: String(err?.message ?? err) }, 500);
+  // Run the repair in the background so the user can leave the screen. The plan
+  // shows as "retrying" until the repair completes and flips it to "approved".
+  const repairWithGuard = async () => {
+    try {
+      await runRepair();
+    } catch (err: any) {
+      // Leave the plan failed but refresh the error so the user can see why the retry didn't work.
+      await admin
+        .from("plans")
+        .update({
+          status: "failed",
+          error_message: `Retry failed: ${String(err?.message ?? err ?? "unknown error")}`,
+        })
+        .eq("id", plan_id)
+        .eq("user_id", user.id);
+    }
+  };
+
+  // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime.
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(repairWithGuard());
+  } else {
+    // Fallback (local/dev): fire-and-forget without awaiting.
+    repairWithGuard();
   }
+
+  return json({ ok: true, background: true, resumed_from_step: startIndex + 1 });
 });
