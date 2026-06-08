@@ -125,7 +125,9 @@ export function AIPlansScreen({ onClose }: Props) {
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {p.status === "proposed"
               ? "Tap to review"
-              : `${p.current_step}/${p.total_steps} · ${timeAgo(p.created_at)}`}
+              : p.status === "retrying"
+                ? "Repairing…"
+                : `${p.current_step}/${p.total_steps} · ${timeAgo(p.created_at)}`}
           </div>
         </div>
         <span className="shrink-0 text-muted-foreground">›</span>
