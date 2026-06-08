@@ -60,12 +60,24 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   };
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return docs;
+    return docs.filter((d) => (d.title || "Untitled").toLowerCase().includes(q));
+  }, [docs, query]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="flex h-[80vh] flex-col">
         <SheetHeader>
           <SheetTitle>Attach documents</SheetTitle>
         </SheetHeader>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search documents…"
+          className="mt-2"
+        />
         <div className="-mx-6 flex-1 overflow-y-auto px-6 py-2">
           {isLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
