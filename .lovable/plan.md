@@ -1,38 +1,55 @@
-# Fix lock (slot 22): persist & restore the locked list
+# Fix: App won't load on cellular networks
 
-## Problem
-When the user locks a list (slot 22), reloading the site does not return to the locked document — it falls back to the last favorite slot or the first doc. Lock is stored only as a boolean (`lock_favorites`); the specific locked document is never remembered, so restore can't target it.
+## What's actually happening
 
-## Goal
-- When locked, a reload returns to the exact list the user was locked on, and stays locked.
-- While locked, the only way to reach another document is following a linked step (swipe right). Linked documents can chain (follow further links first); when a step has no further link, swipe right returns to the locked list. All other jumps (favorites cycling, pinned doc) stay blocked.
+Your phone can reach the **Lovable origin** (the app shell HTML/JS loads fine on cellular — that's why you see the orb and the menu). But the browser's direct requests to the **backend host** (`*.supabase.co`) stall on your mobile carrier and never complete.
 
-## Changes
+Two things combine to make it look "stuck forever":
 
-### 1. Database (migration)
-Add a column to `user_preferences`:
-- `locked_document_id uuid` (nullable) — the document the user is locked onto.
+1. The login check reads the saved session from local storage **without a network call**, so you get into the app even though the backend is unreachable — that's why you're not bounced to the login page.
+2. Every data request (your list title, sentences, preferences) talks to the backend host **directly from the browser**, with **no timeout, no retry, and no error message**. When those stall on cellular, the app just sits on "—" and "Hold the orb…" indefinitely.
 
-No new table, so existing grants/RLS already cover it.
+So the carrier is choking the browser→backend connection specifically, while the browser→Lovable connection works.
 
-### 2. Persist the locked doc (`src/routes/_authenticated/app.tsx`)
-- Extend the `user_preferences` query select + return type to include `locked_document_id`, and expose `lockedDocId = prefs?.locked_document_id ?? null`.
-- Add a `saveLockedDoc(docId: string | null)` helper (mirrors `savePinnedDoc`) that upserts `locked_document_id`.
-- In the lock toggle handler (the slot-22 menu action, ~line 1613): when turning lock **on**, also save `locked_document_id = activeDocId`; when turning **off**, save `locked_document_id = null`.
+## The fix (definitive + resilient)
 
-### 3. Restore on reload (the effect at ~line 377)
-Before the existing last-favorite-slot logic: if `prefs.lock_favorites` is true and `locked_document_id` exists in `docs`, `setActiveDocId(lockedDocId)` and return. Otherwise keep the current behavior unchanged.
+Route backend requests through the **same Lovable origin that already works on your carrier**, instead of letting the browser hit the backend host directly. The Lovable server then forwards them to the backend from inside the cloud network (which always has a clean connection). On top of that, add timeouts, retries, and a real error/retry screen so the app can never silently hang.
 
-### 4. Swipe-right while locked (`onSwipeRight`, ~line 804)
-Keep "follow further links first":
-- If the current sentence has a valid `linked_document_id` → open it (existing behavior, works for chained links).
-- Else if locked **and** the active doc is not the locked doc → return to the locked document (load it at its saved sentence, same fetch/prime pattern as `openLinkedDocument`).
-- Else if locked (on the locked doc, no link) → repeat the current sentence (existing behavior).
-- Unlocked behavior is unchanged.
+### 1. Same-origin backend proxy (the core fix)
 
-This guarantees that while locked the user can only leave the locked list by following links, and always lands back on the locked list when the chain ends.
+Add a catch-all server route `src/routes/api/public/sb/$.ts` that forwards any request to the real backend:
 
-## Technical notes
-- Restore depends on `docs` being loaded, so the membership check (`docs.some(d => d.id === lockedDocId)`) avoids pointing at a deleted doc; falls back to existing logic if missing.
-- Returning to the locked doc reuses the existing parallel fetch + `qc.setQueryData` priming used by `openLinkedDocument`/`onSwipeRight` to keep display and speech in sync.
-- No change to unlocked flows, favorites cycling, or pinned-doc behavior.
+- Accepts `GET / POST / PATCH / DELETE / HEAD / OPTIONS`.
+- Forwards the path + query string to `${SUPABASE_URL}/<rest>` (e.g. `/api/public/sb/rest/v1/documents?...` → backend `/rest/v1/documents?...`).
+- Passes through the caller's own headers (`apikey`, `authorization`, `content-type`, `prefer`, `range`, etc.) and body unchanged.
+- Returns the upstream status, body, and key response headers (`content-type`, `content-range` for pagination).
+
+Security: the proxy **only forwards the credentials the browser already sends** (your normal logged-in token + the public key). It does **not** use the service-role key, so row-level security still applies exactly as today — no new access is granted. It only forwards to the one configured backend host.
+
+### 2. Client request redirector
+
+Add `src/lib/sb-proxy.client.ts`, imported once (for its side effect) at the top of `src/routes/__root.tsx`. On the client it wraps the browser's `fetch` so that any request aimed at the backend host is rewritten to go through `/api/public/sb/...` on the current origin instead. It also:
+
+- Adds a **20s timeout** (via `AbortController`) so a stalled request fails fast instead of hanging forever.
+- **Retries** transient network failures a couple of times with a short backoff.
+
+This automatically covers data reads, writes, token refresh, and storage — without touching the auto-generated backend client file.
+
+### 3. Query resilience
+
+In `src/router.tsx`, give the data layer sane defaults: retry failed requests with exponential backoff, automatically refetch when the connection comes back (`refetchOnReconnect`), and keep retrying even if the browser briefly reports "offline." This means once your signal stabilizes, the app self-heals instead of staying blank.
+
+### 4. Never-blank fallback UI
+
+On the main app screen (`src/routes/_authenticated/app.tsx`), when the documents request errors out, show a small **"Couldn't reach the server — Retry"** message with a button instead of the permanent empty shell, so you always have a way to recover and can tell loading from failure.
+
+## Notes / limits
+
+- Live realtime updates run over a websocket, which this proxy doesn't cover; if any realtime feature also struggles on cellular we can address it separately. All normal loading, saving, and AI calls are covered.
+- No database or schema changes. The auto-generated backend client file is left untouched.
+
+## How we'll verify
+
+- Confirm the app builds and still loads normally on Wi-Fi (data flows through the new proxy path).
+- Confirm requests in the network panel now go to `/api/public/sb/...` on the app's own domain rather than directly to the backend host.
+- You then re-test on cellular — it should load the same as Wi-Fi.
