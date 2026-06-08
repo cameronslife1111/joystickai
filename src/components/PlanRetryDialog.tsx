@@ -36,33 +36,32 @@ export function PlanRetryDialog({
   const handleRetry = async () => {
     if (!planId || submitting) return;
     setSubmitting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("plan-retry", {
-        body: { plan_id: planId, note: note.trim() || undefined },
+    // Fire-and-forget: kick off the background repair, then immediately close
+    // and let the user leave the screen. The plan shows as "retrying" in the
+    // Active tab and resumes on its own once the repair finishes.
+    const id = planId;
+    const trimmedNote = note.trim() || undefined;
+    supabase.functions
+      .invoke("plan-retry", { body: { plan_id: id, note: trimmedNote } })
+      .then(async ({ error }) => {
+        if (error) {
+          let detail = error.message;
+          try {
+            const ctx = await (error as any)?.context?.json?.();
+            if (ctx?.error) detail = ctx.error;
+          } catch { /* ignore */ }
+          toast.error(`Couldn't start retry: ${detail}`);
+        }
+        qc.invalidateQueries({ queryKey: ["plans"] });
+        qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+        qc.invalidateQueries({ queryKey: ["plan", id, "detail"] });
       });
-      if (error) {
-        // Edge function may return a JSON error body in the FunctionsHttpError context.
-        let detail = error.message;
-        try {
-          const ctx = await (error as any)?.context?.json?.();
-          if (ctx?.error) detail = ctx.error;
-        } catch { /* ignore */ }
-        throw new Error(detail);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
 
-      const resumedFrom = (data as any)?.resumed_from_step ?? failedStepNumber;
-      toast.success(`Retrying from step ${resumedFrom}`);
-      qc.invalidateQueries({ queryKey: ["plans"] });
-      qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
-      if (planId) qc.invalidateQueries({ queryKey: ["plan", planId, "detail"] });
-      onOpenChange(false);
-      onRetried?.();
-    } catch (e: any) {
-      toast.error(e?.message ? `Couldn't retry: ${e.message}` : "Couldn't retry the plan");
-    } finally {
-      setSubmitting(false);
-    }
+    toast.success("Retrying in the background — safe to leave this screen");
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    setSubmitting(false);
+    onOpenChange(false);
+    onRetried?.();
   };
 
   return (
