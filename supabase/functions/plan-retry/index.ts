@@ -126,10 +126,30 @@ Deno.serve(async (req) => {
 
   const allSteps: any[] = Array.isArray(plan.steps) ? plan.steps : [];
   const K = Math.max(0, Math.min(plan.current_step ?? 0, allSteps.length));
-  const locked = allSteps.slice(0, K);
+  // Rewind a couple of steps before the failure so the plan re-runs them for
+  // consistency, then continues through the failed step and everything after.
+  const BACKUP_STEPS = 2;
+  const startIndex = Math.max(0, K - BACKUP_STEPS);
+  const locked = allSteps.slice(0, startIndex);
+  const rewound = allSteps.slice(startIndex, K); // completed steps we intentionally re-run
   const failedStep = allSteps[K] ?? null;
 
-  try {
+  // Mark the plan as "retrying" immediately so the user sees progress and can
+  // leave the screen. plan-tick ignores this status, so the stale failed step
+  // is never executed while we compose the repair below.
+  await admin
+    .from("plans")
+    .update({
+      status: "retrying",
+      retry_note: userNote || null,
+      error_message: null,
+      error_lovable_prompt: null,
+      step_claim_at: null,
+    })
+    .eq("id", plan_id)
+    .eq("user_id", user.id);
+
+  const runRepair = async () => {
     // ---- Build a WORKSPACE SNAPSHOT (same approach as plan-compose) so the
     //      repair planner can resolve doc/media references naturally. ----
     const { data: allDocs } = await admin
