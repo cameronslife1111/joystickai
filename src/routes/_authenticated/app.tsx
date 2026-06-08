@@ -221,7 +221,7 @@ function AppPage() {
   }, [theme]);
 
   // Load docs
-  const { data: docs } = useQuery({
+  const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
     queryKey: ["documents"],
     queryFn: async (): Promise<Doc[]> => {
       const { data, error } = await supabase
@@ -1735,6 +1735,26 @@ function AppPage() {
         <div className="absolute left-1/2 top-1/2 h-[60vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
           style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
       </div>
+
+      {/* Connection error fallback — never leave the user stuck on a blank shell */}
+      {docsError && !docsLoading && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95 px-8 text-center backdrop-blur-sm">
+          <div className="text-2xl">📡</div>
+          <div className="text-base font-medium text-foreground">Couldn't reach the server</div>
+          <div className="max-w-xs text-sm text-muted-foreground">
+            Check your connection and try again. Your data is safe.
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchDocs()}
+            className="mt-2 rounded-full px-6 py-2.5 text-sm font-medium text-white transition active:scale-95"
+            style={{ background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))" }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
 
       {/* Top: doc title */}
       <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
