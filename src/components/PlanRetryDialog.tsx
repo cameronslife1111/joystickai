@@ -72,11 +72,14 @@ export function PlanRetryDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Orby will study what went wrong and resume this plan
+          Orby will study what went wrong and resume this plan in the background,
+          starting a couple of steps before
           {failedStepNumber ? (
-            <> from <span className="font-medium text-foreground">step {failedStepNumber}{totalSteps ? ` of ${totalSteps}` : ""}</span></>
-          ) : null}
-          {" "}— no need to start over.
+            <> the one that failed (<span className="font-medium text-foreground">step {failedStepNumber}{totalSteps ? ` of ${totalSteps}` : ""}</span>)</>
+          ) : (
+            <> the one that failed</>
+          )}
+          {" "}— you can leave this screen and keep using the app.
         </p>
 
         {errorMessage && (
