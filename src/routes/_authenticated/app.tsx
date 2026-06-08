@@ -273,21 +273,22 @@ function AppPage() {
   // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
   const lockFavorites = prefs?.lock_favorites ?? false;
   const pinnedDocId = prefs?.pinned_document_id ?? null;
+  const lockedDocId = prefs?.locked_document_id ?? null;
 
 
   // Hydrate theme from saved preference once it loads.
@@ -370,12 +371,32 @@ function AppPage() {
     );
   }, [qc, favorites, muted]);
 
+  const saveLockedDoc = useCallback(async (docId: string | null) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({
+      ...(prev ?? {}), locked_document_id: docId,
+    }));
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, locked_document_id: docId, favorites: favorites as any, muted: muted as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites, muted]);
+
 
 
 
   // Restore last favorite slot (or fall back to first doc) once both docs and prefs are loaded.
   useEffect(() => {
     if (!docs || prefs === undefined || activeDocId) return;
+    // If the user is locked onto a list, always restore to that exact document.
+    if (prefs?.lock_favorites) {
+      const lockedId = prefs?.locked_document_id ?? null;
+      if (lockedId && docs.some((d) => d.id === lockedId)) {
+        setActiveDocId(lockedId);
+        return;
+      }
+    }
     const lastSlot = prefs?.last_favorite_slot ?? null;
     const favs = prefs?.favorites ?? [];
     const lastDocId = typeof lastSlot === "number" && lastSlot >= 0 && lastSlot < favs.length
@@ -799,6 +820,45 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
 
+  // Load an arbitrary document by id at its saved sentence (same prime pattern
+  // used by openLinkedDocument). Used to return to the locked list.
+  const goToDocument = useCallback(async (targetId: string) => {
+    const exists = docs?.some((d) => d.id === targetId);
+    if (!exists) return;
+    const token = claimSpeech();
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+    const list = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = list.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, list.length - 1));
+    const resolved = list[clamped];
+    qc.setQueryData<Sentence[]>(["sentences", targetId], list);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+    setActiveDocId(targetId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [docs, claimSpeech, speak, qc]);
+
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
@@ -812,7 +872,14 @@ function AppPage() {
     }
 
     if (lockFavorites) {
-      // List cycling locked — repeat current sentence instead of advancing.
+      // List cycling locked. The only way off the locked list is following a
+      // linked step (handled above). If we've followed links onto another doc
+      // and this step has no further link, swipe right returns to the locked
+      // list. On the locked list itself, repeat the current sentence.
+      if (lockedDocId && activeDocId !== lockedDocId && docs.some((d) => d.id === lockedDocId)) {
+        await goToDocument(lockedDocId);
+        return;
+      }
       const token = claimSpeech();
       const text = sentences?.[currentIdx]?.content;
       if (text) speak(text, token);
@@ -894,7 +961,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, sentences, currentIdx, currentSentence, openLinkedDocument]);
+  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument]);
   onSwipeRightRef.current = onSwipeRight;
 
 
@@ -1614,11 +1681,13 @@ function AppPage() {
         const next = !lockFavorites;
         setMenuOpen(false);
         void saveLockFavorites(next);
+        // Remember which list is being locked so a reload returns to it.
+        void saveLockedDoc(next ? activeDocId : null);
         toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
       },
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, swapSlot]);
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot]);
 
 
   // Arrange menu buttons into the requested 4x6 grid slots
