@@ -52,11 +52,28 @@ export function LinkDocumentDialog({
   const handlePick = async (docId: string | null) => {
     try {
       setBusy(true);
-      const { error } = await supabase
+      const { data: row, error: rowErr } = await supabase
         .from("sentences")
-        .update({ linked_document_id: docId })
-        .eq("id", sentenceId);
-      if (error) throw error;
+        .select("content, document_id")
+        .eq("id", sentenceId)
+        .maybeSingle();
+      if (rowErr) throw rowErr;
+
+      if (row) {
+        // Apply the same link to every identical sentence in the same document.
+        const { error } = await supabase
+          .from("sentences")
+          .update({ linked_document_id: docId })
+          .eq("document_id", row.document_id)
+          .eq("content", row.content);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("sentences")
+          .update({ linked_document_id: docId })
+          .eq("id", sentenceId);
+        if (error) throw error;
+      }
       toast.success(docId ? "Sentence linked" : "Link removed");
       onSaved();
       onOpenChange(false);

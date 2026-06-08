@@ -1,15 +1,36 @@
-# Add document search to the Attach documents sheet
+# Propagate sentence links to identical sentences (slot 18)
 
-When the user opens the chat (slot 13), then taps **Attach documents** (from settings or the composer row), they get the `DocumentPickerSheet`. I'll add a search input at the top so they can filter documents by title before selecting. Multi-select already works and stays unchanged.
+When a user links (or unlinks) a document to a sentence, apply the same change to every other sentence in the **same document** whose text is exactly identical.
 
-## Changes (`src/components/DocumentPickerSheet.tsx`)
+## Behavior
+- Link a doc to a sentence → all sentences in that document with identical content get the same `linked_document_id`.
+- Switch the linked doc → all matching sentences are updated to the new value.
+- Unlink → all matching sentences are cleared too.
+- Scope is limited to the current document only (no cross-document changes).
 
-1. Add a `query` state string and a search `Input` directly under the sheet header, with a placeholder like "Search documents…". Clear it whenever the sheet opens.
-2. Derive a `filtered` list from `docs` by case-insensitive match of `query` against the document title.
-3. Render `filtered` instead of `docs` in the list, and show a "No matches" empty state when a search yields nothing (keep the existing "No documents yet." state for when there are truly no docs).
-4. Keep the Done button and selection behavior exactly as is — selecting/deselecting multiple documents continues to work, including documents that get filtered out (their selection is preserved).
+## Change (`src/components/LinkDocumentDialog.tsx`)
+
+Update `handlePick` so it no longer updates a single row by id. Instead:
+
+1. Fetch the selected sentence's `content` and `document_id`:
+   ```ts
+   const { data: row } = await supabase
+     .from("sentences")
+     .select("content, document_id")
+     .eq("id", sentenceId)
+     .single();
+   ```
+2. Update every sentence in that document with identical content:
+   ```ts
+   await supabase
+     .from("sentences")
+     .update({ linked_document_id: docId })
+     .eq("document_id", row.document_id)
+     .eq("content", row.content);
+   ```
+3. Keep the existing toast, `onSaved()`, and dialog close behavior. The `onSaved` callback already invalidates the sentences query so the UI refreshes.
 
 ## Notes
-
-- Uses the existing `Input` component (`@/components/ui/input`); no backend or query changes.
-- The search only filters the visible list; it does not affect which selected IDs are returned on Done.
+- Matching is exact string equality on `content` (same as the sentence text). No trimming/case-folding, so only truly identical sentences are affected.
+- RLS already scopes updates to the user's own rows, so no security change is needed.
+- No backend/migration changes required.
