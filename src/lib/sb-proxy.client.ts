@@ -33,6 +33,19 @@ function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Rewrite a backend media URL (image/video/audio file) so it loads through the
+// same-origin proxy instead of hitting the backend host directly. HTML element
+// loads (<img>/<video>/<audio> src, poster) do NOT go through window.fetch, so
+// they bypass the interceptor above — on flaky/cellular networks those direct
+// connections fail even when same-origin requests work. Use ONLY for displayed
+// URLs; never for URLs handed to backend functions (they must stay original).
+export function toProxiedMediaUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+  if (!isClient() || !BACKEND_URL) return url;
+  if (!url.startsWith(BACKEND_URL)) return url;
+  return rewriteUrl(url);
+}
+
 if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
   (window as any).__sbProxyInstalled = true;
   const originalFetch = window.fetch.bind(window);

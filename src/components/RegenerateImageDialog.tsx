@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AspectRatioSelect } from "./AspectRatioSelect";
 import { QualitySelect } from "./QualitySelect";
+import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
@@ -114,7 +115,7 @@ export function RegenerateImageDialog({ open, onOpenChange, sourceAsset, onSubmi
             <div className="flex items-center gap-3">
               {sourceAsset.url && (
                 <img
-                  src={sourceAsset.url}
+                  src={toProxiedMediaUrl(sourceAsset.url) ?? undefined}
                   alt="Source"
                   className="h-24 w-24 rounded-xl border border-foreground/10 object-cover"
                 />
