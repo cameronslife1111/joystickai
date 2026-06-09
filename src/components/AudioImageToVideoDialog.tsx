@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
-import { proxyMediaUrl } from "@/lib/sb-proxy.client";
+import { proxyMediaUrl } from "@/lib/sb-proxy";
 
 interface SourceImage {
   id: string;

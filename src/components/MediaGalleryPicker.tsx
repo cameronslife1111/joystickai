@@ -4,7 +4,7 @@ import { Play, Music } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { proxyMediaUrl } from "@/lib/sb-proxy.client";
+import { proxyMediaUrl } from "@/lib/sb-proxy";
 
 export type MediaAsset = {
   id: string;
