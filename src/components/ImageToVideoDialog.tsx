@@ -24,6 +24,7 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 
 interface SourceImage {
   id: string;
