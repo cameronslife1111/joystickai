@@ -1735,6 +1735,7 @@ function AppPage() {
     >
       {/* Background */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="app-aurora" />
         <div className="absolute left-1/2 top-1/2 h-[60vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
           style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
       </div>
