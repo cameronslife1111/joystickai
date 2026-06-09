@@ -105,6 +105,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
 
+  // Install the same-origin backend proxy on the client (cellular fix).
+  useEffect(() => {
+    void import("@/lib/sb-proxy.client").then((m) => m.installSbProxy());
+  }, []);
+
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
       router.invalidate();
