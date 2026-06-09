@@ -69,7 +69,7 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "add_sentence",
-    description: "Add a new sentence to a document. Position can be 'top' or 'bottom'. Default is 'bottom'. Do NOT use 'after_current' — plans have no notion of a 'current' sentence.",
+    description: "Add a new sentence to a document. Position can be 'top' or 'bottom'. Default is 'bottom'. Do NOT use 'after_current' — plans have no notion of a 'current' sentence. The target document_id is REQUIRED and must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template (e.g. from a create_document step); never rely on an implied or 'previous' document.",
     args: {
       document_id: { type: "string", description: "Target document UUID", required: true },
       content: { type: "string", description: "Sentence text", required: true },
@@ -78,7 +78,7 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "update_sentence_content",
-    description: "Rewrite the content of an existing sentence.",
+    description: "Rewrite the content of an existing sentence. The target sentence_id is REQUIRED and must be a concrete sentence id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied or 'previous' sentence.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence", required: true },
       new_content: { type: "string", description: "New sentence text", required: true },
@@ -86,7 +86,7 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "move_sentence",
-    description: "Move a sentence to a different document. Position is 'top' or 'bottom' (default 'bottom'). Do NOT use 'after_current' — plans have no notion of a 'current' sentence.",
+    description: "Move a sentence to a different document. Position is 'top' or 'bottom' (default 'bottom'). Do NOT use 'after_current' — plans have no notion of a 'current' sentence. Both the sentence_id (what to move) and target_document_id (where it goes) are REQUIRED and must each be a concrete id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied source or destination.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence to move", required: true },
       target_document_id: { type: "string", description: "UUID of the destination document", required: true },
@@ -95,7 +95,7 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "link_sentence_to_document",
-    description: "Set the linked_document_id metadata on a sentence so it points to another document. Pass null as target_document_id to unlink.",
+    description: "Set the linked_document_id metadata on a sentence so it points to another document. Pass null as target_document_id to unlink. The sentence_id is REQUIRED and (unless unlinking) target_document_id must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied target.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence", required: true },
       target_document_id: { type: "string", description: "UUID of the document to link to, or null to remove the link", required: true },

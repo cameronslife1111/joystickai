@@ -1,43 +1,48 @@
-## What's actually broken
+# Upgrade Orby's Planner: Never Lose the "Where"
 
-Earlier we fixed cellular loading by intercepting `window.fetch` and rerouting backend requests through a same-origin proxy (`/api/public/sb/...`). That fix works for **data** (database queries go through `fetch`).
+## Problem
 
-But the media gallery displays files using native `<img>`, `<video>`, and `<audio>` tags pointing directly at the backend storage host (`*.supabase.co`). **Native element loads do NOT go through `window.fetch`**, so the proxy never touches them. On cellular, the carrier breaks those direct browser→backend connections — which is exactly why the gallery only loads when Wi-Fi is on, while the rest of the app works fine.
+When Orby plans, the *what* of each step survives but the *where* (which document the text goes into / comes from) gets lost. The planner relies on fuzzy snapshot matching and template piping, but nothing forces each step to lock in an explicit, resolved destination. Result: steps execute against the wrong doc, or fail because a target was never carried through.
 
-## The fix (small, surgical, same proven mechanism)
+Planning is the root of every plan's success, so we harden it at two levels: a stronger planner prompt (so the model commits the destination into every step), and a deterministic validation pass (so any step missing a resolvable target is caught before the plan is shown/approved).
 
-Reuse the exact same rewrite the fetch proxy already uses, but apply it to media element `src` URLs so they also travel over the same-origin path that works on cellular.
+## Changes
 
-### 1. Export a tiny helper from the existing proxy file
+All work is in the backend planner. No UI or schema changes.
 
-In `src/lib/sb-proxy.client.ts`, export a pure function (same logic already used internally):
+### 1. Strengthen the planner system prompt — `supabase/functions/plan-compose/index.ts`
 
-```text
-proxyMediaUrl(url):
-  if no url or no BACKEND_URL or not on client → return url unchanged
-  if url does not start with BACKEND_URL → return url unchanged   (already same-origin or external)
-  else → rewrite to `${origin}/api/public/sb/${rest}`
-```
+Add a new, prominent rules block (call it "WHERE RULES — every step must lock its target") to the `systemPrompt`, stating:
 
-This is SSR-safe (returns the original URL on the server, so server-rendered markup stays valid) and a no-op for any URL that isn't a backend URL — zero risk to non-backend images.
+- **Every mutating step must carry its full destination explicitly.** For `add_sentence`, `move_sentence`, `update_sentence_content`, `link_sentence_to_document`, `mark_*`, `rename_*`, image/video tools — the target `document_id` / `sentence_id` / `target_document_id` / `source_media_id` must be present in that step's `args`, resolved to a concrete id (from the WORKSPACE SNAPSHOT) or a template (`{{step_N.result.id}}`) from an earlier step. Never leave a destination implied by an earlier step's prose.
+- **New-doc → fill pattern is explicit.** When the plan creates a document and then adds content, every following `add_sentence` MUST set `document_id: "{{step_N.result.id}}"` pointing at the `create_document` step. Do not assume "the document we just made" — wire it through the template.
+- **Each step's `description` must name the destination in plain language** (e.g. "Add the intro line to the *Trip Plan* document", not "Add the intro line"). The user reads these during approval and they double as a self-check.
+- **One destination per step.** If content belongs in multiple docs, emit one step per doc, each with its own explicit `document_id`.
+- **Resolve before you reference.** If a target doc doesn't exist yet and isn't created earlier in the plan, create it first (a `create_document` step) and template its id forward — never invent an id and never point at an unresolved name.
 
-### 2. Apply it to every media `src`
+Reinforce within the existing template-syntax bullets that `create_document` / `add_sentence` return objects with an `id`, and `document_id: "{{step_N.result.id}}"` is the canonical way to target a freshly created doc.
 
-Wrap the `src` of media elements with `proxyMediaUrl(...)` in:
+### 2. Sharpen the tool descriptions — `supabase/functions/_shared/tools.ts`
 
-- `src/routes/_authenticated/media.tsx` — grid thumbnails (img + video) and the fullscreen viewer (img/video/audio)
-- `src/components/MediaGalleryPicker.tsx` — picker thumbnails (img + video)
-- `src/components/ImageToVideoDialog.tsx`, `AudioImageToVideoDialog.tsx`, `VideoToVideoDialog.tsx`, `RemixImagesDialog.tsx`, `RegenerateImageDialog.tsx` — source/preview thumbnails
+Tighten the `description` for the mutation tools so the requirement travels with each tool definition the model sees:
 
-No data shape changes: the stored `url` in the database stays exactly as-is. We only transform it at render time for display.
+- `add_sentence`, `move_sentence`, `update_sentence_content`, `link_sentence_to_document`: append a line — "The target document/sentence id is REQUIRED and must be a concrete id from the snapshot or a `{{step_N.result.id}}` template; never rely on an implied/previous target."
 
-### Why this is safe
+### 3. Deterministic validation pass after the LLM returns — `supabase/functions/plan-compose/index.ts`
 
-- The `/api/public/sb/$` proxy already forwards arbitrary backend paths, including public storage objects, preserving Range headers (so video scrubbing keeps working) and status codes.
-- The helper is a strict no-op unless the URL begins with the backend host, so external images, data URLs, and blob URLs pass through untouched.
-- Downloads already use `fetch(asset.url)` which is intercepted by the existing proxy, so they're unaffected.
-- No backend, schema, RLS, or business-logic changes — purely presentation-layer URL rewriting.
+In the step-normalization loop (where each step's `tool` is validated), add a per-tool required-target check. For each tool, define which args must be non-empty (e.g. `add_sentence` → `document_id` + `content`; `move_sentence` → `sentence_id` + `target_document_id`; `update_sentence_content` → `sentence_id` + `new_content`; image/video tools → their `source_*` ids). If a required target arg is missing/blank AND is not a `{{step_N...}}` template, throw a clear compose error (which already routes the plan to `failed` with an explanatory message) — e.g. "Step 3 (add_sentence) is missing a target document_id." This guarantees a plan never ships with a lost destination.
 
-### Verification
+A template string (`{{step_N.result...}}`) counts as present, since it resolves at execution time.
 
-After the change, load the media gallery in the preview to confirm thumbnails and the fullscreen viewer render, and that video playback/scrubbing still works.
+## Technical Details
+
+- `plan-compose/index.ts`: edit the `systemPrompt` constant (add the WHERE RULES block + reinforce template guidance), and extend the `for (const [i, s] of steps.entries())` validation loop with a required-args map keyed by tool name.
+- `_shared/tools.ts`: edit `description` strings for the four sentence/document mutation tools.
+- Required-args map should be derived to stay in sync with `TOOL_CATALOG` where practical, but an explicit per-tool target map is fine and clearer for the "must be a real destination" rule.
+- No changes to `plan-step` execution, the snapshot builder, RLS, or the DB. Behavior change is entirely "plans are written more precisely and rejected if a destination is missing."
+
+## Out of Scope
+
+- No changes to how steps execute or to template resolution logic.
+- No UI changes to the approval/retry dialogs.
+- No new tools or model/provider changes.

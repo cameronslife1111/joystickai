@@ -65,7 +65,14 @@ Critical rules:
   - {{step_1.result.id}}     -> the id field of step 1's result (when result is a single object)
   - {{step_2.result.text}}   -> the text field of step 2's result
 - find_* tools return ARRAYS of matches (best match first). Subsequent steps almost always want {{step_N.result[0].id}}.
-- create_document and add_sentence return objects with at least an "id" field.
+- create_document and add_sentence return objects with at least an "id" field. To target a document you create earlier in the same plan, set document_id: "{{step_N.result.id}}" pointing at that create_document step — this is the canonical way to fill a freshly created doc.
+
+WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
+- EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
+- NEW-DOC → FILL pattern: when you create a document and then add content to it, EVERY following add_sentence MUST set document_id: "{{step_N.result.id}}" pointing at the create_document step. Do not assume "the document we just made" — wire the id through the template every single time.
+- Each step's "description" MUST name the destination in plain language (e.g. "Add the intro line to the \"Trip Plan\" document", not "Add the intro line"). The user reads these during approval and they double as a self-check that the where is set.
+- ONE destination per step. If the same content belongs in multiple documents, emit one step per document, each with its own explicit document_id.
+- RESOLVE BEFORE YOU REFERENCE. If a target document does not exist yet and is not created earlier in the plan, add a create_document step first and template its id forward. Never invent an id and never point at an unresolved name.
 - BULK / "ALL MATCHING" REQUESTS: When the user asks you to act on EVERY document matching a description (e.g. "all the docs that start with Ricky - Prompt", "every meme prompt doc", "all documents about X"), enumerate the matching titles DIRECTLY from the ALL DOCUMENTS (id — title) list in the WORKSPACE SNAPSHOT and emit one step per match (e.g. one add_sentence per matching title, with the literal title text inlined). The ALL DOCUMENTS list contains the user's complete document set — there is NO five-result limit when you read titles from the snapshot, so match loosely (prefix/substring/keywords) and include EVERY doc that fits, not just a few. Do NOT call find_document_by_title for this — it only returns the 5 best matches and cannot enumerate. Only if the matching set is clearly larger than what the snapshot shows, use find_documents_by_title (plural) which returns all matches.
 - Plan as few steps as possible. Combine where reasonable — BUT for bulk "act on all matching docs" requests, one step per matching document is correct and expected (do not artificially limit the count).
 
@@ -327,12 +334,57 @@ Deno.serve(async (req) => {
     const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
 
     const toolNames = new Set(TOOL_CATALOG.map((t) => t.name));
+
+    // Required target/destination args per tool. A step that mutates or
+    // references a specific resource MUST carry that resource's id (or a
+    // {{step_N...}} template that resolves to it at runtime). This guarantees
+    // a plan never ships having "lost the where".
+    const REQUIRED_TARGET_ARGS: Record<string, string[]> = {
+      add_sentence: ["document_id", "content"],
+      update_sentence_content: ["sentence_id", "new_content"],
+      move_sentence: ["sentence_id", "target_document_id"],
+      link_sentence_to_document: ["sentence_id"],
+      mark_sentence_for_deletion: ["sentence_id"],
+      mark_document_for_deletion: ["document_id"],
+      mark_media_for_deletion: ["media_id"],
+      rename_document: ["document_id", "new_title"],
+      rename_media: ["media_id", "new_title"],
+      read_document: ["document_id"],
+      regenerate_image: ["source_media_id"],
+      remix_images: ["source_media_ids"],
+      image_to_video: ["source_media_id"],
+      video_to_video: ["source_image_id", "reference_video_id"],
+      audio_image_to_video: ["source_image_id", "audio_media_id"],
+    };
+
+    // A value "carries the where" if it's a non-blank string/value OR a
+    // {{step_N...}} template that resolves at execution time.
+    const hasTargetValue = (v: unknown): boolean => {
+      if (v == null) return false;
+      if (typeof v === "string") return v.trim().length > 0;
+      if (typeof v === "number" || typeof v === "boolean") return true;
+      if (Array.isArray(v)) return v.length > 0;
+      return true;
+    };
+
     for (const [i, s] of steps.entries()) {
       if (!s || typeof s !== "object") throw new Error(`Step ${i + 1} is malformed`);
       if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
         throw new Error(`Step ${i + 1} uses unknown tool: ${s.tool}`);
       }
       if (!s.args || typeof s.args !== "object") s.args = {};
+
+      const required = REQUIRED_TARGET_ARGS[s.tool];
+      if (required) {
+        for (const argName of required) {
+          if (!hasTargetValue(s.args[argName])) {
+            throw new Error(
+              `Step ${i + 1} (${s.tool}) is missing a target "${argName}". Every step must carry its destination explicitly — set it to a concrete id from the workspace or a {{step_N.result.id}} template.`,
+            );
+          }
+        }
+      }
+
       if (typeof s.description !== "string" || !s.description.trim()) {
         s.description = `Run ${s.tool}`;
       }
