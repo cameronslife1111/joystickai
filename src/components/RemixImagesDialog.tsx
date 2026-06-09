@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AspectRatioSelect } from "./AspectRatioSelect";
+import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 import { QualitySelect } from "./QualitySelect";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
