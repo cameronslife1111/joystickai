@@ -46,7 +46,8 @@ export function toProxiedMediaUrl(url: string | null | undefined): string | null
   return rewriteUrl(url);
 }
 
-if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
+export function installSbProxy() {
+  if (!isClient() || !BACKEND_URL || (window as any).__sbProxyInstalled) return;
   (window as any).__sbProxyInstalled = true;
   const originalFetch = window.fetch.bind(window);
 
