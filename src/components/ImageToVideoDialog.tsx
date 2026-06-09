@@ -23,7 +23,7 @@ import {
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
-import { proxyMediaUrl } from "@/lib/sb-proxy.client";
+import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
 
 interface SourceImage {

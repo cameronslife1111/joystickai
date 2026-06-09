@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 //
 // Some mobile carriers stall or break direct browser connections to the
 // backend host (*.supabase.co) while the Lovable origin stays reachable.
-// The browser fetch interceptor (src/lib/sb-proxy.client.ts) rewrites those
+// The browser fetch interceptor (src/lib/sb-proxy.ts) rewrites those
 // requests to /api/public/sb/<rest>, and this handler forwards them to the
 // real backend from inside the cloud network (clean connection).
 //

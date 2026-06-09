@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Side-effect: route backend requests through the same-origin proxy on the
 // client so the app loads on flaky/cellular networks. Must run before any
 // backend call is made.
-import "@/lib/sb-proxy.client";
+import "@/lib/sb-proxy";
 
 function NotFoundComponent() {
   return (
