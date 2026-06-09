@@ -16,6 +16,8 @@ interface Props {
 
 type Doc = { id: string; title: string; sentence_count: number };
 
+const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
+
 export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
   const [query, setQuery] = useState("");
@@ -72,6 +74,19 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
         <SheetHeader>
           <SheetTitle>Attach documents</SheetTitle>
         </SheetHeader>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {EMOJI_FILTERS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => setQuery(emoji)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/10 bg-foreground/5 text-lg transition hover:bg-foreground/10 active:scale-[0.95]"
+              aria-label={`Filter by ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
