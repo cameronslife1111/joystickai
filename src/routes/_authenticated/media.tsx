@@ -24,6 +24,7 @@ const NO_CALLOUT_STYLE: React.CSSProperties = {
   userSelect: "none",
 };
 import { supabase } from "@/integrations/supabase/client";
+import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
