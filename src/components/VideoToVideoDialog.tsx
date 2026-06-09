@@ -80,7 +80,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
       setRefVideoDuration(isFinite(v.duration) ? v.duration : null);
     };
     v.onerror = () => setRefVideoDuration(null);
-    v.src = refVideo.url;
+    v.src = toProxiedMediaUrl(refVideo.url) ?? "";
   }, [refVideo]);
 
   const overLimit =
