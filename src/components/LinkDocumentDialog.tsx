@@ -22,6 +22,10 @@ interface Props {
   onSaved: () => void;
 }
 
+const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
+
+
+
 export function LinkDocumentDialog({
   open,
   onOpenChange,
