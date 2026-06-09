@@ -190,7 +190,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                           : undefined
                       }
                     >
-                      <img src={img.url} alt={img.title} className="h-full w-full object-cover" />
+                      <img src={proxyMediaUrl(img.url)} alt={img.title} className="h-full w-full object-cover" />
                       <span
                         className={
                           "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border " +
