@@ -32,6 +32,9 @@ type Sentence = { id: string; content: string; order_index: number; document_id:
 
 type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
 
+const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"] as const;
+
+
 function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFiredRef = useRef(false);
@@ -2247,6 +2250,18 @@ function AppPage() {
                     )}
                   </div>
                 )}
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {EMOJI_FILTERS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setPickerQuery(emoji)}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/5 text-lg transition active:scale-95 hover:bg-foreground/10"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="text"
                   value={pickerQuery}
@@ -2255,6 +2270,7 @@ function AppPage() {
                   autoFocus
                   className="mb-2 w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60 focus:border-foreground/30"
                 />
+
                 <div className="flex-1 space-y-1 overflow-y-auto">
                   {filtered.map((d) => (
                     <button
@@ -2331,7 +2347,20 @@ function AppPage() {
                   Close
                 </button>
               </div>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {EMOJI_FILTERS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setSearchQuery(emoji)}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/5 text-lg transition active:scale-95 hover:bg-foreground/10"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               <input
+
                 ref={(el) => { if (el) el.focus(); }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
