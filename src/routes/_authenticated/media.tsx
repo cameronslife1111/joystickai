@@ -646,7 +646,7 @@ function MediaPage() {
                     <>
                       {a.kind === "image" && a.url && (
                         <img
-                          src={a.url}
+                          src={proxyMediaUrl(a.url)}
                           alt={a.title}
                           loading="lazy"
                           draggable={false}
@@ -656,7 +656,7 @@ function MediaPage() {
                       )}
                       {a.kind === "video" && a.url && (
                         <>
-                          <video src={a.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                          <video src={proxyMediaUrl(a.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                             <Play className="h-10 w-10 text-white drop-shadow" />
                           </div>
