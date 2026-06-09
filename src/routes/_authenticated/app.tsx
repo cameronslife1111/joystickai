@@ -2347,7 +2347,20 @@ function AppPage() {
                   Close
                 </button>
               </div>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {EMOJI_FILTERS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setSearchQuery(emoji)}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/5 text-lg transition active:scale-95 hover:bg-foreground/10"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               <input
+
                 ref={(el) => { if (el) el.focus(); }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
