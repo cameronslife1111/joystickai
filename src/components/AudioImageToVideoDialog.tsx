@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/sb-proxy.client";
 
 interface SourceImage {
   id: string;
@@ -127,7 +128,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
               <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                 {sourceImage.url && (
-                  <img src={sourceImage.url} alt={sourceImage.title} className="h-full w-full object-cover" />
+                  <img src={proxyMediaUrl(sourceImage.url)} alt={sourceImage.title} className="h-full w-full object-cover" />
                 )}
               </div>
               <div className="min-w-0">

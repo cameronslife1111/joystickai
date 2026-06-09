@@ -22,6 +22,7 @@ import {
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/sb-proxy.client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
 
 interface SourceImage {
@@ -164,7 +165,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
               <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                 {sourceImage.url && (
-                  <img src={sourceImage.url} alt={sourceImage.title} className="h-full w-full object-cover" />
+                  <img src={proxyMediaUrl(sourceImage.url)} alt={sourceImage.title} className="h-full w-full object-cover" />
                 )}
               </div>
               <div className="min-w-0">
@@ -200,7 +201,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
                 <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                   <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                     {refVideo.url && (
-                      <video src={refVideo.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                      <video src={proxyMediaUrl(refVideo.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                     )}
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">{refVideo.title}</p>
@@ -263,7 +264,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
                   <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                       {elementImage.url && (
-                        <img src={elementImage.url} alt={elementImage.title} className="h-full w-full object-cover" />
+                        <img src={proxyMediaUrl(elementImage.url)} alt={elementImage.title} className="h-full w-full object-cover" />
                       )}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-sm">{elementImage.title}</p>

@@ -1,68 +1,43 @@
-## Goal
+## What's actually broken
 
-Two improvements to the "Fix & retry" feature we just shipped:
+Earlier we fixed cellular loading by intercepting `window.fetch` and rerouting backend requests through a same-origin proxy (`/api/public/sb/...`). That fix works for **data** (database queries go through `fetch`).
 
-1. **Rewind a couple of steps** — when retrying, don't resume exactly at the failed step. Back up ~2 steps and re-run those (for consistency) along with the failed step and everything after.
-2. **Run in the background** — pressing "Retry" should return instantly, close the dialog, and let the user navigate away (just like a normal running/composing plan). The slow planner-repair work happens server-side in the background.
+But the media gallery displays files using native `<img>`, `<video>`, and `<audio>` tags pointing directly at the backend storage host (`*.supabase.co`). **Native element loads do NOT go through `window.fetch`**, so the proxy never touches them. On cellular, the carrier breaks those direct browser→backend connections — which is exactly why the gallery only loads when Wi-Fi is on, while the rest of the app works fine.
 
----
+## The fix (small, surgical, same proven mechanism)
 
-## How it works today (context)
+Reuse the exact same rewrite the fetch proxy already uses, but apply it to media element `src` URLs so they also travel over the same-origin path that works on cellular.
 
-- `PlanRetryDialog` calls the `plan-retry` edge function and **waits** for it to finish. That function synchronously runs the planner LLM (can take 10-30s) while the user stares at a "Retrying…" button.
-- `plan-retry` locks steps `0..K-1` (where `K = current_step`, the failed step), asks the planner to repair from index `K`, then sets `status='approved'` so the `plan-tick` cron resumes it.
+### 1. Export a tiny helper from the existing proxy file
 
----
-
-## Changes
-
-### 1. Database migration — new status value
-
-The `plans.status` column has a CHECK constraint. Add a `'retrying'` state used while the background repair is composing (so the plan shows as active but `plan-tick` won't try to execute its stale failed step mid-repair).
+In `src/lib/sb-proxy.client.ts`, export a pure function (same logic already used internally):
 
 ```text
-status IN (composing, proposed, approved, running, awaiting_media,
-           completed, failed, cancelled, retrying)   -- add 'retrying'
+proxyMediaUrl(url):
+  if no url or no BACKEND_URL or not on client → return url unchanged
+  if url does not start with BACKEND_URL → return url unchanged   (already same-origin or external)
+  else → rewrite to `${origin}/api/public/sb/${rest}`
 ```
 
-### 2. `supabase/functions/plan-retry/index.ts` — rewind + background
+This is SSR-safe (returns the original URL on the server, so server-rendered markup stays valid) and a no-op for any URL that isn't a backend URL — zero risk to non-backend images.
 
-**Rewind logic:**
-- Introduce `BACKUP_STEPS = 2`.
-- Compute `K = current_step` (failed index) and `startIndex = max(0, K - BACKUP_STEPS)`.
-- `locked = steps.slice(0, startIndex)` (truly preserved, referenced by absolute index).
-- Steps `startIndex..K-1` are "previously completed but intentionally rewound" — pass them to the planner as re-run candidates.
-- Repair planner emits replacement steps starting at absolute index `startIndex` (failed step is at `K`). On success set `current_step = startIndex`.
-- Update the repair prompt to explain: steps `0..startIndex-1` are locked; steps `startIndex..K-1` completed before but we're rewinding to re-run them for consistency; the failed step is at `K` with its error; re-emit everything from `startIndex` onward. Absolute indices are preserved so existing `{{step_N.result...}}` references to locked steps stay valid.
+### 2. Apply it to every media `src`
 
-**Background execution:**
-- As soon as the request is validated and the plan loaded, set the plan to `status='retrying'`, store `retry_note`, clear `error_message`, and **return immediately** (`{ ok: true, background: true }`).
-- Run the heavy work (workspace snapshot + planner LLM + splice) inside `EdgeRuntime.waitUntil(...)` so it continues after the response is sent.
-- On success: set `status='approved'`, `current_step=startIndex`, merged steps, increment `retry_count`, etc. (same as today). The `plan-tick` cron then resumes it.
-- On failure: set `status='failed'` with a refreshed error message (same as today's catch block).
+Wrap the `src` of media elements with `proxyMediaUrl(...)` in:
 
-### 3. `src/components/PlanRetryDialog.tsx` — instant, fire-and-forget UX
+- `src/routes/_authenticated/media.tsx` — grid thumbnails (img + video) and the fullscreen viewer (img/video/audio)
+- `src/components/MediaGalleryPicker.tsx` — picker thumbnails (img + video)
+- `src/components/ImageToVideoDialog.tsx`, `AudioImageToVideoDialog.tsx`, `VideoToVideoDialog.tsx`, `RemixImagesDialog.tsx`, `RegenerateImageDialog.tsx` — source/preview thumbnails
 
-- On "Retry plan": invoke `plan-retry`, then immediately close the dialog and show a toast like "Retrying in the background — safe to leave this screen." No more long "Retrying…" wait.
-- Update the description copy to say Orby will resume "a couple of steps before the one that failed" instead of "from step N".
-- Invalidate the `plans` / `plans_pending_count` / detail queries and call `onRetried()` as today.
+No data shape changes: the stored `url` in the database stays exactly as-is. We only transform it at render time for display.
 
-### 4. `src/components/AIPlansScreen.tsx` — show the retrying state
+### Why this is safe
 
-- Add `retrying` to `STATUS_COLOR` (blue, like running) and to `ACTIVE_STATUSES` so it appears in the **Active** tab.
-- In `handleRowClick`, treat `retrying` like a normal plan (open `PlanDetailDialog`, not the approval dialog).
-- Row subtitle for `retrying` shows something like "Repairing…" instead of the step counter.
+- The `/api/public/sb/$` proxy already forwards arbitrary backend paths, including public storage objects, preserving Range headers (so video scrubbing keeps working) and status codes.
+- The helper is a strict no-op unless the URL begins with the backend host, so external images, data URLs, and blob URLs pass through untouched.
+- Downloads already use `fetch(asset.url)` which is intercepted by the existing proxy, so they're unaffected.
+- No backend, schema, RLS, or business-logic changes — purely presentation-layer URL rewriting.
 
-### 5. `src/components/PlanDetailDialog.tsx` — minor copy
+### Verification
 
-- Keep the existing "Fix & retry from this step" button; pass current props. (Optionally relabel to "Fix & retry".) The dialog already closes on `onRetried`.
-
----
-
-## Technical notes / safety
-
-- **No `plan-tick` change needed**: it only selects `approved`/`running`/`awaiting_media`, so a `retrying` plan is never executed while its steps are still being repaired — this prevents the race where the cron would re-run the stale failed step.
-- **Composing watcher unaffected**: `useComposingPlansWatcher` only watches `composing`, so `retrying` won't be auto-approved by it.
-- **Index integrity**: because we rewind to `startIndex` and re-emit from there, locked indices `0..startIndex-1` never shift, so any `{{step_N.result}}` references the planner wires to locked steps remain correct.
-- **Re-running side effects**: rewound steps (e.g. image generations) will run again and produce fresh outputs — this is the intended "start a couple steps earlier" behavior.
-- `EdgeRuntime.waitUntil` is supported in the Supabase edge runtime and keeps the worker alive until the background repair completes.
+After the change, load the media gallery in the preview to confirm thumbnails and the fullscreen viewer render, and that video playback/scrubbing still works.

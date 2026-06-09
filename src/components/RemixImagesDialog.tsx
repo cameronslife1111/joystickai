@@ -16,6 +16,7 @@ import { AspectRatioSelect } from "./AspectRatioSelect";
 import { QualitySelect } from "./QualitySelect";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/sb-proxy.client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
 
 interface InitialAsset {
@@ -189,7 +190,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                           : undefined
                       }
                     >
-                      <img src={img.url} alt={img.title} className="h-full w-full object-cover" />
+                      <img src={proxyMediaUrl(img.url)} alt={img.title} className="h-full w-full object-cover" />
                       <span
                         className={
                           "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border " +
@@ -231,7 +232,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                   {selectedAssets.map((a) => (
                     <img
                       key={a.id}
-                      src={a.url}
+                      src={proxyMediaUrl(a.url)}
                       alt={a.title}
                       className="h-16 w-16 shrink-0 rounded-lg border border-foreground/10 object-cover"
                     />

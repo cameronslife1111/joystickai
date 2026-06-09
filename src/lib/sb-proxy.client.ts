@@ -24,6 +24,18 @@ function rewriteUrl(rawUrl: string): string {
   return `${window.location.origin}/api/public/sb/${rest}`;
 }
 
+// Rewrite a backend media URL (storage object) to the same-origin proxy path so
+// native <img>/<video>/<audio> loads travel over the connection that works on
+// cellular. SSR-safe and a strict no-op for any non-backend URL.
+export function proxyMediaUrl<T extends string | null | undefined>(url: T): T {
+  if (!url) return url;
+  if (!BACKEND_URL) return url;
+  if (typeof window === "undefined") return url;
+  if (!url.startsWith(BACKEND_URL)) return url;
+  const rest = url.slice(BACKEND_URL.replace(/\/+$/, "").length).replace(/^\/+/, "");
+  return `${window.location.origin}/api/public/sb/${rest}` as T;
+}
+
 function shouldRetry(method: string) {
   // Only auto-retry idempotent reads to avoid duplicate writes.
   return method === "GET" || method === "HEAD";
