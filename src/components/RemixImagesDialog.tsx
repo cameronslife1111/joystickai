@@ -16,6 +16,7 @@ import { AspectRatioSelect } from "./AspectRatioSelect";
 import { QualitySelect } from "./QualitySelect";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/sb-proxy.client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
 
 interface InitialAsset {
