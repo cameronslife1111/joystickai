@@ -232,7 +232,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                   {selectedAssets.map((a) => (
                     <img
                       key={a.id}
-                      src={a.url}
+                      src={toProxiedMediaUrl(a.url) ?? undefined}
                       alt={a.title}
                       className="h-16 w-16 shrink-0 rounded-lg border border-foreground/10 object-cover"
                     />
