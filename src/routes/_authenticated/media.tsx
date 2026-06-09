@@ -762,7 +762,7 @@ function MediaPage() {
               <>
                 {currentAsset.kind === "image" && currentAsset.url && (
                   <img
-                    src={currentAsset.url}
+                    src={proxyMediaUrl(currentAsset.url)}
                     alt={currentAsset.title}
                     draggable={false}
                     style={NO_CALLOUT_STYLE}
@@ -770,13 +770,13 @@ function MediaPage() {
                   />
                 )}
                 {currentAsset.kind === "video" && currentAsset.url && (
-                  <video src={currentAsset.url} controls playsInline className="max-h-full max-w-full" />
+                  <video src={proxyMediaUrl(currentAsset.url)} controls playsInline className="max-h-full max-w-full" />
                 )}
                 {currentAsset.kind === "audio" && currentAsset.url && (
                   <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white">
                     <Music className="mx-auto mb-3 h-10 w-10" />
                     <p className="mb-4 font-display text-lg">{currentAsset.title}</p>
-                    <audio src={currentAsset.url} controls className="w-full" />
+                    <audio src={proxyMediaUrl(currentAsset.url)} controls className="w-full" />
                   </div>
                 )}
               </>
