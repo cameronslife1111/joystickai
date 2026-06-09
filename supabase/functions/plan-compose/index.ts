@@ -334,12 +334,57 @@ Deno.serve(async (req) => {
     const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
 
     const toolNames = new Set(TOOL_CATALOG.map((t) => t.name));
+
+    // Required target/destination args per tool. A step that mutates or
+    // references a specific resource MUST carry that resource's id (or a
+    // {{step_N...}} template that resolves to it at runtime). This guarantees
+    // a plan never ships having "lost the where".
+    const REQUIRED_TARGET_ARGS: Record<string, string[]> = {
+      add_sentence: ["document_id", "content"],
+      update_sentence_content: ["sentence_id", "new_content"],
+      move_sentence: ["sentence_id", "target_document_id"],
+      link_sentence_to_document: ["sentence_id"],
+      mark_sentence_for_deletion: ["sentence_id"],
+      mark_document_for_deletion: ["document_id"],
+      mark_media_for_deletion: ["media_id"],
+      rename_document: ["document_id", "new_title"],
+      rename_media: ["media_id", "new_title"],
+      read_document: ["document_id"],
+      regenerate_image: ["source_media_id"],
+      remix_images: ["source_media_ids"],
+      image_to_video: ["source_media_id"],
+      video_to_video: ["source_image_id", "reference_video_id"],
+      audio_image_to_video: ["source_image_id", "audio_media_id"],
+    };
+
+    // A value "carries the where" if it's a non-blank string/value OR a
+    // {{step_N...}} template that resolves at execution time.
+    const hasTargetValue = (v: unknown): boolean => {
+      if (v == null) return false;
+      if (typeof v === "string") return v.trim().length > 0;
+      if (typeof v === "number" || typeof v === "boolean") return true;
+      if (Array.isArray(v)) return v.length > 0;
+      return true;
+    };
+
     for (const [i, s] of steps.entries()) {
       if (!s || typeof s !== "object") throw new Error(`Step ${i + 1} is malformed`);
       if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
         throw new Error(`Step ${i + 1} uses unknown tool: ${s.tool}`);
       }
       if (!s.args || typeof s.args !== "object") s.args = {};
+
+      const required = REQUIRED_TARGET_ARGS[s.tool];
+      if (required) {
+        for (const argName of required) {
+          if (!hasTargetValue(s.args[argName])) {
+            throw new Error(
+              `Step ${i + 1} (${s.tool}) is missing a target "${argName}". Every step must carry its destination explicitly — set it to a concrete id from the workspace or a {{step_N.result.id}} template.`,
+            );
+          }
+        }
+      }
+
       if (typeof s.description !== "string" || !s.description.trim()) {
         s.description = `Run ${s.tool}`;
       }
