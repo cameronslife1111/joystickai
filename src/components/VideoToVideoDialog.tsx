@@ -201,7 +201,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
                 <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                   <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                     {refVideo.url && (
-                      <video src={refVideo.url} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                      <video src={proxyMediaUrl(refVideo.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                     )}
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">{refVideo.title}</p>
