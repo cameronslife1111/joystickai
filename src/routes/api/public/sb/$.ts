@@ -77,14 +77,8 @@ async function proxy(request: Request, splat: string | undefined): Promise<Respo
     if (!STRIP_RESPONSE_HEADERS.has(key.toLowerCase())) respHeaders.set(key, value);
   });
 
-  // Stream the body through instead of buffering it. This keeps large media
-  // (videos, hi-res images) off the worker's memory and preserves range/partial
-  // responses (206 + Content-Range) so video seeking works.
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: respHeaders,
-  });
+  const body = await upstream.arrayBuffer();
+  return new Response(body, { status: upstream.status, statusText: upstream.statusText, headers: respHeaders });
 }
 
 export const Route = createFileRoute("/api/public/sb/$")({

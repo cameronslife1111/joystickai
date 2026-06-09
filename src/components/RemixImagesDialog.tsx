@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AspectRatioSelect } from "./AspectRatioSelect";
-import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 import { QualitySelect } from "./QualitySelect";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
@@ -190,7 +189,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                           : undefined
                       }
                     >
-                      <img src={toProxiedMediaUrl(img.url) ?? undefined} alt={img.title} className="h-full w-full object-cover" />
+                      <img src={img.url} alt={img.title} className="h-full w-full object-cover" />
                       <span
                         className={
                           "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border " +
@@ -232,7 +231,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                   {selectedAssets.map((a) => (
                     <img
                       key={a.id}
-                      src={toProxiedMediaUrl(a.url) ?? undefined}
+                      src={a.url}
                       alt={a.title}
                       className="h-16 w-16 shrink-0 rounded-lg border border-foreground/10 object-cover"
                     />

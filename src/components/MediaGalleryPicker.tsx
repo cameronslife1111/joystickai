@@ -4,7 +4,6 @@ import { Play, Music } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { toProxiedMediaUrl } from "@/lib/sb-proxy.client";
 
 export type MediaAsset = {
   id: string;
@@ -122,7 +121,7 @@ export function MediaGalleryPicker({
                   >
                     {a.kind === "image" && a.url && (
                       <img
-                        src={toProxiedMediaUrl(a.url) ?? undefined}
+                        src={a.url}
                         alt={a.title}
                         loading="lazy"
                         draggable={false}
@@ -132,7 +131,7 @@ export function MediaGalleryPicker({
                     {a.kind === "video" && a.url && (
                       <>
                         <video
-                          src={toProxiedMediaUrl(a.url) ?? undefined}
+                          src={a.url}
                           preload="metadata"
                           muted
                           playsInline

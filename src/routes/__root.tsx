@@ -12,6 +12,10 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+// Side-effect: route backend requests through the same-origin proxy on the
+// client so the app loads on flaky/cellular networks. Must run before any
+// backend call is made.
+import "@/lib/sb-proxy.client";
 
 function NotFoundComponent() {
   return (
@@ -104,12 +108,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
-
-  // Install the same-origin backend proxy on the client (cellular fix).
-  useEffect(() => {
-    void import("@/lib/sb-proxy.client").then((m) => m.installSbProxy());
-  }, []);
-
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
