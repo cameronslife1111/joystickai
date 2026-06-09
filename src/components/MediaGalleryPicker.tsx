@@ -121,7 +121,7 @@ export function MediaGalleryPicker({
                   >
                     {a.kind === "image" && a.url && (
                       <img
-                        src={a.url}
+                        src={proxyMediaUrl(a.url)}
                         alt={a.title}
                         loading="lazy"
                         draggable={false}
@@ -131,7 +131,7 @@ export function MediaGalleryPicker({
                     {a.kind === "video" && a.url && (
                       <>
                         <video
-                          src={a.url}
+                          src={proxyMediaUrl(a.url)}
                           preload="metadata"
                           muted
                           playsInline
