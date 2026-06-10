@@ -110,6 +110,17 @@ function AppPage() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("orby-recent-docs");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
@@ -513,6 +524,7 @@ function AppPage() {
     jumpOpen ||
     moveOpen ||
     searchOpen ||
+    recentOpen ||
     composing ||
     sendOpen ||
     linkPickerOpen ||
@@ -520,6 +532,18 @@ function AppPage() {
     planComposerOpen ||
     planApprovalOpen ||
     plansScreenOpen;
+
+  // Track recently-opened documents (most-recent first) in localStorage.
+  useEffect(() => {
+    if (!activeDocId) return;
+    setRecentIds((prev) => {
+      const next = [activeDocId, ...prev.filter((id) => id !== activeDocId)].slice(0, 15);
+      try {
+        window.localStorage.setItem("orby-recent-docs", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [activeDocId]);
 
   // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
   // Any change to activeDocId / currentIdx / sentence text tears this effect
@@ -1690,6 +1714,7 @@ function AppPage() {
       },
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
+    { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
   ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot]);
 
 
@@ -1709,7 +1734,7 @@ function AppPage() {
     filled[10] = grid[20]; // 11 Plan mode
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
-    filled[13] = null;     // 14 (folded into Chat)
+    filled[13] = grid[24];  // 14 Recent docs
     filled[14] = null;     // 15 (folded into Chat)
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
@@ -2376,6 +2401,66 @@ function AppPage() {
               <div className="flex max-h-[50vh] flex-col gap-1.5 overflow-y-auto">
                 {results.length === 0 ? (
                   <div className="px-2 py-6 text-center text-sm text-muted-foreground">No matches</div>
+                ) : results.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => pickDoc(d)}
+                    className="w-full shrink-0 truncate rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {recentOpen && (() => {
+        const results = recentIds
+          .map((id) => (docs ?? []).find((d) => d.id === id))
+          .filter((d): d is Doc => !!d);
+        const pickDoc = (doc: Doc) => {
+          if (lockFavorites) { toast.error("List is locked"); return; }
+          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
+              const idx = doc.current_sentence_index ?? 0;
+              const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
+              if (text) {
+                const clean = stripEmoji(text);
+                if (clean) {
+                  window.speechSynthesis.cancel();
+                  const u = new SpeechSynthesisUtterance(clean);
+                  u.rate = 1; u.pitch = 1;
+                  window.speechSynthesis.speak(u);
+                }
+              }
+            } catch {}
+          }
+          setActiveDocId(doc.id);
+          setRecentOpen(false);
+        };
+        return (
+          <div
+            className="absolute inset-0 z-50 flex items-start justify-center bg-background/85 px-4 pt-20 backdrop-blur-md"
+            onClick={() => setRecentOpen(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between px-2">
+                <div className="font-display text-lg">🕘 Recent docs</div>
+                <button
+                  onClick={() => setRecentOpen(false)}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
+                {results.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">No recent documents yet</div>
                 ) : results.map((d) => (
                   <button
                     key={d.id}
