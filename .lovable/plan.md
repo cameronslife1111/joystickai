@@ -1,22 +1,33 @@
 ## Goal
-Show the same row of emoji quick-filter buttons (🐝 🟣 🔵 🔴 🟢 🟡 🟠 🟤) — that already exist in the document picker/link dialogs — inside the two search pop-ups on the main app screen that are currently missing them. Tapping an emoji enters that emoji into the search text box, which immediately narrows the results.
+Turn the currently-empty grid slot **14** into a **🕘 Recent docs** button that opens a pop-up (styled like the existing 🔍 Search docs pop-up) listing the documents the user has most recently opened, newest first. Tapping one opens it, just like the search results.
 
-## Where they're missing (both in `src/routes/_authenticated/app.tsx`)
-1. **The main "🔍 Search docs" pop-up** (`searchOpen` overlay, around lines 2286–2360). Uses `searchQuery` / `setSearchQuery`.
-2. **The favorites slot picker** — the pop-up shown when you pick/select a favorites slot (`pickerSlot` overlay, around lines 2152–2280). Uses `pickerQuery` / `setPickerQuery`.
+## How "recent" is tracked
+There is no backend column for last-opened, and adding one would touch business/data logic. To keep this a frontend-only change, recency is tracked client-side in `localStorage`:
 
-## What gets added
-- A shared `EMOJI_FILTERS` constant (`["🐝","🟣","🔵","🔴","🟢","🟡","🟠","🟤"]`) defined once at the top of the file.
-- A small horizontal row of 8 `type="button"` emoji buttons rendered directly **above** the existing search `<input>` in each of the two pop-ups.
-- On press:
-  - In the Search-docs pop-up the button calls `setSearchQuery(emoji)`.
-  - In the favorites slot picker the button calls `setPickerQuery(emoji)`.
-  - This replaces the current text (matching the "replace the search" behavior already used in the other dialogs). Both lists already filter reactively from their query value, so results narrow automatically — no filter-logic changes.
-- Buttons reuse the existing token-based styling (border + `bg-foreground/5`, rounded) so they match the current look, and wrap to stay tap-friendly on the 390px mobile viewport.
+- A small ordered list of recently-opened document IDs (most-recent first, capped at ~15), keyed per nothing fancy (single key, e.g. `orby-recent-docs`).
+- A `useEffect` watching `activeDocId` pushes the current doc to the front of that list whenever it changes. This captures every way a doc gets opened (search, favorites, swipe, pinned, etc.) because they all flow through `setActiveDocId`.
+- The list is kept in React state (initialized from `localStorage`) so the pop-up re-renders as it updates.
 
-## Behavior notes
-- Tapping a different emoji replaces the previous one (single-emoji filter at a time); the user can still type manually afterward.
-- Buttons are `type="button"` so they never submit or close the pop-up.
+## What gets added (all in `src/routes/_authenticated/app.tsx`)
+
+1. **State + persistence**
+   - `recentOpen` boolean state for the pop-up.
+   - `recentIds` string[] state, initialized from `localStorage`.
+   - A `useEffect([activeDocId])` that, when `activeDocId` is set, moves it to the front of `recentIds`, dedupes, caps the length, and writes back to `localStorage`.
+
+2. **Slot wiring**
+   - Add a new menu entry `{ e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } }` to the `grid` array.
+   - In the `slots` useMemo, set `filled[13] = grid[<newIndex>];` (slot 14) instead of `null`.
+
+3. **Recent-docs pop-up**
+   - Rendered with `{recentOpen && (() => { ... })()}`, mirroring the Search-docs overlay markup (same overlay container, card, header with a Close button, scrollable list).
+   - Builds its list by mapping `recentIds` to the matching `Doc` from `docs` (skipping any that no longer exist), preserving recency order — no alphabetical sort.
+   - Reuses the same `pickDoc` behavior as search (respects `lockFavorites`, speaks the current sentence when unmuted, calls `setActiveDocId`, closes the pop-up).
+   - Shows an empty-state message ("No recent documents yet") when the list is empty.
+   - No emoji-filter row and no text input (it's a recency list, not a search) — title reads `🕘 Recent docs`.
+
+4. **Outside-tap handling**
+   - Add `recentOpen` to the existing `searchOpen || ...` interaction-guard condition (around line 515) so background gestures are suppressed while it's open, consistent with the other overlays.
 
 ## Out of scope
-No backend, data, routing, or filtering-algorithm changes — only the two presentation pop-ups in `app.tsx` get the emoji button row.
+No database, schema, or server changes. No change to how documents are opened — only an additive recency tracker plus the new slot button and pop-up.
