@@ -524,6 +524,7 @@ function AppPage() {
     jumpOpen ||
     moveOpen ||
     searchOpen ||
+    recentOpen ||
     composing ||
     sendOpen ||
     linkPickerOpen ||
