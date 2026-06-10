@@ -2415,6 +2415,66 @@ function AppPage() {
           </div>
         );
       })()}
+      {recentOpen && (() => {
+        const results = recentIds
+          .map((id) => (docs ?? []).find((d) => d.id === id))
+          .filter((d): d is Doc => !!d);
+        const pickDoc = (doc: Doc) => {
+          if (lockFavorites) { toast.error("List is locked"); return; }
+          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
+              const idx = doc.current_sentence_index ?? 0;
+              const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
+              if (text) {
+                const clean = stripEmoji(text);
+                if (clean) {
+                  window.speechSynthesis.cancel();
+                  const u = new SpeechSynthesisUtterance(clean);
+                  u.rate = 1; u.pitch = 1;
+                  window.speechSynthesis.speak(u);
+                }
+              }
+            } catch {}
+          }
+          setActiveDocId(doc.id);
+          setRecentOpen(false);
+        };
+        return (
+          <div
+            className="absolute inset-0 z-50 flex items-start justify-center bg-background/85 px-4 pt-20 backdrop-blur-md"
+            onClick={() => setRecentOpen(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between px-2">
+                <div className="font-display text-lg">🕘 Recent docs</div>
+                <button
+                  onClick={() => setRecentOpen(false)}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto">
+                {results.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">No recent documents yet</div>
+                ) : results.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => pickDoc(d)}
+                    className="w-full shrink-0 truncate rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10"
+                  >
+                    {d.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* Jump-to overlay */}
       {jumpOpen && (
         <div
