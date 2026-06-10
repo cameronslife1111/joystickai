@@ -533,6 +533,18 @@ function AppPage() {
     planApprovalOpen ||
     plansScreenOpen;
 
+  // Track recently-opened documents (most-recent first) in localStorage.
+  useEffect(() => {
+    if (!activeDocId) return;
+    setRecentIds((prev) => {
+      const next = [activeDocId, ...prev.filter((id) => id !== activeDocId)].slice(0, 15);
+      try {
+        window.localStorage.setItem("orby-recent-docs", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [activeDocId]);
+
   // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
   // Any change to activeDocId / currentIdx / sentence text tears this effect
   // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
