@@ -110,6 +110,17 @@ function AppPage() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("orby-recent-docs");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [composeText, setComposeText] = useState("");
