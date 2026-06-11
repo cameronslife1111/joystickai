@@ -52,6 +52,7 @@ ${toolCatalogForPrompt()}
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
 - PLAN INDEPENDENCE — there is NO "current document" and NO "current sentence". You are NOT told which doc the user has open or where their cursor is, and you must not assume one. Every target doc/sentence must come from the user's request itself, resolved fuzzily against the WORKSPACE SNAPSHOT below.
+- FRESH-PLAN ISOLATION — this plan is COMPLETELY INDEPENDENT of any previous request or plan. You have NOT been told about, and must NOT carry over, any earlier plan's goal, steps, content, document titles, or generated media. The DOCUMENT CATALOG and MEDIA lists below are the user's whole workspace (much of it is leftover output from unrelated past plans) — they are a LOOKUP TABLE for resolving items THIS request explicitly names or describes, NOT a backlog to continue. If the current request does not name or clearly describe a document/media item, do NOT include it in any step. When in doubt, act ONLY on what the request itself asks for.
 - Because you have no cursor, DO NOT use position: "after_current" for add_sentence or move_sentence unless the user's request explicitly says to place content after a specific sentence that you have already located by id. Default to "bottom" (or "top" if the user said "at the top"/"first").
 - If the WORKSPACE SNAPSHOT contains an ATTACHED DOCUMENTS section, the user explicitly attached those documents to this request. Treat their contents as PRIMARY context for resolving the request, even if the request text is short or generic. Prefer using their text and ids directly over calling find_* tools.
 - A WORKSPACE SNAPSHOT (after this prompt) lists the user's actual documents and media with their real ids, and inlines the full text of any document plausibly referenced by the request. ALWAYS prefer ids and content from the snapshot over calling find_document_by_title / find_media_by_title / find_sentence_by_content / read_document.
@@ -231,8 +232,30 @@ Deno.serve(async (req) => {
       : [];
     const forcedSet = new Set(forcedDocIds);
 
+    // ISOLATION: only inline a document's FULL TEXT when it is *genuinely*
+    // referenced by the current request — not merely sharing one loose word
+    // with it. A single generic token overlap (e.g. "video", "image",
+    // "part") used to drag in unrelated docs from prior plans. Require either
+    // a phrase/substring hit OR 2+ distinct meaningful token matches.
+    const reqTokenSet = new Set(reqTokens);
+    const strongDocMatch = (title: string): boolean => {
+      const hay = String(title ?? "").toLowerCase().trim();
+      if (!hay) return false;
+      // The whole title appears verbatim inside the request → strong signal.
+      if (hay.length >= 4 && reqLower.includes(hay)) return true;
+      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      let distinct = 0;
+      for (const t of reqTokenSet) {
+        if (hayTokens.has(t)) {
+          distinct += 1;
+          if (distinct >= 2) return true;
+        }
+      }
+      return false;
+    };
+
     const scoreInlineIds = scoredDocs
-      .filter(({ score }) => score > 0)
+      .filter(({ d }) => strongDocMatch(String(d.title ?? "")))
       .slice(0, 6)
       .map(({ d }) => d.id)
       .filter((id) => !forcedSet.has(id));
@@ -300,23 +323,44 @@ Deno.serve(async (req) => {
       if (b.score !== a.score) return b.score - a.score;
       return String(b.m.created_at ?? "").localeCompare(String(a.m.created_at ?? ""));
     });
-    const mediaList = mediaScored.map(({ m }) => ({
+    // ISOLATION: only surface media that is plausibly relevant to THIS
+    // request. A scored hit (score > 0) means at least one token overlaps;
+    // we additionally always keep a small recency tail so brand-new requests
+    // that name nothing still have a few candidates, but we no longer dump the
+    // entire 200-item library (the long tail is almost all prior-plan output
+    // and is the biggest source of "old stuff" bleeding into new plans).
+    const MEDIA_LIST_CAP = 25;
+    const relevantMedia = mediaScored.filter(({ score }) => score > 0).map(({ m }) => m);
+    const mediaSource = relevantMedia.length > 0 ? relevantMedia : (allMedia ?? []);
+    const totalMedia = (allMedia ?? []).length;
+    const mediaList = mediaSource.slice(0, MEDIA_LIST_CAP).map((m: any) => ({
       id: m.id, title: m.title, kind: m.kind,
       source_text: m?.generation_params?.user_text ?? null,
     }));
+    const mediaTruncated = totalMedia > mediaList.length;
+
+    // Bulk intent: requests like "act on ALL/EVERY doc matching X" need the
+    // full document list presented as actionable. Otherwise the doc list is a
+    // lookup catalog only — for resolving references, NOT a to-do list.
+    const bulkIntent =
+      /\b(all|every|each)\b/.test(reqLower) &&
+      /\b(doc|docs|document|documents|matching|named|titled|start|begin|contain)/.test(reqLower);
 
     let userContext = "";
     if (attachmentsHeader) {
       userContext += `\n\nATTACHED DOCUMENTS (the user explicitly attached these to the request — treat their contents as primary input even if the request text is short. Their full text is inlined under REFERENCED DOCUMENTS below):\n${attachmentsHeader}`;
     }
     if (docList.length) {
-      userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
+      const docLabel = bulkIntent
+        ? `ALL DOCUMENTS (id — title) — the request asks to act on every matching document, so enumerate matches from THIS list`
+        : `DOCUMENT CATALOG (id — title) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
+      userContext += `\n\n${docLabel}:\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
     }
     if (mediaList.length) {
-      userContext += `\n\nALL MEDIA (id — kind — title — source_text, ranked by relevance to the request):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+      userContext += `\n\nMEDIA (id — kind — title — source_text, ranked by relevance to THIS request${mediaTruncated ? `; showing ${mediaList.length} of ${totalMedia} — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
 
 
