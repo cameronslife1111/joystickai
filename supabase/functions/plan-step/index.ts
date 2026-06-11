@@ -1016,7 +1016,8 @@ Deno.serve(async (req) => {
     // Default: reset no-progress counter on every advance. The awaiting_media
     // "still generating" branch overrides this to bump it instead.
     if (!("consecutive_no_progress" in patch)) patch.consecutive_no_progress = 0;
-    await admin.from("plans").update(patch).eq("id", plan_id);
+    // Never let a post-step write resurrect a plan the user cancelled mid-step.
+    await admin.from("plans").update(patch).eq("id", plan_id).neq("status", "cancelled");
   };
 
   // ---- Guardrails ----
