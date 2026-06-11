@@ -1,33 +1,61 @@
 ## Goal
-Turn the currently-empty grid slot **14** into a **🕘 Recent docs** button that opens a pop-up (styled like the existing 🔍 Search docs pop-up) listing the documents the user has most recently opened, newest first. Tapping one opens it, just like the search results.
 
-## How "recent" is tracked
-There is no backend column for last-opened, and adding one would touch business/data logic. To keep this a frontend-only change, recency is tracked client-side in `localStorage`:
+Replace Orby's swipe gestures (up/down/left/right) with invisible press/click "buttons" placed over regions of Orby's face, keep single/double tap behavior on the center, and swap the up/down navigation direction so up goes up in the document and down goes down.
 
-- A small ordered list of recently-opened document IDs (most-recent first, capped at ~15), keyed per nothing fancy (single key, e.g. `orby-recent-docs`).
-- A `useEffect` watching `activeDocId` pushes the current doc to the front of that list whenever it changes. This captures every way a doc gets opened (search, favorites, swipe, pinned, etc.) because they all flow through `setActiveDocId`.
-- The list is kept in React state (initialized from `localStorage`) so the pop-up re-renders as it updates.
+## Current behavior (for reference)
 
-## What gets added (all in `src/routes/_authenticated/app.tsx`)
+The `useOrbGestures(orbRef, ...)` hook on the Orb currently maps:
+- single tap → new idea composer
+- double tap → edit
+- triple tap → delete sentence
+- long press → plan composer
+- swipe **up** → `advanceSentence` (next sentence)
+- swipe **down** → `onSwipeUp` (previous sentence) — confusingly reversed
+- swipe **right** → `onSwipeRight` (favorites / next doc)
+- swipe **left** → `onSwipeLeft` (open menu)
 
-1. **State + persistence**
-   - `recentOpen` boolean state for the pop-up.
-   - `recentIds` string[] state, initialized from `localStorage`.
-   - A `useEffect([activeDocId])` that, when `activeDocId` is set, moves it to the front of `recentIds`, dedupes, caps the length, and writes back to `localStorage`.
+## New behavior
 
-2. **Slot wiring**
-   - Add a new menu entry `{ e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } }` to the `grid` array.
-   - In the `slots` useMemo, set `filled[13] = grid[<newIndex>];` (slot 14) instead of `null`.
+### Directional regions become invisible buttons
 
-3. **Recent-docs pop-up**
-   - Rendered with `{recentOpen && (() => { ... })()}`, mirroring the Search-docs overlay markup (same overlay container, card, header with a Close button, scrollable list).
-   - Builds its list by mapping `recentIds` to the matching `Doc` from `docs` (skipping any that no longer exist), preserving recency order — no alphabetical sort.
-   - Reuses the same `pickDoc` behavior as search (respects `lockFavorites`, speaks the current sentence when unmuted, calls `setActiveDocId`, closes the pop-up).
-   - Shows an empty-state message ("No recent documents yet") when the list is empty.
-   - No emoji-filter row and no text input (it's a recency list, not a search) — title reads `🕘 Recent docs`.
+Add four invisible (`opacity-0`) buttons layered over the orb container, each a single press/click on iPhone or computer. No triangles or visible markers — Orby looks exactly the same and stays the same size.
 
-4. **Outside-tap handling**
-   - Add `recentOpen` to the existing `searchOpen || ...` interaction-guard condition (around line 515) so background gestures are suppressed while it's open, consistent with the other overlays.
+```text
+        ┌──────────────┐
+        │     TOP      │  ← press = go UP a sentence (previous)
+        ├───┬──────┬───┤
+        │ L │CENTER│ R │  ← L press = open menu, R press = next doc
+        ├───┴──────┴───┤
+        │   BOTTOM     │  ← press = go DOWN a sentence (next)
+        └──────────────┘
+```
 
-## Out of scope
-No database, schema, or server changes. No change to how documents are opened — only an additive recency tracker plus the new slot button and pop-up.
+- **Top region** → previous sentence (`onSwipeUp`) — *swapped*
+- **Bottom region** → next sentence (`advanceSentence`) — *swapped*
+- **Left region** → open menu (`onSwipeLeft`)
+- **Right region** → next-doc functions (`onSwipeRight`)
+- Each region also triggers the mood boost, like swipes did.
+
+### Center face keeps tap gestures
+
+The center stays the Orb itself, handling:
+- single press/click → new idea composer (unchanged)
+- double press/click → edit (unchanged)
+- triple press → delete (unchanged)
+- long press → plan composer (unchanged)
+
+Swipe handling is removed from the gesture hook since swipes are replaced by the region buttons.
+
+### Spacebar mirrors the center
+
+A global keydown listener (ignored while editing or any dialog/overlay is open, using the existing `busyRef`):
+- single **Space** → new idea composer (same as center single press)
+- double **Space** (two presses within a short window) → edit (same as center double press)
+
+## Technical details
+
+- File: `src/routes/_authenticated/app.tsx`.
+- In the `useOrbGestures` call, drop the `onSwipe` handler; keep `onTap`, `onDoubleTap`, `onTripleTap`, long-press handlers.
+- In the orb `<section>` container (the square `relative` div around `<Orb />`), add four `absolute` `opacity-0` buttons positioned over top / bottom / middle-left / middle-right, each calling its handler plus `(orbRef.current as any)?.boostMood?.()`. They sit after `<Orb />` in the DOM so they layer above it; the uncovered center keeps falling through to the Orb for taps. The existing flanking "repeat sentence" buttons sit outside the orb and are unaffected.
+- Add a `useEffect` keydown listener for `" "` / `"Space"`: call `e.preventDefault()` only when not busy, debounce to distinguish single vs double press (reuse the same compose/edit callbacks the center uses).
+- No backend, schema, or business-logic changes — only gesture wiring and the new overlay buttons. All existing functions (`onSwipeUp`, `advanceSentence`, `onSwipeLeft`, `onSwipeRight`, edit, delete, plan composer) are reused as-is.

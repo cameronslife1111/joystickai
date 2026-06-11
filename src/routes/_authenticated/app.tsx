@@ -1027,14 +1027,33 @@ function AppPage() {
     onTripleTap: deleteCurrent,
     onLongPressStart,
     onLongPressEnd,
-    onSwipe: (d) => {
-      (orbRef.current as any)?.boostMood?.();
-      if (d === "up") advanceSentence();
-      else if (d === "down") onSwipeUp();
-      else if (d === "right") onSwipeRight();
-      else onSwipeLeft();
-    },
   });
+
+  // Spacebar mirrors the center face: single press = new idea, double = edit.
+  useEffect(() => {
+    let spaceTaps = 0;
+    let spaceTimer: ReturnType<typeof setTimeout> | null = null;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (busyRef.current) return; // typing in an editor / dialog open
+      e.preventDefault();
+      spaceTaps += 1;
+      if (spaceTimer) clearTimeout(spaceTimer);
+      spaceTimer = setTimeout(() => {
+        const n = spaceTaps;
+        spaceTaps = 0;
+        spaceTimer = null;
+        if (n >= 2) onDoubleTap();
+        else openNewIdea();
+      }, 280);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (spaceTimer) clearTimeout(spaceTimer);
+    };
+  }, [onDoubleTap, openNewIdea]);
+
 
   // Parse the full-doc editor text into sentence parts.
   // Supports punctuation-based splitting (. ! ?) while still respecting
@@ -2002,6 +2021,43 @@ function AppPage() {
             state={orbState}
             size={0}
             className={`!w-full !h-full${inCall ? " orb-call" : ""}`}
+          />
+          {/* Invisible directional buttons over Orby's face (replace swipes) */}
+          <button
+            type="button"
+            onClick={() => {
+              (orbRef.current as any)?.boostMood?.();
+              onSwipeUp();
+            }}
+            className="absolute left-0 top-0 h-1/3 w-full opacity-0"
+            aria-label="Previous sentence"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              (orbRef.current as any)?.boostMood?.();
+              advanceSentence();
+            }}
+            className="absolute left-0 bottom-0 h-1/3 w-full opacity-0"
+            aria-label="Next sentence"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              (orbRef.current as any)?.boostMood?.();
+              onSwipeLeft();
+            }}
+            className="absolute left-0 top-1/3 h-1/3 w-1/3 opacity-0"
+            aria-label="Open menu"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              (orbRef.current as any)?.boostMood?.();
+              onSwipeRight();
+            }}
+            className="absolute right-0 top-1/3 h-1/3 w-1/3 opacity-0"
+            aria-label="Next document"
           />
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
