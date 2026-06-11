@@ -322,23 +322,44 @@ Deno.serve(async (req) => {
       if (b.score !== a.score) return b.score - a.score;
       return String(b.m.created_at ?? "").localeCompare(String(a.m.created_at ?? ""));
     });
-    const mediaList = mediaScored.map(({ m }) => ({
+    // ISOLATION: only surface media that is plausibly relevant to THIS
+    // request. A scored hit (score > 0) means at least one token overlaps;
+    // we additionally always keep a small recency tail so brand-new requests
+    // that name nothing still have a few candidates, but we no longer dump the
+    // entire 200-item library (the long tail is almost all prior-plan output
+    // and is the biggest source of "old stuff" bleeding into new plans).
+    const MEDIA_LIST_CAP = 25;
+    const relevantMedia = mediaScored.filter(({ score }) => score > 0).map(({ m }) => m);
+    const mediaSource = relevantMedia.length > 0 ? relevantMedia : (allMedia ?? []);
+    const totalMedia = (allMedia ?? []).length;
+    const mediaList = mediaSource.slice(0, MEDIA_LIST_CAP).map((m: any) => ({
       id: m.id, title: m.title, kind: m.kind,
       source_text: m?.generation_params?.user_text ?? null,
     }));
+    const mediaTruncated = totalMedia > mediaList.length;
+
+    // Bulk intent: requests like "act on ALL/EVERY doc matching X" need the
+    // full document list presented as actionable. Otherwise the doc list is a
+    // lookup catalog only — for resolving references, NOT a to-do list.
+    const bulkIntent =
+      /\b(all|every|each)\b/.test(reqLower) &&
+      /\b(doc|docs|document|documents|matching|named|titled|start|begin|contain)/.test(reqLower);
 
     let userContext = "";
     if (attachmentsHeader) {
       userContext += `\n\nATTACHED DOCUMENTS (the user explicitly attached these to the request — treat their contents as primary input even if the request text is short. Their full text is inlined under REFERENCED DOCUMENTS below):\n${attachmentsHeader}`;
     }
     if (docList.length) {
-      userContext += `\n\nALL DOCUMENTS (id — title):\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
+      const docLabel = bulkIntent
+        ? `ALL DOCUMENTS (id — title) — the request asks to act on every matching document, so enumerate matches from THIS list`
+        : `DOCUMENT CATALOG (id — title) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
+      userContext += `\n\n${docLabel}:\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
     }
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
     }
     if (mediaList.length) {
-      userContext += `\n\nALL MEDIA (id — kind — title — source_text, ranked by relevance to the request):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+      userContext += `\n\nMEDIA (id — kind — title — source_text, ranked by relevance to THIS request${mediaTruncated ? `; showing ${mediaList.length} of ${totalMedia} — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
 
 
