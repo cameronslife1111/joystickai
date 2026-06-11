@@ -231,8 +231,30 @@ Deno.serve(async (req) => {
       : [];
     const forcedSet = new Set(forcedDocIds);
 
+    // ISOLATION: only inline a document's FULL TEXT when it is *genuinely*
+    // referenced by the current request — not merely sharing one loose word
+    // with it. A single generic token overlap (e.g. "video", "image",
+    // "part") used to drag in unrelated docs from prior plans. Require either
+    // a phrase/substring hit OR 2+ distinct meaningful token matches.
+    const reqTokenSet = new Set(reqTokens);
+    const strongDocMatch = (title: string): boolean => {
+      const hay = String(title ?? "").toLowerCase().trim();
+      if (!hay) return false;
+      // The whole title appears verbatim inside the request → strong signal.
+      if (hay.length >= 4 && reqLower.includes(hay)) return true;
+      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      let distinct = 0;
+      for (const t of reqTokenSet) {
+        if (hayTokens.has(t)) {
+          distinct += 1;
+          if (distinct >= 2) return true;
+        }
+      }
+      return false;
+    };
+
     const scoreInlineIds = scoredDocs
-      .filter(({ score }) => score > 0)
+      .filter(({ d }) => strongDocMatch(String(d.title ?? "")))
       .slice(0, 6)
       .map(({ d }) => d.id)
       .filter((id) => !forcedSet.has(id));
