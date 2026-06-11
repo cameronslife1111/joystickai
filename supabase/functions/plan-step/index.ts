@@ -1043,6 +1043,11 @@ Deno.serve(async (req) => {
     return await failWithReason("stalled: media generation made no progress for too long");
   }
 
+  if (plan.status === "cancelled") {
+    await releaseClaim();
+    return json({ status: "cancelled" });
+  }
+
   if (plan.status === "approved") {
     plan.status = "running";
     // Persisted on first downstream update; no separate write needed.
