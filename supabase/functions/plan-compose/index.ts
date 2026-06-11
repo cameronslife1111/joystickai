@@ -323,21 +323,59 @@ Deno.serve(async (req) => {
       if (b.score !== a.score) return b.score - a.score;
       return String(b.m.created_at ?? "").localeCompare(String(a.m.created_at ?? ""));
     });
-    // ISOLATION: only surface media that is plausibly relevant to THIS
-    // request. A scored hit (score > 0) means at least one token overlaps;
-    // we additionally always keep a small recency tail so brand-new requests
-    // that name nothing still have a few candidates, but we no longer dump the
-    // entire 200-item library (the long tail is almost all prior-plan output
-    // and is the biggest source of "old stuff" bleeding into new plans).
+    // ISOLATION (the #1 source of "old images coming back" on repeated /
+    // scheduled runs): we must NOT put prior-plan media in front of the planner
+    // unless THIS request genuinely operates on an existing asset.
+    //
+    // The old code surfaced any media with score > 0 and, worse, fell back to
+    // the 25 most-recent assets when nothing matched. A schedule like
+    // "generate a cat image" then self-matched its own previous output ("cat")
+    // every run, so the planner kept calling regenerate_image / remix_images on
+    // stale ids instead of generating fresh. We now:
+    //   1. NEVER fall back to the whole library, and
+    //   2. only surface media when the request shows REUSE INTENT (it wants to
+    //      operate on existing media) or explicitly attached something, and even
+    //      then require a STRONG match (mirroring strongDocMatch for docs).
     const MEDIA_LIST_CAP = 25;
-    const relevantMedia = mediaScored.filter(({ score }) => score > 0).map(({ m }) => m);
-    const mediaSource = relevantMedia.length > 0 ? relevantMedia : (allMedia ?? []);
+
+    // Reuse intent: words/phrases that imply acting on an EXISTING asset rather
+    // than creating something brand new.
+    const reuseIntent =
+      forcedDocIds.length > 0 ||
+      /\b(regenerate|re-?generate|remix|edit|animate|upscale|variation|variant|recreate|modify|change|update|combine|merge|turn\s+.*\s+into|the\s+\w+\s+(image|photo|picture|pic|video|clip)|this\s+(image|photo|picture|video|clip)|that\s+(image|photo|picture|video|clip)|existing|previous|same)\b/.test(
+        reqLower,
+      );
+
+    // Strong media match: phrase/substring hit OR 2+ distinct meaningful token
+    // matches against the asset's title + source_text. Generic single-token
+    // overlap (e.g. "image") no longer drags in unrelated prior output.
+    const strongMediaMatch = (m: any): boolean => {
+      const title = String(m?.title ?? "").toLowerCase().trim();
+      const src = String(m?.generation_params?.user_text ?? "").toLowerCase().trim();
+      if (title && title.length >= 4 && reqLower.includes(title)) return true;
+      if (src && src.length >= 6 && reqLower.includes(src)) return true;
+      const hayTokens = new Set(
+        `${title} ${src}`.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2),
+      );
+      let distinct = 0;
+      for (const t of reqTokenSet) {
+        if (hayTokens.has(t)) {
+          distinct += 1;
+          if (distinct >= 2) return true;
+        }
+      }
+      return false;
+    };
+
     const totalMedia = (allMedia ?? []).length;
-    const mediaList = mediaSource.slice(0, MEDIA_LIST_CAP).map((m: any) => ({
+    const relevantMedia = reuseIntent
+      ? mediaScored.filter(({ m }) => strongMediaMatch(m)).map(({ m }) => m)
+      : [];
+    const mediaList = relevantMedia.slice(0, MEDIA_LIST_CAP).map((m: any) => ({
       id: m.id, title: m.title, kind: m.kind,
       source_text: m?.generation_params?.user_text ?? null,
     }));
-    const mediaTruncated = totalMedia > mediaList.length;
+    const mediaTruncated = relevantMedia.length > mediaList.length;
 
     // Bulk intent: requests like "act on ALL/EVERY doc matching X" need the
     // full document list presented as actionable. Otherwise the doc list is a
