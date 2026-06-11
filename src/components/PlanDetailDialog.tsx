@@ -27,15 +27,29 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
   const [retryOpen, setRetryOpen] = useState(false);
-  const { data: plan } = useQuery({
+  const qc = useQueryClient();
+  const { data: plan, refetch } = useQuery({
     queryKey: ["plan", planId, "detail"],
     enabled: !!planId && open,
+    refetchInterval: (q) => (STOPPABLE.has((q.state.data as any)?.status) ? 3000 : false),
     queryFn: async () => {
       if (!planId) return null;
       const { data } = await supabase.from("plans").select("*").eq("id", planId).single();
       return data;
     },
   });
+
+  const stopPlan = async () => {
+    if (!planId) return;
+    if (!confirm("Stop this plan? It can't be resumed.")) return;
+    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
+    if (error) { toast.error(`Couldn't stop: ${error.message}`); return; }
+    toast.success("Plan stopped");
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    refetch();
+    onOpenChange(false);
+  };
 
   if (!plan) {
     return (
