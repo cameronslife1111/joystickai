@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PlanRetryDialog } from "./PlanRetryDialog";
 
@@ -17,6 +17,9 @@ const STEP_STATUS_COLOR: Record<string, string> = {
   completed: "text-green-400",
   failed: "text-red-400",
 };
+
+const STOPPABLE = new Set(["approved", "running", "awaiting_media", "retrying"]);
+
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
