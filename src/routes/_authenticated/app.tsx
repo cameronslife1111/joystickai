@@ -1027,14 +1027,33 @@ function AppPage() {
     onTripleTap: deleteCurrent,
     onLongPressStart,
     onLongPressEnd,
-    onSwipe: (d) => {
-      (orbRef.current as any)?.boostMood?.();
-      if (d === "up") advanceSentence();
-      else if (d === "down") onSwipeUp();
-      else if (d === "right") onSwipeRight();
-      else onSwipeLeft();
-    },
   });
+
+  // Spacebar mirrors the center face: single press = new idea, double = edit.
+  useEffect(() => {
+    let spaceTaps = 0;
+    let spaceTimer: ReturnType<typeof setTimeout> | null = null;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (busyRef.current) return; // typing in an editor / dialog open
+      e.preventDefault();
+      spaceTaps += 1;
+      if (spaceTimer) clearTimeout(spaceTimer);
+      spaceTimer = setTimeout(() => {
+        const n = spaceTaps;
+        spaceTaps = 0;
+        spaceTimer = null;
+        if (n >= 2) onDoubleTap();
+        else openNewIdea();
+      }, 280);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (spaceTimer) clearTimeout(spaceTimer);
+    };
+  }, [onDoubleTap, openNewIdea]);
+
 
   // Parse the full-doc editor text into sentence parts.
   // Supports punctuation-based splitting (. ! ?) while still respecting
