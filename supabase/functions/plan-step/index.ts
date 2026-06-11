@@ -1158,7 +1158,7 @@ Deno.serve(async (req) => {
   const step = steps[idx];
   step.status = "running";
   // Note: claim is already held; this is just persisting the running flag on the step.
-  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id);
+  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id).neq("status", "cancelled");
 
   try {
     const resolvedArgs = resolveTemplates(step.args ?? {}, steps);
