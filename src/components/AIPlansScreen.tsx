@@ -104,11 +104,23 @@ export function AIPlansScreen({ onClose }: Props) {
     qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
   };
 
-  const renderRow = (p: Plan) => (
+  const cancelPlan = async (planId: string) => {
+    if (!confirm("Stop this plan? It can't be resumed.")) return;
+    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
+    if (error) { toast.error(`Couldn't stop: ${error.message}`); return; }
+    toast.success("Plan stopped");
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+  };
+
+  const renderRow = (p: Plan) => {
+    const stoppable = ACTIVE_STATUSES.has(p.status) && p.status !== "proposed" && p.status !== "composing";
+    return (
     <li key={p.id}>
+      <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-card pr-2 hover:bg-muted/40">
       <button
         onClick={() => handleRowClick(p)}
-        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-muted/40"
+        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
       >
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase ${STATUS_COLOR[p.status] ?? "bg-muted"}`}>
           {p.status === "awaiting_media" ? "media" : p.status}
@@ -130,10 +142,21 @@ export function AIPlansScreen({ onClose }: Props) {
                 : `${p.current_step}/${p.total_steps} · ${timeAgo(p.created_at)}`}
           </div>
         </div>
-        <span className="shrink-0 text-muted-foreground">›</span>
       </button>
+      {stoppable ? (
+        <button
+          onClick={() => cancelPlan(p.id)}
+          className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-destructive hover:text-destructive"
+        >
+          Stop
+        </button>
+      ) : (
+        <span className="shrink-0 pr-1 text-muted-foreground">›</span>
+      )}
+      </div>
     </li>
-  );
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground overflow-hidden">

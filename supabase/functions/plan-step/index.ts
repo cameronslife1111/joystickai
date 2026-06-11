@@ -1016,7 +1016,8 @@ Deno.serve(async (req) => {
     // Default: reset no-progress counter on every advance. The awaiting_media
     // "still generating" branch overrides this to bump it instead.
     if (!("consecutive_no_progress" in patch)) patch.consecutive_no_progress = 0;
-    await admin.from("plans").update(patch).eq("id", plan_id);
+    // Never let a post-step write resurrect a plan the user cancelled mid-step.
+    await admin.from("plans").update(patch).eq("id", plan_id).neq("status", "cancelled");
   };
 
   // ---- Guardrails ----
@@ -1040,6 +1041,11 @@ Deno.serve(async (req) => {
   }
   if ((plan.consecutive_no_progress ?? 0) >= MAX_NO_PROGRESS) {
     return await failWithReason("stalled: media generation made no progress for too long");
+  }
+
+  if (plan.status === "cancelled") {
+    await releaseClaim();
+    return json({ status: "cancelled" });
   }
 
   if (plan.status === "approved") {
@@ -1152,7 +1158,7 @@ Deno.serve(async (req) => {
   const step = steps[idx];
   step.status = "running";
   // Note: claim is already held; this is just persisting the running flag on the step.
-  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id);
+  await admin.from("plans").update({ steps, status: "running" }).eq("id", plan.id).neq("status", "cancelled");
 
   try {
     const resolvedArgs = resolveTemplates(step.args ?? {}, steps);

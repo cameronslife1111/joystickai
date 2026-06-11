@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PlanRetryDialog } from "./PlanRetryDialog";
 
@@ -18,21 +18,38 @@ const STEP_STATUS_COLOR: Record<string, string> = {
   failed: "text-red-400",
 };
 
+const STOPPABLE = new Set(["approved", "running", "awaiting_media", "retrying"]);
+
+
 async function copyToClipboard(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
 }
 
 export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
   const [retryOpen, setRetryOpen] = useState(false);
-  const { data: plan } = useQuery({
+  const qc = useQueryClient();
+  const { data: plan, refetch } = useQuery({
     queryKey: ["plan", planId, "detail"],
     enabled: !!planId && open,
+    refetchInterval: (q) => (STOPPABLE.has((q.state.data as any)?.status) ? 3000 : false),
     queryFn: async () => {
       if (!planId) return null;
       const { data } = await supabase.from("plans").select("*").eq("id", planId).single();
       return data;
     },
   });
+
+  const stopPlan = async () => {
+    if (!planId) return;
+    if (!confirm("Stop this plan? It can't be resumed.")) return;
+    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
+    if (error) { toast.error(`Couldn't stop: ${error.message}`); return; }
+    toast.success("Plan stopped");
+    qc.invalidateQueries({ queryKey: ["plans"] });
+    qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+    refetch();
+    onOpenChange(false);
+  };
 
   if (!plan) {
     return (
@@ -65,6 +82,17 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
             <p className="text-sm whitespace-pre-wrap break-words">{plan.plan_summary}</p>
           </section>
         )}
+
+        {STOPPABLE.has(plan.status) && (
+          <button
+            onClick={stopPlan}
+            className="self-start rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-destructive hover:text-destructive"
+          >
+            Stop plan
+          </button>
+        )}
+
+
 
         <section className="space-y-2 min-w-0">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Steps</div>
