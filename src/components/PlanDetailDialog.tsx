@@ -83,6 +83,17 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
           </section>
         )}
 
+        {STOPPABLE.has(plan.status) && (
+          <button
+            onClick={stopPlan}
+            className="self-start rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-destructive hover:text-destructive"
+          >
+            Stop plan
+          </button>
+        )}
+
+
+
         <section className="space-y-2 min-w-0">
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Steps</div>
           <ol className="space-y-2">
