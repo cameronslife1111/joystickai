@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@^2.45.0";
 import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
+import { applyEmojiSynonyms, extractShortcode, leadingEmoji, tokenizeRich } from "../_shared/lookup.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -67,6 +68,13 @@ Critical rules:
   - {{step_2.result.text}}   -> the text field of step 2's result
 - find_* tools return ARRAYS of matches (best match first). Subsequent steps almost always want {{step_N.result[0].id}}.
 - create_document and add_sentence return objects with at least an "id" field. To target a document you create earlier in the same plan, set document_id: "{{step_N.result.id}}" pointing at that create_document step — this is the canonical way to fill a freshly created doc.
+
+EMOJI / SHORTCODE / PARTIAL-TITLE SELECTION — the DOCUMENT CATALOG shows each title plus parsed (emoji=…, code=…) fields. Use them to resolve descriptive references the user gives:
+- "the doc that starts with the blue/red circle" → match titles whose emoji= is 🔵 / 🔴 (the catalog already parsed it). Color words map to the obvious glyph (blue circle = 🔵, red circle = 🔴, green = 🟢, etc.).
+- "the lowest X shortcode" / "the next video number" → among the titles that match the description, pick the one with the SMALLEST code= number (e.g. code=X597 is chosen over code=X601). Compare the digits numerically.
+- Never require an exact title. Match on emoji + a phrase fragment + shortcode together, picking the single best id from the catalog yourself.
+- READ-THEN-DO: when a step says to read context/rules/instructions documents and then act on them, emit a read_document step for each such doc (using its catalog id) and pipe their text into the later step via {{step_N.result.text}}. Do this whenever the doc's full text is not already inlined under REFERENCED DOCUMENTS.
+- RUNTIME LOOPS ("for EACH shot/idea/item"): when the number of items is only knowable after reading a document at runtime, DO NOT guess a fixed count. Instead read the source doc first, then emit ONE expand_plan step whose context pipes that doc's text ({{step_N.result.text}}) and whose instruction says exactly what to do per item (which tool, prompt, target/reference ids, and naming). expand_plan generates and runs the per-item steps at runtime.
 
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
@@ -202,19 +210,19 @@ Deno.serve(async (req) => {
       "image", "images", "photo", "photos", "picture", "pic", "pics",
       "reference", "ref", "video", "videos", "audio", "clip",
     ]);
-    const tokenize = (s: string): string[] =>
-      String(s ?? "").toLowerCase().split(/[^a-z0-9]+/i)
-        .filter((t) => t.length >= 2 && !STOP.has(t));
+    // Emoji-aware: translate emoji-name phrases ("blue circle" -> 🔵) in the
+    // request, then keep word tokens AND emoji glyphs AND any shortcode.
+    const tokenize = (s: string): string[] => tokenizeRich(applyEmojiSynonyms(s), STOP);
     const reqTokens = tokenize(plan.user_request ?? "");
-    const reqLower = (plan.user_request ?? "").toLowerCase();
+    const reqLower = applyEmojiSynonyms(plan.user_request ?? "").toLowerCase();
     const scoreText = (text: string): number => {
       const hay = String(text ?? "").toLowerCase();
-      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      const hayTokens = new Set(tokenizeRich(String(text ?? "")));
       let score = 0;
       if (hay && reqLower.includes(hay)) score += 3;
       for (const t of reqTokens) {
-        if (hay.includes(t)) score += 2;
-        if (hayTokens.has(t)) score += 1;
+        if (/[a-z0-9]/i.test(t) && hay.includes(t)) score += 2;
+        if (hayTokens.has(t)) score += 2;
       }
       return score;
     };
@@ -243,7 +251,8 @@ Deno.serve(async (req) => {
       if (!hay) return false;
       // The whole title appears verbatim inside the request → strong signal.
       if (hay.length >= 4 && reqLower.includes(hay)) return true;
-      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      // Emoji-aware token overlap: emoji glyphs and shortcodes count too.
+      const hayTokens = new Set(tokenizeRich(String(title ?? "")));
       let distinct = 0;
       for (const t of reqTokenSet) {
         if (hayTokens.has(t)) {
@@ -256,7 +265,7 @@ Deno.serve(async (req) => {
 
     const scoreInlineIds = scoredDocs
       .filter(({ d }) => strongDocMatch(String(d.title ?? "")))
-      .slice(0, 6)
+      .slice(0, 12)
       .map(({ d }) => d.id)
       .filter((id) => !forcedSet.has(id));
 
@@ -390,9 +399,17 @@ Deno.serve(async (req) => {
     }
     if (docList.length) {
       const docLabel = bulkIntent
-        ? `ALL DOCUMENTS (id — title) — the request asks to act on every matching document, so enumerate matches from THIS list`
-        : `DOCUMENT CATALOG (id — title) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
-      userContext += `\n\n${docLabel}:\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
+        ? `ALL DOCUMENTS (id — title — parsed emoji/code) — the request asks to act on every matching document, so enumerate matches from THIS list`
+        : `DOCUMENT CATALOG (id — title — parsed emoji/code) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
+      const renderDoc = (d: any): string => {
+        const title = d.title ?? "";
+        const emoji = leadingEmoji(title);
+        const sc = extractShortcode(title);
+        const meta = [emoji ? `emoji=${emoji}` : null, sc ? `code=${sc.raw}` : null]
+          .filter(Boolean).join(", ");
+        return `  ${d.id} — ${JSON.stringify(title)}${meta ? `  (${meta})` : ""}`;
+      };
+      userContext += `\n\n${docLabel}:\n${docList.map(renderDoc).join("\n")}`;
     }
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;

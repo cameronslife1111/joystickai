@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@^2.45.0";
-import { TOOL_CATALOG } from "../_shared/tools.ts";
+import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
+import { applyEmojiSynonyms, tokenizeRich } from "../_shared/lookup.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -51,6 +52,114 @@ async function invokeEdgeFunction(
     throw new Error(`${functionName} failed: ${error.message ?? String(error)}`);
   }
 }
+
+// ---- Runtime plan expansion (expand_plan) ----
+const PLANNER_PROVIDER = Deno.env.get("PLANNER_PROVIDER") ?? "openai";
+const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.5";
+const MAX_EXPANSION_STEPS = 120;
+
+async function callExpansionLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (PLANNER_PROVIDER !== "openai") throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: PLANNER_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+// Compact live snapshot for the expansion LLM: every doc title (id — title) and
+// recent media (id — kind — title). Lets the AI target real ids when it writes
+// per-item steps (e.g. which reference image to remix).
+async function buildExpansionSnapshot(admin: any, userId: string): Promise<string> {
+  const { data: docs } = await admin
+    .from("documents").select("id, title")
+    .eq("user_id", userId).order("updated_at", { ascending: false }).limit(2000);
+  const { data: media } = await admin
+    .from("media_assets").select("id, title, kind, generation_params")
+    .eq("user_id", userId).order("created_at", { ascending: false }).limit(200);
+  const docLines = (docs ?? []).map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n");
+  const mediaLines = (media ?? []).map((m: any) => {
+    const src = m?.generation_params?.user_text ?? null;
+    return `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${src ? ` — src=${JSON.stringify(String(src).slice(0, 120))}` : ""}`;
+  }).join("\n");
+  let out = "";
+  if (docLines) out += `\n\nDOCUMENT CATALOG (id — title):\n${docLines}`;
+  if (mediaLines) out += `\n\nMEDIA (id — kind — title — src):\n${mediaLines}`;
+  return out;
+}
+
+// Validate generated sub-steps with the same target-arg rules the composer uses.
+function validateExpansionSteps(rawSteps: any[]): any[] {
+  const toolNames = new Set(TOOL_CATALOG.map((t) => t.name));
+  const REQUIRED: Record<string, string[]> = {
+    add_sentence: ["document_id", "content"],
+    update_sentence_content: ["sentence_id", "new_content"],
+    move_sentence: ["sentence_id", "target_document_id"],
+    link_sentence_to_document: ["sentence_id"],
+    mark_sentence_for_deletion: ["sentence_id"],
+    mark_document_for_deletion: ["document_id"],
+    mark_media_for_deletion: ["media_id"],
+    rename_document: ["document_id", "new_title"],
+    rename_media: ["media_id", "new_title"],
+    read_document: ["document_id"],
+    regenerate_image: ["source_media_id"],
+    remix_images: ["source_media_ids"],
+    image_to_video: ["source_media_id"],
+    video_to_video: ["source_image_id", "reference_video_id"],
+    audio_image_to_video: ["source_image_id", "audio_media_id"],
+  };
+  const has = (v: unknown) =>
+    v != null && (typeof v === "string" ? v.trim().length > 0 : (Array.isArray(v) ? v.length > 0 : true));
+  const out: any[] = [];
+  for (const s of rawSteps) {
+    if (!s || typeof s !== "object") continue;
+    if (s.tool === "expand_plan") continue; // no recursive expansion
+    if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
+      throw new Error(`expand_plan produced an unknown tool: ${s.tool}`);
+    }
+    if (!s.args || typeof s.args !== "object") s.args = {};
+    const req = REQUIRED[s.tool];
+    if (req) for (const a of req) {
+      if (!has(s.args[a])) throw new Error(`expand_plan step (${s.tool}) is missing target "${a}"`);
+    }
+    out.push({
+      tool: s.tool,
+      args: s.args,
+      description: typeof s.description === "string" && s.description.trim() ? s.description : `Run ${s.tool}`,
+      status: "pending",
+      result: null,
+      error: null,
+    });
+    if (out.length >= MAX_EXPANSION_STEPS) break;
+  }
+  return out;
+}
+
+const expansionSystemPrompt = `You expand ONE step of a running Orby plan into concrete sub-steps. The user's higher-level plan reached a point where it must do something "for each" item, and the items are only known now, from the CONTEXT below.
+
+You have these tools (no others exist; do NOT emit expand_plan again):
+
+${toolCatalogForPrompt()}
+
+Rules:
+- Read the CONTEXT (already-resolved document text / data) and the WORKSPACE SNAPSHOT, then emit one or a few real tool steps PER discovered item, in execution order.
+- Every mutating/media step MUST carry its full target id in its own args — a concrete id from the snapshot, or a {{step_N.result.id}} template pointing at an EARLIER step.
+- ABSOLUTE INDEXING: your first generated step will be inserted at index {{BASE_INDEX}}. So reference your own generated steps by their absolute index: the first is step {{BASE_INDEX}}, the next is {{BASE_INDEX_PLUS_1}}, and so on. You may also reference any already-completed earlier step by its absolute index if its result id is given to you.
+- Image prompts must never exceed 3000 characters. Generate media one item at a time (one step per image).
+- Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
+
 
 function stringifyForTemplate(value: any, stepIdx: number, path: string): string {
   if (value == null) return "";
@@ -167,23 +276,22 @@ const SEARCH_STOPWORDS = new Set([
 ]);
 
 function tokenize(s: string): string[] {
-  return String(s ?? "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/i)
-    .filter((t) => t.length >= 2 && !SEARCH_STOPWORDS.has(t));
+  // Emoji-aware: translate emoji-name phrases ("blue circle" -> 🔵) first, then
+  // keep word tokens AND emoji glyphs AND any shortcode (e.g. "x597").
+  return tokenizeRich(applyEmojiSynonyms(s), SEARCH_STOPWORDS);
 }
 
 function scoreCandidate(haystack: string, query: string, qTokens: string[]): number {
   const hay = haystack.toLowerCase();
-  const hayTokens = new Set(
-    hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2),
-  );
+  // Rich token set of the candidate title — includes emoji glyphs + shortcode.
+  const hayTokens = new Set(tokenizeRich(haystack));
   let score = 0;
-  const fullQ = query.trim().toLowerCase();
+  const fullQ = applyEmojiSynonyms(query.trim()).toLowerCase();
   if (fullQ && hay.includes(fullQ)) score += 3;
   for (const t of qTokens) {
-    if (hay.includes(t)) score += 2;
-    if (hayTokens.has(t)) score += 1;
+    // Emoji/shortcode tokens are exact-match only (substring would be noisy).
+    if (/[a-z0-9]/i.test(t) && hay.includes(t)) score += 2;
+    if (hayTokens.has(t)) score += 2;
   }
   return score;
 }
@@ -386,6 +494,26 @@ const TOOL_HANDLERS: Record<string, any> = {
       kind: m.kind,
       source_text: m?.generation_params?.user_text ?? null,
     }));
+  },
+  async expand_plan(args, { user_id, admin, baseIndex }: any) {
+    const instruction = String(args.instruction ?? "").trim();
+    const context = String(args.context ?? "").trim();
+    if (!instruction) throw new Error("expand_plan requires an instruction");
+    const base = Number.isFinite(baseIndex) ? Number(baseIndex) : 0;
+    const snapshot = await buildExpansionSnapshot(admin, user_id);
+    const sys = expansionSystemPrompt
+      .replace(/\{\{BASE_INDEX_PLUS_1\}\}/g, String(base + 1))
+      .replace(/\{\{BASE_INDEX\}\}/g, String(base));
+    const userPrompt =
+      `INSTRUCTION (do this for EACH discovered item):\n${instruction}\n\n` +
+      `CONTEXT (derive the items from this):\n${context || "(none provided)"}\n` +
+      `${snapshot}\n\nReturn JSON now. Your first generated step is index ${base}.`;
+    const raw = await callExpansionLLM(sys, userPrompt);
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch { throw new Error("expand_plan: AI returned non-JSON"); }
+    const rawSteps = Array.isArray(parsed?.steps) ? parsed.steps : [];
+    const steps = validateExpansionSteps(rawSteps);
+    return { __expand_steps: steps, generated: steps.length };
   },
   async create_document(args, { user_id, admin }) {
     const { count } = await admin
@@ -1165,7 +1293,26 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal });
+    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal, baseIndex: idx + 1 });
+
+    // Runtime expansion: splice the AI-generated sub-steps in right after this
+    // step, then continue. current_step advances to the first new step.
+    if (result && typeof result === "object" && "__expand_steps" in result) {
+      const newSteps: any[] = Array.isArray((result as any).__expand_steps) ? (result as any).__expand_steps : [];
+      step.status = "completed";
+      step.result = { expanded: newSteps.length };
+      step.error = null;
+      steps.splice(idx + 1, 0, ...newSteps);
+      const nextIdx = idx + 1;
+      const updates: any = { steps, current_step: nextIdx, total_steps: steps.length };
+      if (nextIdx >= steps.length) {
+        updates.status = "completed";
+        updates.result_summary = summarizeRun(steps);
+        updates.completed_at = new Date().toISOString();
+      }
+      await releaseClaim(updates);
+      return json({ status: updates.status ?? "running", advanced_to: nextIdx, expanded: newSteps.length });
+    }
 
     // Async media generation: pause the plan until the media asset finishes.
     if (result && typeof result === "object" && "__pending_media" in result) {
