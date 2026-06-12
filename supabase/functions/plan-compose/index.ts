@@ -244,7 +244,8 @@ Deno.serve(async (req) => {
       if (!hay) return false;
       // The whole title appears verbatim inside the request → strong signal.
       if (hay.length >= 4 && reqLower.includes(hay)) return true;
-      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      // Emoji-aware token overlap: emoji glyphs and shortcodes count too.
+      const hayTokens = new Set(tokenizeRich(String(title ?? "")));
       let distinct = 0;
       for (const t of reqTokenSet) {
         if (hayTokens.has(t)) {
@@ -257,7 +258,7 @@ Deno.serve(async (req) => {
 
     const scoreInlineIds = scoredDocs
       .filter(({ d }) => strongDocMatch(String(d.title ?? "")))
-      .slice(0, 6)
+      .slice(0, 12)
       .map(({ d }) => d.id)
       .filter((id) => !forcedSet.has(id));
 
