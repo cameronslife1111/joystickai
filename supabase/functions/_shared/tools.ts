@@ -53,6 +53,17 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "expand_plan",
+    description:
+      "Generate additional plan steps AT RUNTIME, after earlier steps have produced data you don't have yet at planning time. Use this for 'do X for EACH item' loops where the number of items is only known after reading a document — e.g. 'generate one first-frame image for each shot in the brain dump', 'add one sentence per approved idea'. " +
+      "How it works: when this step runs, an AI reads the `context` you pipe in (typically the text of a document read by an earlier read_document step) plus the live workspace, then writes a fresh batch of real tool steps (generate_image, remix_images, rename_media, add_sentence, etc.) that are spliced into the plan and executed in order. " +
+      "ALWAYS pipe the source material into `context` via templates, e.g. context: \"Brain dump:\\n{{step_2.result.text}}\\n\\nRules:\\n{{step_3.result.text}}\". Put the per-item instruction (what to do for each discovered item, including which media/reference ids to use and how to name outputs) in `instruction`. The generated steps can reference earlier steps by their absolute index using {{step_N...}} as usual.",
+    args: {
+      instruction: { type: "string", description: "What to do for EACH discovered item — be specific about the tool to use per item, the prompt/content, target ids, and any renaming. The runtime AI follows this to emit one (or a few) steps per item.", required: true },
+      context: { type: "string", description: "The source material to derive the items from — pipe in document text via {{step_N.result.text}} templates (brain dump, rules, approved-ideas list, etc.).", required: true },
+    },
+  },
+  {
     name: "create_document",
     description: "Create a new empty document. Returns the new document's id and title.",
     args: {
