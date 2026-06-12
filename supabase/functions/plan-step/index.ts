@@ -53,6 +53,114 @@ async function invokeEdgeFunction(
   }
 }
 
+// ---- Runtime plan expansion (expand_plan) ----
+const PLANNER_PROVIDER = Deno.env.get("PLANNER_PROVIDER") ?? "openai";
+const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.5";
+const MAX_EXPANSION_STEPS = 120;
+
+async function callExpansionLLM(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (PLANNER_PROVIDER !== "openai") throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: PLANNER_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+// Compact live snapshot for the expansion LLM: every doc title (id — title) and
+// recent media (id — kind — title). Lets the AI target real ids when it writes
+// per-item steps (e.g. which reference image to remix).
+async function buildExpansionSnapshot(admin: any, userId: string): Promise<string> {
+  const { data: docs } = await admin
+    .from("documents").select("id, title")
+    .eq("user_id", userId).order("updated_at", { ascending: false }).limit(2000);
+  const { data: media } = await admin
+    .from("media_assets").select("id, title, kind, generation_params")
+    .eq("user_id", userId).order("created_at", { ascending: false }).limit(200);
+  const docLines = (docs ?? []).map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n");
+  const mediaLines = (media ?? []).map((m: any) => {
+    const src = m?.generation_params?.user_text ?? null;
+    return `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${src ? ` — src=${JSON.stringify(String(src).slice(0, 120))}` : ""}`;
+  }).join("\n");
+  let out = "";
+  if (docLines) out += `\n\nDOCUMENT CATALOG (id — title):\n${docLines}`;
+  if (mediaLines) out += `\n\nMEDIA (id — kind — title — src):\n${mediaLines}`;
+  return out;
+}
+
+// Validate generated sub-steps with the same target-arg rules the composer uses.
+function validateExpansionSteps(rawSteps: any[]): any[] {
+  const toolNames = new Set(TOOL_CATALOG.map((t) => t.name));
+  const REQUIRED: Record<string, string[]> = {
+    add_sentence: ["document_id", "content"],
+    update_sentence_content: ["sentence_id", "new_content"],
+    move_sentence: ["sentence_id", "target_document_id"],
+    link_sentence_to_document: ["sentence_id"],
+    mark_sentence_for_deletion: ["sentence_id"],
+    mark_document_for_deletion: ["document_id"],
+    mark_media_for_deletion: ["media_id"],
+    rename_document: ["document_id", "new_title"],
+    rename_media: ["media_id", "new_title"],
+    read_document: ["document_id"],
+    regenerate_image: ["source_media_id"],
+    remix_images: ["source_media_ids"],
+    image_to_video: ["source_media_id"],
+    video_to_video: ["source_image_id", "reference_video_id"],
+    audio_image_to_video: ["source_image_id", "audio_media_id"],
+  };
+  const has = (v: unknown) =>
+    v != null && (typeof v === "string" ? v.trim().length > 0 : (Array.isArray(v) ? v.length > 0 : true));
+  const out: any[] = [];
+  for (const s of rawSteps) {
+    if (!s || typeof s !== "object") continue;
+    if (s.tool === "expand_plan") continue; // no recursive expansion
+    if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
+      throw new Error(`expand_plan produced an unknown tool: ${s.tool}`);
+    }
+    if (!s.args || typeof s.args !== "object") s.args = {};
+    const req = REQUIRED[s.tool];
+    if (req) for (const a of req) {
+      if (!has(s.args[a])) throw new Error(`expand_plan step (${s.tool}) is missing target "${a}"`);
+    }
+    out.push({
+      tool: s.tool,
+      args: s.args,
+      description: typeof s.description === "string" && s.description.trim() ? s.description : `Run ${s.tool}`,
+      status: "pending",
+      result: null,
+      error: null,
+    });
+    if (out.length >= MAX_EXPANSION_STEPS) break;
+  }
+  return out;
+}
+
+const expansionSystemPrompt = `You expand ONE step of a running Orby plan into concrete sub-steps. The user's higher-level plan reached a point where it must do something "for each" item, and the items are only known now, from the CONTEXT below.
+
+You have these tools (no others exist; do NOT emit expand_plan again):
+
+${toolCatalogForPrompt()}
+
+Rules:
+- Read the CONTEXT (already-resolved document text / data) and the WORKSPACE SNAPSHOT, then emit one or a few real tool steps PER discovered item, in execution order.
+- Every mutating/media step MUST carry its full target id in its own args — a concrete id from the snapshot, or a {{step_N.result.id}} template pointing at an EARLIER step.
+- ABSOLUTE INDEXING: your first generated step will be inserted at index {{BASE_INDEX}}. So reference your own generated steps by their absolute index: the first is step {{BASE_INDEX}}, the next is {{BASE_INDEX_PLUS_1}}, and so on. You may also reference any already-completed earlier step by its absolute index if its result id is given to you.
+- Image prompts must never exceed 3000 characters. Generate media one item at a time (one step per image).
+- Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
+
+
 function stringifyForTemplate(value: any, stepIdx: number, path: string): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
