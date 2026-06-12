@@ -1,54 +1,63 @@
-# Fix: old media leaking into freshly-run scheduled plans
+# Fix Orby Planning: Robust Document Lookup + Runtime Looping
 
-## What's actually happening
+## What's broken today
 
-The "Run now" button (`runScheduleNow` in `src/lib/plan-schedules.functions.ts`) creates a brand-new `plans` row in status `composing` and invokes the `plan-compose` edge function. That part is clean — it copies only the schedule's `user_request` and `attached_document_ids`, nothing else.
+Three concrete regressions/limitations make your action tickets fail:
 
-The leak is inside **`supabase/functions/plan-compose/index.ts`**, in how it builds the `MEDIA` section of the WORKSPACE SNAPSHOT that gets handed to the planner LLM:
+1. **Emoji & symbol blindness.** Every search and scoring function tokenizes with `split(/[^a-z0-9]+/)`, which deletes 🔴 / 🔵 and all punctuation. So "the doc that starts with the blue circle" or "lowest X shortcode" can never be resolved — the matcher literally cannot see emojis or symbols. Shortcodes like `X597` survive as tokens but there's no logic to compare them numerically.
 
-```text
-src/lib/plan-schedules.functions.ts  runScheduleNow → insert plan → invoke plan-compose
-                                          │  (only user_request + attached_document_ids carried) ✅
-                                          ▼
-supabase/functions/plan-compose/index.ts  builds MEDIA snapshot from ALL of user's media ❌
-                                          ▼
-                                       planner reuses old media ids → regenerate_image / remix etc.
-```
+2. **Context docs no longer get read.** The recent isolation work capped full-text inlining at 6 documents behind a strict 2-token match. Your tickets reference several context docs (the brain-dump instructions, the series rules) whose contents the planner now usually never sees, so it can't actually follow them.
 
-Two specific code paths cause it:
+3. **No runtime looping.** The composer emits a *fixed* step list in one pass. Tickets like "generate one first-frame image for each shot" can't be expressed, because the number of shots is only known after a document is read at run time.
 
-1. **Media fallback dumps the whole library (lines 333–334).**
-   ```ts
-   const relevantMedia = mediaScored.filter(({ score }) => score > 0).map(({ m }) => m);
-   const mediaSource = relevantMedia.length > 0 ? relevantMedia : (allMedia ?? []);
-   ```
-   When the request doesn't token-match any media, it falls back to the 25 most-recent assets — almost all leftover output from prior plans — and lists them as reusable candidates.
+The fix keeps the strict media-reuse isolation (old images won't resurface) untouched.
 
-2. **Repeated schedules self-match their own prior output (line 333, the `score > 0` filter).**
-   A schedule like "generate a cat image" produces media whose title/`source_text` contains "cat". On the next run the same word "cat" token-matches that prior asset, so it's surfaced in the MEDIA list, and the planner picks `regenerate_image` / `remix_images` on the old id instead of generating something fresh. This is exactly why the problem shows up on repeated/scheduled runs specifically.
+## The plan
 
-The DOCUMENT side already has a strict `strongDocMatch` guard (lines 241–261); MEDIA never got the equivalent tightening.
+### 1. Emoji / shortcode / prefix-aware matching
+`supabase/functions/_shared/` + both edge functions:
 
-## The fix
+- Add a shared `lookup.ts` helper with:
+  - `leadingEmoji(title)` — extracts the first emoji/symbol cluster of a title.
+  - `extractShortcode(title)` — pulls a code like `X597` (pattern `/\b[A-Z]\d{2,5}\b/`) and its numeric part for ordering.
+  - An emoji synonym map so natural language resolves to glyphs: "blue circle"→🔵, "red circle"→🔴, "green"→🟢, "yellow"→🟡, "purple"→🟣, "check/checkmark"→✅, "fire"→🔥, "laughing/laugh/😂"→😂, etc. (extensible, not hardcoded to your specific titles).
+  - An emoji-preserving tokenizer used for scoring (keeps emoji glyphs and the shortcode token instead of stripping them).
+- Update `find_document_by_title`, `find_documents_by_title`, and `find_sentence_by_content` in `plan-step/index.ts` to match on leading emoji and shortcode in addition to word tokens, and to translate emoji-name phrases in the query to the actual glyph before matching.
 
-Edit only `supabase/functions/plan-compose/index.ts` (no schema, no UI, no behavior change to one-off plans that genuinely reference existing media):
+### 2. Make the catalog self-describing so the planner can reason
+`supabase/functions/plan-compose/index.ts`:
 
-1. **Remove the whole-library fallback.** Drop the `: (allMedia ?? [])` fallback so an unmatched request yields an empty MEDIA list instead of the recent-output dump.
+- The DOCUMENT CATALOG already lists every title. Enrich each line with parsed fields so selection logic is trivial for the model:
+  `  <id> — "🔴 Ava - Context - X597 - XYZ - Video Brain Dump"  (emoji=🔴, code=X597)`
+- Add planner guidance covering the patterns your tickets use: select by leading emoji, pick the **lowest** shortcode among matches, match partial/loose titles, and resolve emoji descriptions ("blue circle") via the synonym map. No titles are hardcoded — this is general matching guidance.
 
-2. **Detect "reuse intent" vs "create-fresh intent".** Add a small check on `reqLower` for words that imply operating on existing media (e.g. regenerate, remix, edit, "this/that image", animate, "turn … into a video", "the … photo/image/clip"). Only when reuse intent is present (or a document/media is explicitly attached) should prior media be surfaced as candidates.
+### 3. Restore context-document reading
+`plan-compose/index.ts`:
 
-3. **Apply strong matching to media, mirroring docs.** When reuse intent exists, require a genuine match (phrase/substring hit or 2+ distinct meaningful tokens against title + `source_text`) before listing an asset — replacing the loose `score > 0`. A pure "generate a cat image" request will then surface nothing to reuse and the planner will use `generate_image` fresh.
+- Raise the full-text inline cap from 6 to ~12 and always inline any doc whose title appears (loosely) in the request, so named context docs come through.
+- Add explicit guidance: when a referenced context/rules doc is *not* inlined, emit a `read_document` step for it and pipe its text into later steps via `{{step_N.result.text}}` (already supported by the executor). This is what lets Orby actually "read these documents and then fill out the brain dump."
 
-4. **Keep attachments and explicit references working.** Forced `attached_document_ids` and `find_media_by_title` (used only when the planner truly needs an existing asset) remain available, so legitimately referencing existing media still works.
+### 4. Runtime looping via a new `expand_plan` tool
+This is the structural change that makes "for each shot/idea" possible without knowing the count up front.
+
+- Add `expand_plan` to the tool catalog (`_shared/tools.ts`). Args: `instruction` (what to do for each item), and `context` (template refs like `{{step_N.result.text}}` feeding the brain dump / rules into the expansion).
+- In `plan-step/index.ts`, handle `expand_plan` specially: at execution time it calls the planner LLM with the resolved context (e.g. the brain-dump text already read in a prior step), the full tool catalog, and the live workspace snapshot, and returns a fresh list of sub-steps (e.g. one `remix_images` + one `rename_media` per shot).
+- The executor **splices** those generated sub-steps into the plan's `steps` array immediately after the current step, persists, and continues — reusing the existing per-step claim/await-media/advance machinery. The LLM is told the absolute base index so its `{{step_N...}}` references resolve correctly; generated steps are validated through the same `REQUIRED_TARGET_ARGS` guard used at compose time.
+- Existing safety caps (`MAX_TICKS`, watchdog, no-progress, per-media wall clock) already bound runaway expansion; add a cap on generated sub-steps per expansion as defense in depth.
+
+### 5. Keep media isolation strict (unchanged)
+The reuse-intent + `strongMediaMatch` gating in `plan-compose` stays exactly as is, so repeated/scheduled runs still won't drag back old generated images. New images come from `generate_image` / `remix_images` with fresh prompts.
 
 ## Verification
 
-- Redeploy `plan-compose`.
-- Run a scheduled plan whose request only says to generate new media; confirm via edge-function logs / the resulting steps that no `regenerate_image` / `remix_images` step targets a pre-existing media id and that `generate_image` is used instead.
-- Run a plan that explicitly says "regenerate the cat image" to confirm reuse still works when intended.
-- Run it twice in a row to confirm the second run does not pick up the first run's output.
+- Deploy `plan-compose` and `plan-step`.
+- Unit-style checks on the new `lookup.ts` helpers (emoji extraction, shortcode ordering, synonym resolution).
+- Compose a test plan against a request that names a doc by emoji + "lowest shortcode" and confirm the catalog lines expose `emoji=` / `code=` and the chosen step targets the right id.
+- Run an `expand_plan` flow end-to-end (read a doc → expand into per-item steps) via `curl_edge_functions` and confirm sub-steps splice and execute.
+- Confirm a pure "generate a cat image" repeat run still does NOT reuse a prior asset (isolation intact).
 
 ## Technical notes
 
-- Changes are confined to the snapshot-building block (≈ lines 312–364) of `plan-compose/index.ts`; the system prompt's FRESH-PLAN ISOLATION rule already tells the planner to treat lists as lookup-only — this change stops the offending items from being put in front of it in the first place.
-- No changes to `runScheduleNow`, `plan-scheduler-tick`, `plan-step`, or any table — the carried fields were already minimal and correct.
+- Splicing into `steps` mutates the stored array; `current_step` keeps pointing at the next index, so no index math breaks for already-completed steps. Generated sub-step templates use absolute indices supplied at expansion time.
+- `expand_plan`'s LLM call reuses the same `callPlannerLLM` provider/model config already in `plan-compose` (extracted into the shared module or duplicated minimally in `plan-step`).
+- Emoji handling uses `Intl.Segmenter`/`\p{Extended_Pictographic}` so multi-codepoint emoji (skin tones, ZWJ) are treated as one cluster.
