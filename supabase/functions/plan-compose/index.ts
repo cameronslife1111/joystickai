@@ -392,9 +392,17 @@ Deno.serve(async (req) => {
     }
     if (docList.length) {
       const docLabel = bulkIntent
-        ? `ALL DOCUMENTS (id — title) — the request asks to act on every matching document, so enumerate matches from THIS list`
-        : `DOCUMENT CATALOG (id — title) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
-      userContext += `\n\n${docLabel}:\n${docList.map((d: any) => `  ${d.id} — ${JSON.stringify(d.title ?? "")}`).join("\n")}`;
+        ? `ALL DOCUMENTS (id — title — parsed emoji/code) — the request asks to act on every matching document, so enumerate matches from THIS list`
+        : `DOCUMENT CATALOG (id — title — parsed emoji/code) — a LOOKUP TABLE ONLY for resolving documents the request explicitly names or describes. Do NOT act on a document just because it appears here; if the request doesn't reference it, ignore it`;
+      const renderDoc = (d: any): string => {
+        const title = d.title ?? "";
+        const emoji = leadingEmoji(title);
+        const sc = extractShortcode(title);
+        const meta = [emoji ? `emoji=${emoji}` : null, sc ? `code=${sc.raw}` : null]
+          .filter(Boolean).join(", ");
+        return `  ${d.id} — ${JSON.stringify(title)}${meta ? `  (${meta})` : ""}`;
+      };
+      userContext += `\n\n${docLabel}:\n${docList.map(renderDoc).join("\n")}`;
     }
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
