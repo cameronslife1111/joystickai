@@ -168,23 +168,22 @@ const SEARCH_STOPWORDS = new Set([
 ]);
 
 function tokenize(s: string): string[] {
-  return String(s ?? "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/i)
-    .filter((t) => t.length >= 2 && !SEARCH_STOPWORDS.has(t));
+  // Emoji-aware: translate emoji-name phrases ("blue circle" -> 🔵) first, then
+  // keep word tokens AND emoji glyphs AND any shortcode (e.g. "x597").
+  return tokenizeRich(applyEmojiSynonyms(s), SEARCH_STOPWORDS);
 }
 
 function scoreCandidate(haystack: string, query: string, qTokens: string[]): number {
   const hay = haystack.toLowerCase();
-  const hayTokens = new Set(
-    hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2),
-  );
+  // Rich token set of the candidate title — includes emoji glyphs + shortcode.
+  const hayTokens = new Set(tokenizeRich(haystack));
   let score = 0;
-  const fullQ = query.trim().toLowerCase();
+  const fullQ = applyEmojiSynonyms(query.trim()).toLowerCase();
   if (fullQ && hay.includes(fullQ)) score += 3;
   for (const t of qTokens) {
-    if (hay.includes(t)) score += 2;
-    if (hayTokens.has(t)) score += 1;
+    // Emoji/shortcode tokens are exact-match only (substring would be noisy).
+    if (/[a-z0-9]/i.test(t) && hay.includes(t)) score += 2;
+    if (hayTokens.has(t)) score += 2;
   }
   return score;
 }
