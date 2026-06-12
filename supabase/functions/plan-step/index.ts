@@ -1293,7 +1293,26 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal });
+    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal, baseIndex: idx + 1 });
+
+    // Runtime expansion: splice the AI-generated sub-steps in right after this
+    // step, then continue. current_step advances to the first new step.
+    if (result && typeof result === "object" && "__expand_steps" in result) {
+      const newSteps: any[] = Array.isArray((result as any).__expand_steps) ? (result as any).__expand_steps : [];
+      step.status = "completed";
+      step.result = { expanded: newSteps.length };
+      step.error = null;
+      steps.splice(idx + 1, 0, ...newSteps);
+      const nextIdx = idx + 1;
+      const updates: any = { steps, current_step: nextIdx, total_steps: steps.length };
+      if (nextIdx >= steps.length) {
+        updates.status = "completed";
+        updates.result_summary = summarizeRun(steps);
+        updates.completed_at = new Date().toISOString();
+      }
+      await releaseClaim(updates);
+      return json({ status: updates.status ?? "running", advanced_to: nextIdx, expanded: newSteps.length });
+    }
 
     // Async media generation: pause the plan until the media asset finishes.
     if (result && typeof result === "object" && "__pending_media" in result) {
