@@ -495,6 +495,26 @@ const TOOL_HANDLERS: Record<string, any> = {
       source_text: m?.generation_params?.user_text ?? null,
     }));
   },
+  async expand_plan(args, { user_id, admin, baseIndex }: any) {
+    const instruction = String(args.instruction ?? "").trim();
+    const context = String(args.context ?? "").trim();
+    if (!instruction) throw new Error("expand_plan requires an instruction");
+    const base = Number.isFinite(baseIndex) ? Number(baseIndex) : 0;
+    const snapshot = await buildExpansionSnapshot(admin, user_id);
+    const sys = expansionSystemPrompt
+      .replace(/\{\{BASE_INDEX_PLUS_1\}\}/g, String(base + 1))
+      .replace(/\{\{BASE_INDEX\}\}/g, String(base));
+    const userPrompt =
+      `INSTRUCTION (do this for EACH discovered item):\n${instruction}\n\n` +
+      `CONTEXT (derive the items from this):\n${context || "(none provided)"}\n` +
+      `${snapshot}\n\nReturn JSON now. Your first generated step is index ${base}.`;
+    const raw = await callExpansionLLM(sys, userPrompt);
+    let parsed: any;
+    try { parsed = JSON.parse(raw); } catch { throw new Error("expand_plan: AI returned non-JSON"); }
+    const rawSteps = Array.isArray(parsed?.steps) ? parsed.steps : [];
+    const steps = validateExpansionSteps(rawSteps);
+    return { __expand_steps: steps, generated: steps.length };
+  },
   async create_document(args, { user_id, admin }) {
     const { count } = await admin
       .from("documents")
