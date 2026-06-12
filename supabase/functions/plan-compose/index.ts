@@ -203,19 +203,19 @@ Deno.serve(async (req) => {
       "image", "images", "photo", "photos", "picture", "pic", "pics",
       "reference", "ref", "video", "videos", "audio", "clip",
     ]);
-    const tokenize = (s: string): string[] =>
-      String(s ?? "").toLowerCase().split(/[^a-z0-9]+/i)
-        .filter((t) => t.length >= 2 && !STOP.has(t));
+    // Emoji-aware: translate emoji-name phrases ("blue circle" -> 🔵) in the
+    // request, then keep word tokens AND emoji glyphs AND any shortcode.
+    const tokenize = (s: string): string[] => tokenizeRich(applyEmojiSynonyms(s), STOP);
     const reqTokens = tokenize(plan.user_request ?? "");
-    const reqLower = (plan.user_request ?? "").toLowerCase();
+    const reqLower = applyEmojiSynonyms(plan.user_request ?? "").toLowerCase();
     const scoreText = (text: string): number => {
       const hay = String(text ?? "").toLowerCase();
-      const hayTokens = new Set(hay.split(/[^a-z0-9]+/i).filter((t) => t.length >= 2));
+      const hayTokens = new Set(tokenizeRich(String(text ?? "")));
       let score = 0;
       if (hay && reqLower.includes(hay)) score += 3;
       for (const t of reqTokens) {
-        if (hay.includes(t)) score += 2;
-        if (hayTokens.has(t)) score += 1;
+        if (/[a-z0-9]/i.test(t) && hay.includes(t)) score += 2;
+        if (hayTokens.has(t)) score += 2;
       }
       return score;
     };
