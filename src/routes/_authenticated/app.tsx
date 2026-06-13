@@ -1761,7 +1761,9 @@ function AppPage() {
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot]);
+    { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash]);
+
 
 
   // Arrange menu buttons into the requested 4x6 grid slots
