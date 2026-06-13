@@ -746,6 +746,33 @@ function AppPage() {
     });
   }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
 
+  // Slot 15: prepend a 🗑️ to the current sentence as a visual delete cue.
+  const markCurrentTrash = useCallback(async () => {
+    setMenuOpen(false);
+    if (!currentSentence) {
+      toast("No sentence selected");
+      return;
+    }
+    if (currentSentence.content.startsWith("🗑️")) {
+      toast("Already marked");
+      return;
+    }
+    const newContent = `🗑️ ${currentSentence.content}`;
+    const id = currentSentence.id;
+    qc.setQueryData<Sentence[]>(["sentences", activeDocId], (prev) =>
+      prev?.map((s) => (s.id === id ? { ...s, content: newContent } : s)) ?? prev,
+    );
+    const { error } = await supabase.from("sentences").update({ content: newContent }).eq("id", id);
+    if (error) {
+      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      toast("Could not mark sentence");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    toast("Marked for deletion");
+  }, [currentSentence, qc, activeDocId]);
+
+
   const openLinkedDocument = useCallback(async () => {
     const targetId = currentSentence?.linked_document_id;
     if (!targetId) return;
@@ -1734,7 +1761,9 @@ function AppPage() {
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot]);
+    { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash]);
+
 
 
   // Arrange menu buttons into the requested 4x6 grid slots
@@ -1754,7 +1783,7 @@ function AppPage() {
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
     filled[13] = grid[24];  // 14 Recent docs
-    filled[14] = null;     // 15 (folded into Chat)
+    filled[14] = grid[25]; // 15 Mark with trash
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
