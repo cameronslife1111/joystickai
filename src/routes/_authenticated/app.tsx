@@ -1783,7 +1783,7 @@ function AppPage() {
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
     filled[13] = grid[24];  // 14 Recent docs
-    filled[14] = null;     // 15 (folded into Chat)
+    filled[14] = grid[25]; // 15 Mark with trash
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
