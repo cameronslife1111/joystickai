@@ -746,6 +746,33 @@ function AppPage() {
     });
   }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
 
+  // Slot 15: prepend a 🗑️ to the current sentence as a visual delete cue.
+  const markCurrentTrash = useCallback(async () => {
+    setMenuOpen(false);
+    if (!currentSentence) {
+      toast("No sentence selected");
+      return;
+    }
+    if (currentSentence.content.startsWith("🗑️")) {
+      toast("Already marked");
+      return;
+    }
+    const newContent = `🗑️ ${currentSentence.content}`;
+    const id = currentSentence.id;
+    qc.setQueryData<Sentence[]>(["sentences", activeDocId], (prev) =>
+      prev?.map((s) => (s.id === id ? { ...s, content: newContent } : s)) ?? prev,
+    );
+    const { error } = await supabase.from("sentences").update({ content: newContent }).eq("id", id);
+    if (error) {
+      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      toast("Could not mark sentence");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    toast("Marked for deletion");
+  }, [currentSentence, qc, activeDocId]);
+
+
   const openLinkedDocument = useCallback(async () => {
     const targetId = currentSentence?.linked_document_id;
     if (!targetId) return;
