@@ -1048,13 +1048,24 @@ function AppPage() {
     // no-op; the composer takes over from here
   }, []);
 
-  useOrbGestures(orbRef, {
-    onTap: openNewIdea,
-    onDoubleTap,
-    onTripleTap: deleteCurrent,
-    onLongPressStart,
-    onLongPressEnd,
-  });
+  useOrbGestures(
+    orbRef,
+    {
+      onTap: openNewIdea,
+      onDoubleTap,
+      onTripleTap: deleteCurrent,
+      onLongPressStart,
+      onLongPressEnd,
+      onSwipe: (dir) => {
+        (orbRef.current as any)?.boostMood?.();
+        if (dir === "up") void advanceSentence();
+        else if (dir === "down") void onSwipeUp();
+        else if (dir === "left") onSwipeLeft();
+        else if (dir === "right") void onSwipeRight();
+      },
+    },
+    { swipeThreshold: 38, moveCancelPx: 16 },
+  );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
   useEffect(() => {
@@ -2051,43 +2062,7 @@ function AppPage() {
             size={0}
             className={`!w-full !h-full${inCall ? " orb-call" : ""}`}
           />
-          {/* Invisible directional buttons over Orby's face (replace swipes) */}
-          <button
-            type="button"
-            onClick={() => {
-              (orbRef.current as any)?.boostMood?.();
-              onSwipeUp();
-            }}
-            className="absolute left-0 top-0 h-1/3 w-full opacity-0"
-            aria-label="Previous sentence"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              (orbRef.current as any)?.boostMood?.();
-              advanceSentence();
-            }}
-            className="absolute left-0 bottom-0 h-1/3 w-full opacity-0"
-            aria-label="Next sentence"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              (orbRef.current as any)?.boostMood?.();
-              onSwipeLeft();
-            }}
-            className="absolute left-0 top-1/3 h-1/3 w-1/3 opacity-0"
-            aria-label="Open menu"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              (orbRef.current as any)?.boostMood?.();
-              onSwipeRight();
-            }}
-            className="absolute right-0 top-1/3 h-1/3 w-1/3 opacity-0"
-            aria-label="Next document"
-          />
+          {/* Swipe gestures on the orb handle directional navigation. */}
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
             type="button"
