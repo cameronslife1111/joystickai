@@ -1,27 +1,38 @@
 ## Goal
-Add a button to menu **slot 15** (currently empty) that marks the user's current sentence for deletion by prepending a 🗑️ emoji to that one sentence — purely a visual cue, no actual deletion.
+Restore real swipe gestures on the Orby orb (replacing the current invisible tap-zone overlays) so navigation feels fast and works across phones, tablets, and desktop (mouse).
 
-## Current state
-- The menu grid lives in `src/routes/_authenticated/app.tsx`.
-- Slot 15 maps to `filled[14]`, which is currently `null` (was folded into Chat).
-- The active sentence is available as `currentSentence` (with `currentIdx` / `activeDocId`).
-- Sentence text lives in the `sentences` table; updates go through `supabase.from("sentences").update(...)`.
+## Desired gesture map
+- **Swipe up** → next sentence
+- **Swipe down** → previous sentence
+- **Swipe left** → open the grid menu
+- **Swipe right** → favorites / next-document cycling (existing `onSwipeRight` logic, unchanged)
+- Tap / double-tap / triple-tap / long-press behaviors stay exactly as they are today (new idea / edit / delete / Plan composer).
+
+## What's there now
+In `src/routes/_authenticated/app.tsx`:
+- The `useOrbGestures(orbRef, {...})` call wires tap/doubleTap/tripleTap/longPress but **does not pass `onSwipe`**.
+- Four invisible `<button>` overlays sit on top of the orb's face (top third = previous, bottom third = next, left/right thirds = menu / next doc). These overlays intercept pointer events, which is why true swipes don't fire.
+- The `use-orb-gestures` hook already fully supports `onSwipe(direction)` via pointer events (works for touch + mouse) — it just isn't being used.
 
 ## Changes (all in `src/routes/_authenticated/app.tsx`)
 
-1. **New callback `markCurrentTrash`**
-   - Reads `currentSentence`. If none, no-op (optionally a small toast).
-   - If the content does NOT already start with `🗑️`, prepend `🗑️ ` to the content.
-   - Persist: `await supabase.from("sentences").update({ content: newContent }).eq("id", currentSentence.id)`.
-   - Invalidate the sentences query (`qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })` matching existing usage) so the UI refreshes.
-   - Close the menu (`setMenuOpen(false)`), and show a confirmation toast like `Marked for deletion`.
-   - Idempotent: pressing again won't stack multiple trash cans.
+1. **Add `onSwipe` to the `useOrbGestures` call** mapping:
+   - `up` → `advanceSentence()` (next sentence, with speech)
+   - `down` → `onSwipeUp()` (this is the existing "go to previous sentence" callback)
+   - `left` → `onSwipeLeft()` (open menu)
+   - `right` → `onSwipeRight()` (favorites / next-doc cycling)
+   - Each branch also calls `orbRef.current?.boostMood?.()` to keep the mood-boost feedback the tap zones had.
 
-2. **Add a grid entry** for the new button, e.g. `{ e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() }`.
+2. **Remove the four invisible directional overlay buttons** (the top/bottom/left/right `opacity-0` buttons added to "replace swipes"). These must be removed so they stop intercepting pointer events and blocking swipe detection on the orb.
 
-3. **Wire slot 15**: change `filled[14] = null;` to point at the new grid entry, with the comment updated to `15 Mark with trash`.
+3. **Keep** the two flanking "repeat sentence" invisible buttons (left/right of the orb) — they are not directional and don't overlap the orb's gesture surface in a way that blocks vertical swipes. (If testing shows they interfere, narrow them; otherwise leave as-is.)
+
+4. **Tune responsiveness** in the `useOrbGestures` options for fast, reliable swipes on all devices: keep a modest `swipeThreshold` (~40px) and `moveCancelPx` so quick flicks register as swipes rather than taps, and ensure the orb element keeps `touch-none` (already set in `Orb.tsx`) so the browser doesn't hijack vertical swipes as page scroll.
+
+## Verification
+- Test in the preview with mouse drag (up/down/left/right) and confirm sentence navigation + menu + favorites trigger correctly.
+- Confirm tap still creates a new idea and the orb mood still boosts on gesture.
+- Resize to mobile viewport and confirm swipes feel smooth and don't trigger page scroll.
 
 ## Notes
-- This only edits that one current sentence — no other sentences, documents, or plans are touched.
-- It does not delete anything; it only adds the emoji as a visual marker the user can act on later.
-- This is distinct from the existing `pending_delete` flag / `mark_delete` voice flow — per the request it just adds the 🗑️ character to the sentence text.
+- No backend, plan-mode, or document-lookup logic is touched — this is purely the orb's input handling on the main app screen.

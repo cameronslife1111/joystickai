@@ -1048,13 +1048,24 @@ function AppPage() {
     // no-op; the composer takes over from here
   }, []);
 
-  useOrbGestures(orbRef, {
-    onTap: openNewIdea,
-    onDoubleTap,
-    onTripleTap: deleteCurrent,
-    onLongPressStart,
-    onLongPressEnd,
-  });
+  useOrbGestures(
+    orbRef,
+    {
+      onTap: openNewIdea,
+      onDoubleTap,
+      onTripleTap: deleteCurrent,
+      onLongPressStart,
+      onLongPressEnd,
+      onSwipe: (dir) => {
+        (orbRef.current as any)?.boostMood?.();
+        if (dir === "up") void advanceSentence();
+        else if (dir === "down") void onSwipeUp();
+        else if (dir === "left") onSwipeLeft();
+        else if (dir === "right") void onSwipeRight();
+      },
+    },
+    { swipeThreshold: 38, moveCancelPx: 16 },
+  );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
   useEffect(() => {
