@@ -2557,10 +2557,12 @@ function AppPage() {
             <div className="flex flex-col gap-1.5">
               {[
                 { label: "⤒  Jump to top", target: 0 },
+                { label: "⏪  Jump back 25", target: currentIdx - 25 },
                 { label: "⏪  Jump back 10", target: currentIdx - 10 },
                 { label: "◀  Jump back 5", target: currentIdx - 5 },
                 { label: "▶  Jump ahead 5", target: currentIdx + 5 },
                 { label: "⏩  Jump ahead 10", target: currentIdx + 10 },
+                { label: "⏩  Jump ahead 25", target: currentIdx + 25 },
                 { label: "⤓  Jump to end", target: (sentences?.length ?? 1) - 1 },
               ].map((opt) => (
                 <button
