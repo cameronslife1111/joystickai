@@ -22,6 +22,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -87,6 +97,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,14 +171,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
 
   const handleClear = async () => {
     if (!userId) return;
-    if (!confirm("Clear the entire chat? This cannot be undone.")) return;
     const { error } = await supabase.from("chat_messages").delete().eq("user_id", userId);
     if (error) {
       toast.error("Failed to clear chat");
       return;
     }
     qc.setQueryData(["chat_messages", userId], []);
-    setSettingsOpen(false);
+    setClearConfirmOpen(false);
     toast.success("Chat cleared");
   };
 
@@ -241,12 +251,22 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
         <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="flex flex-row items-center justify-between border-b border-foreground/10 p-3">
             <DialogTitle className="text-base">Chat</DialogTitle>
-            <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <PopoverTrigger asChild>
-                <Button size="icon" variant="ghost" aria-label="Chat settings" className="mr-8">
-                  <SettingsIcon className="h-5 w-5" />
-                </Button>
-              </PopoverTrigger>
+            <div className="mr-8 flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Clear chat"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setClearConfirmOpen(true)}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+              <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="icon" variant="ghost" aria-label="Chat settings">
+                    <SettingsIcon className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
               <PopoverContent align="end" className="w-64">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
@@ -286,17 +306,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
                   >
                     <Paperclip className="mr-2 h-4 w-4" /> Attach documents
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-destructive hover:text-destructive"
-                    onClick={handleClear}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" /> Clear chat
-                  </Button>
                 </div>
               </PopoverContent>
-            </Popover>
+              </Popover>
+            </div>
           </DialogHeader>
 
           {/* Messages */}
@@ -447,6 +460,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear the entire chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. All messages will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleClear();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
 
       <DocumentPickerSheet
         open={docPickerOpen}
