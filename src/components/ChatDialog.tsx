@@ -251,12 +251,22 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
         <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="flex flex-row items-center justify-between border-b border-foreground/10 p-3">
             <DialogTitle className="text-base">Chat</DialogTitle>
-            <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-              <PopoverTrigger asChild>
-                <Button size="icon" variant="ghost" aria-label="Chat settings" className="mr-8">
-                  <SettingsIcon className="h-5 w-5" />
-                </Button>
-              </PopoverTrigger>
+            <div className="mr-8 flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Clear chat"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setClearConfirmOpen(true)}
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+              <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="icon" variant="ghost" aria-label="Chat settings">
+                    <SettingsIcon className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
               <PopoverContent align="end" className="w-64">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
