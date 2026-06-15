@@ -461,6 +461,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear the entire chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. All messages will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleClear();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+
       <DocumentPickerSheet
         open={docPickerOpen}
         onOpenChange={setDocPickerOpen}
