@@ -97,6 +97,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
