@@ -306,17 +306,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
                   >
                     <Paperclip className="mr-2 h-4 w-4" /> Attach documents
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-destructive hover:text-destructive"
-                    onClick={handleClear}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" /> Clear chat
-                  </Button>
                 </div>
               </PopoverContent>
-            </Popover>
+              </Popover>
+            </div>
           </DialogHeader>
 
           {/* Messages */}
