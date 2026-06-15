@@ -171,14 +171,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents }:
 
   const handleClear = async () => {
     if (!userId) return;
-    if (!confirm("Clear the entire chat? This cannot be undone.")) return;
     const { error } = await supabase.from("chat_messages").delete().eq("user_id", userId);
     if (error) {
       toast.error("Failed to clear chat");
       return;
     }
     qc.setQueryData(["chat_messages", userId], []);
-    setSettingsOpen(false);
+    setClearConfirmOpen(false);
     toast.success("Chat cleared");
   };
 
