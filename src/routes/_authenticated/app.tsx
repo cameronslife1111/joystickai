@@ -425,21 +425,26 @@ function AppPage() {
     }
   }, [docs, prefs, activeDocId]);
 
-  // Keep favIdxRef pointed at the currently-viewed favorite slot (if any), so
-  // the next swipe-right always advances to the NEXT filled slot — never
-  // re-selects the slot the user is already on.
+  // Initialize favIdxRef ONLY when there isn't already a valid bookmark.
+  // The bookmark (the user's place in the favorites sequence) must advance
+  // solely via swipe-right — opening a document directly (search, grid, jump)
+  // should never move it. So if the current ref already points at a valid,
+  // filled slot whose document still exists, leave it untouched.
   useEffect(() => {
     if (!activeDocId) return;
-    // If the current ref already points at a slot holding the active doc,
-    // keep it — otherwise the same doc appearing in multiple slots would
-    // snap the cursor back to the first match and trap the cycle.
-    if (favorites[favIdxRef.current] === activeDocId) return;
+    const cur = favIdxRef.current;
+    const curDocId =
+      cur >= 0 && cur < favorites.length ? favorites[cur] : null;
+    const curValid = !!curDocId && !!docs?.some((d) => d.id === curDocId);
+    if (curValid) return;
+    // No valid bookmark yet (fresh session, emptied slot, or deleted doc):
+    // anchor it to the opened document's slot if it lives in the list.
     const slot = favorites.findIndex((id) => id === activeDocId);
     if (slot >= 0) {
       favIdxRef.current = slot;
       void saveLastFavoriteSlot(slot);
     }
-  }, [favorites, activeDocId, saveLastFavoriteSlot]);
+  }, [favorites, activeDocId, docs, saveLastFavoriteSlot]);
 
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
