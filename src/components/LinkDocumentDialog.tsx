@@ -22,7 +22,7 @@ interface Props {
   onSaved: () => void;
 }
 
-const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
+const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
 
 
 

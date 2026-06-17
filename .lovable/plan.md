@@ -1,56 +1,41 @@
-# Fix favorites "remembered position" so it survives opening other documents
+# Add ⚪️/⚫️ circles and remove 🐝
 
-## The problem
+## Goal
+Across every place that shows the colorful circle "filter" buttons: remove the bee (🐝) and add a white circle (⚪️) and a black circle (⚫️). Also add the circle filter row to the Favorites slot list (which currently has none).
 
-When you swipe right through your favorites list, the app keeps a "bookmark" that tracks which slot you're on (an internal pointer called `favIdxRef`, also saved as `last_favorite_slot`). Swiping right correctly advances this bookmark to the next slot.
-
-The bug: every time the active document changes, a piece of code **snaps the bookmark back to whatever slot the newly-opened document sits in**. So if you're on slot 5 and then open the document that lives in slot 2 (from search, the favorites grid, or "Jump to"), the bookmark jumps back to slot 2. Your next swipe-right then goes to slot 3 instead of continuing forward to slot 6.
-
-In short: opening a document is overwriting your place in the sequence. It should not.
-
-## The desired behavior
-
-- The bookmark (your place in the sequence) should change **only** when you swipe right to advance.
-- Opening a document directly — whether it's already in the list at an earlier slot, or not in the list at all — must **not** move the bookmark.
-- After opening that document and finishing any linked-document steps, swiping right should continue from where you left off (e.g. you were on slot 5 → next swipe lands on slot 6, not slot 3).
-- Linked-document traversal (swipe right opens a linked doc, then the next slot when there are no more links) keeps working exactly as it does today.
-
-## The change
-
-There is exactly one place causing this: an effect in `src/routes/_authenticated/app.tsx` (around lines 431–442) that re-points the bookmark to the active document's slot whenever the active document changes.
-
-We will change it so it **only initializes the bookmark when there isn't a valid one yet** (for example, a fresh session, or the previously-bookmarked slot was emptied / its document was deleted). When the bookmark already points at a valid, filled slot, the effect leaves it alone — so opening any other document no longer disturbs your position.
-
-Concretely:
+## Current state
+A shared list drives every circle row:
 
 ```text
-On active document change:
-  - If the current bookmark already points at a valid, filled favorites slot → do nothing.
-  - Otherwise (bookmark unset = -1, or its slot is empty / missing) → set the
-    bookmark to the opened document's slot (if that document is in the list).
+EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"]
 ```
 
-This keeps every existing flow intact:
-- Normal swipe-right cycling: the swipe handler sets the bookmark, it's valid, the effect no longer touches it.
-- You're on slot 5, open slot 2's document, swipe right (after any linked docs) → continues to slot 6. (Fixed)
-- Fresh session with no saved position, open a favorited document → bookmark initializes there so the first swipe advances sensibly.
-- The bookmarked document gets deleted or its slot cleared → bookmark re-initializes to the current document.
+It's defined in three files:
+- `src/routes/_authenticated/app.tsx` — used in the document Search overlay AND the favorites document picker (after you tap a slot).
+- `src/components/DocumentPickerSheet.tsx`
+- `src/components/LinkDocumentDialog.tsx`
 
-No changes to linked-document handling, the swipe-right advance logic, persistence (`last_favorite_slot`), lock-favorites mode, or the menu/search/jump open flows.
+The Favorites **slot list** (the screen listing slots 1–50) has no circle row today.
+
+## Changes
+
+### 1. Update the circle list everywhere
+In all three files, change the array to:
+
+```text
+EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"]
+```
+
+This automatically updates: the document Search overlay, the favorites document picker, the DocumentPickerSheet, and the LinkDocumentDialog. The 🐝 is gone; ⚪️ and ⚫️ are added.
+
+### 2. Add a circle filter row to the Favorites slot list
+On the Favorites editor (the slots 1–50 list in `app.tsx`), add the same circle button row just above the slot list. Tapping a circle filters the visible slots to those whose document title contains that emoji; tapping it again (or a "clear" affordance) shows all slots. This uses a new local filter state and filters the rendered `Array.from({ length: 50 })` slots by the chosen emoji against each slot's document title. Empty slots are hidden while a filter is active.
 
 ## Verification
+- Open the document Search overlay → circle row shows ⚪️ ⚫️ then the colors, no 🐝. Tapping each filters results.
+- Open Favorites → tap a slot → document picker shows the same updated circle row.
+- Open Favorites slot list → new circle row appears; tapping a circle narrows the slot list; clearing restores all slots.
+- Link-document dialog and document picker sheet show the updated circles.
+- Check on the 390px mobile viewport so the extra circle still wraps cleanly.
 
-1. Set up favorites with documents in several slots (some with linked docs, some without).
-2. Swipe right to reach, say, slot 5.
-3. Open an earlier document (slot 2) via search / favorites grid / "Jump to".
-4. Swipe right through any of that document's linked docs; once links are exhausted, confirm the next swipe lands on **slot 6**, not slot 3.
-5. Repeat opening the document A → swipe right should go to C (the slot after where you were), not back to B.
-6. Confirm a fresh load still restores your last saved slot, and that linked-doc swiping is unchanged.
-7. Test on mobile (touch) and desktop to confirm smooth, consistent behavior.
-
-## Technical detail
-
-- File: `src/routes/_authenticated/app.tsx`, the `useEffect` at ~431–442 keyed on `[favorites, activeDocId, saveLastFavoriteSlot]`.
-- New guard: compute whether `favIdxRef.current` is `>= 0`, in range, non-null, and its document still exists in `docs`. If valid, `return` early. Otherwise fall back to the existing `favorites.findIndex(id === activeDocId)` initialization.
-- Add `docs` to the dependency array since the validity check reads it.
-- No schema or backend changes.
+No backend or schema changes.

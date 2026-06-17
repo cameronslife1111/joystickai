@@ -16,7 +16,7 @@ interface Props {
 
 type Doc = { id: string; title: string; sentence_count: number };
 
-const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
+const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
 
 export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
