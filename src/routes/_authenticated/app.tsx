@@ -2689,6 +2689,19 @@ function AppPage() {
                     </button>
                   );
                 })()}
+                <div className="flex shrink-0 flex-wrap gap-1.5">
+                  {EMOJI_FILTERS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setSendSearchQuery(emoji)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/10 bg-foreground/5 text-lg transition hover:bg-foreground/10 active:scale-[0.95]"
+                      aria-label={`Filter by ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <Input
                   placeholder="Search lists…"
                   value={sendSearchQuery}

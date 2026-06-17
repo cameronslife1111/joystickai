@@ -1,22 +1,18 @@
-# Fix "Jump to top" so it stays on the document
+# Add circle filters to the "Send to" list picker
 
-## Problem
-When you tap **Jump to top**, the app moves to the first sentence and then automatically performs a swipe-right, advancing to the next document. You want it to simply stay on the current document at the top sentence and let you swipe right yourself when ready.
-
-## Cause
-In `src/routes/_authenticated/app.tsx`, the `jumpTo` function (around lines 593–606) has special-case logic: when the target is the top (`clamped === 0`), it waits 600ms and calls the swipe-right handler to auto-advance to the next favorite.
-
-```text
-if (clamped === 0) {
-  await new Promise((r) => setTimeout(r, 600));
-  await onSwipeRightRef.current?.();
-}
-```
+## Goal
+When you press Orby → "Send to", the "Send to which list?" screen has a "Search lists…" box. Add the same colorful circle buttons used elsewhere so you can quickly narrow the lists. Tapping a circle drops that circle into the search box and filters the lists.
 
 ## Change
-Remove that auto swipe-right block (and its now-unneeded comment) from `jumpTo`. After the change, jumping to top just sets the index to 0 and speaks/repeats that first sentence, staying on the current document. Every other jump option (and manual swipe-right) is unaffected.
+In `src/routes/_authenticated/app.tsx`, inside the `sendStage === "doc"` overlay (just above the existing `Search lists…` `Input` around line 2692), add a wrapping circle filter row:
+
+- A `flex flex-wrap gap-1.5` row rendering the existing `EMOJI_FILTERS` array (`⚪️ ⚫️ 🟣 🔵 🔴 🟢 🟡 🟠 🟤`).
+- Each button calls `setSendSearchQuery(emoji)`, mirroring the existing pattern in `DocumentPickerSheet` / `LinkDocumentDialog` (same 9×9 rounded styling and `active:scale` behavior).
+- The existing filtering logic already matches `sendSearchQuery` against the list title, so the circle's emoji will filter results automatically (titles that contain that circle emoji), exactly like the other search areas.
+
+No backend or business-logic changes — this is purely the send-to picker UI.
 
 ## Verification
-- Tap Jump to → Jump to top: it moves to the first sentence, repeats it, and stays on the same document (no jump to the next doc).
-- Swiping right manually still advances to the next favorite.
-- Jump to end and other jump targets behave as before.
+- Press Orby → Send to → confirm a row of circles appears above the search box.
+- Tap a circle: it populates the search field and narrows the lists to titles containing that circle.
+- Clearing the search text restores the full list.
