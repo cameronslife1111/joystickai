@@ -32,7 +32,7 @@ type Sentence = { id: string; content: string; order_index: number; document_id:
 
 type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
 
-const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"] as const;
+const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"] as const;
 
 
 function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
@@ -102,6 +102,7 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [pinPickerOpen, setPinPickerOpen] = useState(false);
   const [pinPickerQuery, setPinPickerQuery] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
@@ -2217,10 +2218,36 @@ function AppPage() {
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
               Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
             </div>
+            <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+              {EMOJI_FILTERS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => setSlotFilter((cur) => (cur === emoji ? null : emoji))}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl border text-lg transition active:scale-95 ${
+                    slotFilter === emoji
+                      ? "border-primary/40 bg-primary/15"
+                      : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10"
+                  }`}
+                >
+                  {emoji}
+                </button>
+              ))}
+              {slotFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSlotFilter(null)}
+                  className="flex h-9 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/5 px-3 text-xs transition active:scale-95 hover:bg-foreground/10"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
             <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
               {Array.from({ length: 50 }).map((_, i) => {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
+                if (slotFilter && !(doc && doc.title.includes(slotFilter))) return null;
                 return (
                   <button
                     key={i}
