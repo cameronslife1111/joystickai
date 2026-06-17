@@ -32,7 +32,7 @@ type Sentence = { id: string; content: string; order_index: number; document_id:
 
 type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
 
-const EMOJI_FILTERS = ["🐝", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"] as const;
+const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"] as const;
 
 
 function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
