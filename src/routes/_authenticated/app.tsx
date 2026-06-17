@@ -102,6 +102,7 @@ function AppPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
+  const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [pinPickerOpen, setPinPickerOpen] = useState(false);
   const [pinPickerQuery, setPinPickerQuery] = useState("");
   const [pickerQuery, setPickerQuery] = useState("");
