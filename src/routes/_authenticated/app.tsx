@@ -1733,7 +1733,7 @@ function AppPage() {
       setMenuOpen(false);
       navigate({ to: "/media" });
     }, badge: unseenCount },
-    { e: "📤", t: "Export text", fn: () => {
+    { e: "💾", t: "Export text", fn: () => {
       setMenuOpen(false);
       void handleExportAll();
     }},
