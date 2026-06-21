@@ -136,6 +136,7 @@ function AppPage() {
   const [planApprovalOpen, setPlanApprovalOpen] = useState(false);
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
+  const [exportChooserOpen, setExportChooserOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">(() => {
