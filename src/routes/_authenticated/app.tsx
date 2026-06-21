@@ -1548,6 +1548,108 @@ function AppPage() {
 
   // openLinkedDocument is defined above (before onSwipeRight) so swipe-right can call it.
 
+  // Build the timestamp string shared by all export filenames.
+  const exportStamp = useCallback(() => {
+    const now = new Date();
+    const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    let h = now.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${months[now.getMonth()]}_${now.getDate()}_${h}${String(now.getMinutes()).padStart(2, "0")}${ampm}`;
+  }, []);
+
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  // Slugify a document title for use in a filename.
+  const slugTitle = useCallback((title: string) => {
+    const s = (title || "document").trim().replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+    return s || "document";
+  }, []);
+
+  // Fetch the active document's sentences (joined into one string).
+  const fetchActiveDocText = useCallback(async () => {
+    if (!activeDocId) return null;
+    let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
+    if (!list) {
+      const { data } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", activeDocId)
+        .order("order_index", { ascending: true });
+      list = data ?? [];
+    }
+    return list.map((s) => s.content);
+  }, [activeDocId, qc]);
+
+  const handleExportCurrentTxt = useCallback(async () => {
+    if (!activeDocId || !activeDoc) { toast.error("No document open"); return; }
+    try {
+      const lines = await fetchActiveDocText();
+      const text = (lines ?? []).join("\n").trim();
+      if (!text) { toast.error("Document is empty"); return; }
+      const blob = new Blob([`=== ${activeDoc.title} ===\n${text}\n`], { type: "text/plain;charset=utf-8" });
+      downloadBlob(blob, `${slugTitle(activeDoc.title)}_${exportStamp()}.txt`);
+      toast.success("Exported document");
+    } catch (e: any) {
+      toast.error(e?.message || "Export failed");
+    }
+  }, [activeDocId, activeDoc, fetchActiveDocText, downloadBlob, slugTitle, exportStamp]);
+
+  const handleExportCurrentPdf = useCallback(async () => {
+    if (!activeDocId || !activeDoc) { toast.error("No document open"); return; }
+    try {
+      const lines = await fetchActiveDocText();
+      const sentences = (lines ?? []).map((s) => s.trim()).filter(Boolean);
+      if (sentences.length === 0) { toast.error("Document is empty"); return; }
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const margin = 48;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const maxWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      const titleLines = doc.splitTextToSize(activeDoc.title, maxWidth);
+      for (const tl of titleLines) {
+        doc.text(tl, margin, y);
+        y += 24;
+      }
+      y += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      const lineHeight = 18;
+      for (const sentence of sentences) {
+        const wrapped = doc.splitTextToSize(sentence, maxWidth);
+        for (const wl of wrapped) {
+          if (y > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(wl, margin, y);
+          y += lineHeight;
+        }
+        y += 6;
+      }
+
+      doc.save(`${slugTitle(activeDoc.title)}_${exportStamp()}.pdf`);
+      toast.success("Exported PDF");
+    } catch (e: any) {
+      toast.error(e?.message || "Export failed");
+    }
+  }, [activeDocId, activeDoc, fetchActiveDocText, slugTitle, exportStamp]);
+
   const handleExportAll = useCallback(async () => {
     try {
       const { data: allDocs, error: dErr } = await supabase
