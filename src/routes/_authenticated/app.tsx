@@ -2974,6 +2974,38 @@ function AppPage() {
         </div>
       )}
 
+      <Dialog open={exportChooserOpen} onOpenChange={setExportChooserOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Export</DialogTitle>
+            <DialogDescription>Choose what you'd like to export.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => { setExportChooserOpen(false); void handleExportAll(); }}
+            >
+              📚 All documents (.txt)
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => { setExportChooserOpen(false); void handleExportCurrentTxt(); }}
+            >
+              📄 Current document (.txt)
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start"
+              onClick={() => { setExportChooserOpen(false); void handleExportCurrentPdf(); }}
+            >
+              🗎 Current document (.pdf)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </main>
   );
 }
