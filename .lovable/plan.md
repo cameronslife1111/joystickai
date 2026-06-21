@@ -1,18 +1,30 @@
-# Add circle filters to the "Send to" list picker
+# Export text → choose what to export
 
-## Goal
-When you press Orby → "Send to", the "Send to which list?" screen has a "Search lists…" box. Add the same colorful circle buttons used elsewhere so you can quickly narrow the lists. Tapping a circle drops that circle into the search box and filters the lists.
+Currently the "Export text" menu button (slot 17, 💾) immediately exports **all documents** as a single `.txt` file. We'll make it first ask what the user wants.
 
-## Change
-In `src/routes/_authenticated/app.tsx`, inside the `sendStage === "doc"` overlay (just above the existing `Search lists…` `Input` around line 2692), add a wrapping circle filter row:
+## New behavior
 
-- A `flex flex-wrap gap-1.5` row rendering the existing `EMOJI_FILTERS` array (`⚪️ ⚫️ 🟣 🔵 🔴 🟢 🟡 🟠 🟤`).
-- Each button calls `setSendSearchQuery(emoji)`, mirroring the existing pattern in `DocumentPickerSheet` / `LinkDocumentDialog` (same 9×9 rounded styling and `active:scale` behavior).
-- The existing filtering logic already matches `sendSearchQuery` against the list title, so the circle's emoji will filter results automatically (titles that contain that circle emoji), exactly like the other search areas.
+Tapping "Export text" opens a small chooser dialog with three options:
 
-No backend or business-logic changes — this is purely the send-to picker UI.
+1. **All documents (.txt)** — the current behavior (`handleExportAll`).
+2. **Current document (.txt)** — export only the active document as a text file.
+3. **Current document (.pdf)** — export only the active document as a PDF.
 
-## Verification
-- Press Orby → Send to → confirm a row of circles appears above the search box.
-- Tap a circle: it populates the search field and narrows the lists to titles containing that circle.
-- Clearing the search text restores the full list.
+If no document is open, options 2 and 3 show an error toast ("No document open").
+
+## Implementation (`src/routes/_authenticated/app.tsx`)
+
+- Add state `exportChooserOpen` and render an `AlertDialog`/`Dialog` with three buttons (matching the app's existing dialog styling).
+- Change the slot-17 button `fn` to open the chooser instead of calling `handleExportAll` directly.
+- Add `handleExportCurrentTxt`: pull the active document's sentences (reuse the same query pattern as "Copy document"), join them, and download as `<title>.txt` using the existing timestamped-filename + Blob/anchor download approach.
+- Add `handleExportCurrentPdf`: build a PDF from the active document's sentences and download `<title>.pdf`.
+- Each option closes the chooser after running.
+
+## PDF generation
+
+Add the `jspdf` package (no PDF library is currently installed). The PDF will contain the document title as a heading followed by each sentence, wrapped to the page width with automatic page breaks. Filename uses the document title plus the same timestamp format already used for exports.
+
+## Notes
+
+- Pure frontend/presentation change plus one client-side dependency; no backend or schema changes.
+- Reuses existing filename/timestamp logic for consistency.
