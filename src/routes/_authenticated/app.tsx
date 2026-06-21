@@ -1674,25 +1674,12 @@ function AppPage() {
       }
       const text = parts.join("\n");
       const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const now = new Date();
-      const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
-      let h = now.getHours();
-      const ampm = h >= 12 ? "PM" : "AM";
-      h = h % 12 || 12;
-      const stamp = `${months[now.getMonth()]}_${now.getDate()}_${h}${String(now.getMinutes()).padStart(2, "0")}${ampm}`;
-      a.href = url;
-      a.download = `orby_export_${stamp}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `orby_export_${exportStamp()}.txt`);
       toast.success(`Exported ${allDocs.length} document${allDocs.length === 1 ? "" : "s"}`);
     } catch (e: any) {
       toast.error(e?.message || "Export failed");
     }
-  }, []);
+  }, [downloadBlob, exportStamp]);
 
   // Menu actions
   const grid = useMemo(() => [
