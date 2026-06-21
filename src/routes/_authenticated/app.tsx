@@ -1825,7 +1825,7 @@ function AppPage() {
     }, badge: unseenCount },
     { e: "💾", t: "Export text", fn: () => {
       setMenuOpen(false);
-      void handleExportAll();
+      setExportChooserOpen(true);
     }},
     { e: "🔗", t: "Link to doc", fn: () => {
       if (!currentSentence) { toast.error("No sentence selected"); return; }
