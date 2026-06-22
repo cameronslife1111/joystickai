@@ -1778,6 +1778,9 @@ function AppPage() {
     { e: "↕️", t: "Move sentence", fn: () => {
       setMenuOpen(false);
       setMoveOpen(true);
+    }, onLongPress: () => {
+      setMenuOpen(false);
+      void moveSentence((sentences?.length ?? 1) - 1);
     }},
     { e: "🔍", t: "Search docs", fn: () => {
       setMenuOpen(false);
@@ -1865,7 +1868,7 @@ function AppPage() {
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash]);
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, sentences]);
 
 
 
@@ -1877,7 +1880,7 @@ function AppPage() {
     filled[2] = grid[5];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc
-    filled[5] = grid[10];  // 6  Move sentence
+    filled[5] = grid[23];  // 6  Swap slot
     filled[6] = grid[12];  // 7  Copy sentence
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
@@ -1895,7 +1898,7 @@ function AppPage() {
     filled[20] = grid[21]; // 21 AI Plans
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = grid[23]; // 24 Swap slot
+    filled[23] = grid[10]; // 24 Move sentence
 
 
     return filled;
