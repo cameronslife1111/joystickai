@@ -1,30 +1,29 @@
-# Export text → choose what to export
+# Move sentence ↔ Swap slot positions + long-press move-to-bottom
 
-Currently the "Export text" menu button (slot 17, 💾) immediately exports **all documents** as a single `.txt` file. We'll make it first ask what the user wants.
+All changes are in `src/routes/_authenticated/app.tsx` (frontend only).
 
-## New behavior
+## 1. Add long-press to the Move sentence button
+The "Move sentence" grid entry (currently `{ e: "↕️", t: "Move sentence", ... }`) gets an `onLongPress` handler. On long press/click (works on mobile and desktop via the existing `MenuGridButton` long-press logic), it closes the menu and runs the same "Move to bottom" action the dialog uses:
 
-Tapping "Export text" opens a small chooser dialog with three options:
+```text
+onLongPress: () => {
+  setMenuOpen(false);
+  void moveSentence((sentences?.length ?? 1) - 1);
+}
+```
 
-1. **All documents (.txt)** — the current behavior (`handleExportAll`).
-2. **Current document (.txt)** — export only the active document as a text file.
-3. **Current document (.pdf)** — export only the active document as a PDF.
+This mirrors exactly what happens when the user opens the Move sentence dialog and taps "⤓ Move to bottom" (`moveSentence(sentences.length - 1)`).
 
-If no document is open, options 2 and 3 show an error toast ("No document open").
+## 2. Swap the grid positions of slot 6 and slot 24
+In the `slots` arrangement `useMemo`:
+- `filled[5]` (slot 6) currently = `grid[10]` (Move sentence) → change to `grid[23]` (Swap slot)
+- `filled[23]` (slot 24) currently = `grid[23]` (Swap slot) → change to `grid[10]` (Move sentence)
 
-## Implementation (`src/routes/_authenticated/app.tsx`)
+Result: the ⚡️ Swap slot button lives in slot 6, and the ↕️ Move sentence button (with the new long-press move-to-bottom) lives in slot 24.
 
-- Add state `exportChooserOpen` and render an `AlertDialog`/`Dialog` with three buttons (matching the app's existing dialog styling).
-- Change the slot-17 button `fn` to open the chooser instead of calling `handleExportAll` directly.
-- Add `handleExportCurrentTxt`: pull the active document's sentences (reuse the same query pattern as "Copy document"), join them, and download as `<title>.txt` using the existing timestamped-filename + Blob/anchor download approach.
-- Add `handleExportCurrentPdf`: build a PDF from the active document's sentences and download `<title>.pdf`.
-- Each option closes the chooser after running.
-
-## PDF generation
-
-Add the `jspdf` package (no PDF library is currently installed). The PDF will contain the document title as a heading followed by each sentence, wrapped to the page width with automatic page breaks. Filename uses the document title plus the same timestamp format already used for exports.
+## 3. Dependency wiring
+The grid `useMemo` dependency array gets `moveSentence` and `sentences` added so the new `onLongPress` always references current sentence data.
 
 ## Notes
-
-- Pure frontend/presentation change plus one client-side dependency; no backend or schema changes.
-- Reuses existing filename/timestamp logic for consistency.
+- Both buttons keep their existing tap behavior; only their grid positions change and Move sentence gains a long-press action.
+- No backend, schema, or business-logic changes — `moveSentence` already exists.
