@@ -452,48 +452,14 @@ const TOOL_HANDLERS: Record<string, any> = {
 
 
   async find_media_by_title(args, { user_id, admin }) {
-    const raw = String(args.query ?? "").trim();
-    if (!raw) return [];
-    const STOP = new Set([
-      "the", "a", "an", "of", "to", "and", "or", "with", "for", "this", "that",
-      "these", "those", "my", "image", "images", "photo", "photos", "picture",
-      "pic", "pics", "reference", "ref", "video", "videos", "audio", "clip",
-    ]);
-    const tokens = raw
-      .toLowerCase()
-      .split(/[^a-z0-9]+/i)
-      .filter((t) => t && !STOP.has(t));
-    const searchTerms = tokens.length > 0 ? tokens : [raw.toLowerCase()];
-
-    // Build OR filter across title and generation_params->user_text for every token.
-    const orFilter = searchTerms
-      .flatMap((t) => [
-        `title.ilike.%${t}%`,
-        `generation_params->>user_text.ilike.%${t}%`,
-      ])
-      .join(",");
-
-    const { data } = await admin
-      .from("media_assets")
-      .select("id, title, kind, generation_params, created_at")
-      .eq("user_id", user_id)
-      .or(orFilter)
-      .order("created_at", { ascending: false })
-      .limit(25);
-
-    // Score by number of tokens matched (in title or source_text), break ties by recency.
-    const scored = (data ?? []).map((m: any) => {
-      const hay = `${String(m.title ?? "").toLowerCase()} ${String(m?.generation_params?.user_text ?? "").toLowerCase()}`;
-      const score = searchTerms.reduce((n, t) => (hay.includes(t) ? n + 1 : n), 0);
-      return { m, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 5).map(({ m }) => ({
-      id: m.id,
-      title: m.title,
-      kind: m.kind,
-      source_text: m?.generation_params?.user_text ?? null,
-    }));
+    const matches = await findMediaMatches(args, { user_id, admin });
+    return matches.slice(0, 5);
+  },
+  async find_all_media_by_title(args, { user_id, admin }) {
+    const rawLimit = Number(args.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 100;
+    const matches = await findMediaMatches(args, { user_id, admin });
+    return matches.slice(0, limit);
   },
   async expand_plan(args, { user_id, admin, baseIndex }: any) {
     const instruction = String(args.instruction ?? "").trim();
