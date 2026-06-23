@@ -414,8 +414,26 @@ Deno.serve(async (req) => {
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
     }
+    // MEDIA CATALOG — every media asset (id — kind — title — src), exactly like
+    // the DOCUMENT CATALOG. This is what lets the planner LOOSELY match images,
+    // videos, and audio by description ("the sunset image" → an asset titled
+    // "Golden hour over the bay") instead of being blind to the library. Framed
+    // as a lookup table ONLY so it does NOT reintroduce stale-media auto-reuse:
+    // the planner must not act on a catalog item the request doesn't reference.
+    const mediaCatalog = (allMedia ?? []).map((m: any) => {
+      const title = m.title ?? "";
+      const emoji = leadingEmoji(title);
+      const sc = extractShortcode(title);
+      const meta = [emoji ? `emoji=${emoji}` : null, sc ? `code=${sc.raw}` : null]
+        .filter(Boolean).join(", ");
+      const src = m?.generation_params?.user_text ?? null;
+      return `  ${m.id} — ${m.kind} — ${JSON.stringify(title)}${meta ? `  (${meta})` : ""}${src ? ` — src=${JSON.stringify(String(src).slice(0, 160))}` : ""}`;
+    });
+    if (mediaCatalog.length) {
+      userContext += `\n\nMEDIA CATALOG (id — kind — title — parsed emoji/code — src) — a LOOKUP TABLE ONLY for resolving images/videos/audio the request explicitly names or describes${totalMedia > mediaCatalog.length ? ` (showing ${mediaCatalog.length} of ${totalMedia} most-recent assets; if the item you need isn't here, call find_media_by_title / find_all_media_by_title)` : ""}. Match LOOSELY: never require an exact title — pick the closest id by keywords, emoji, or words from its src prompt. Do NOT act on an asset just because it appears here; if the request doesn't reference it, ignore it (this list is mostly leftover output from unrelated past plans):\n${mediaCatalog.join("\n")}`;
+    }
     if (mediaList.length) {
-      userContext += `\n\nMEDIA (existing assets that match THIS request; listed ONLY because the request appears to operate on existing media — reuse these ids only when the request explicitly references them${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+      userContext += `\n\nSTRONGLY-MATCHED MEDIA (assets this request appears to operate on directly — prefer these ids when the request references existing media${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
 
 
