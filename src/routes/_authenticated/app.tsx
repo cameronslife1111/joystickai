@@ -683,6 +683,25 @@ function AppPage() {
     setMoveOpen(false);
   }, [activeDocId, sentences, currentIdx, setIndex, qc, speak, claimSpeech]);
 
+  const moveCurrentToBottom = useCallback(async () => {
+    if (!activeDocId || !sentences || sentences.length === 0) return;
+    const from = currentIdx;
+    const to = sentences.length - 1;
+    if (from >= to) { setMoveOpen(false); return; }
+    const token = claimSpeech();
+    const { error } = await supabase.rpc("move_sentence", {
+      p_document_id: activeDocId,
+      p_from_index: from,
+      p_to_index: to,
+    });
+    if (error) { toast.error(error.message || "Failed to move"); return; }
+    // Stay at the same index: the next sentence shifts into this slot.
+    const next = sentences.find((s) => s.order_index === from + 1);
+    await qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    if (next) speak(next.content, token);
+    setMoveOpen(false);
+  }, [activeDocId, sentences, currentIdx, qc, speak, claimSpeech]);
+
   const advanceSentence = useCallback(async () => {
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
