@@ -1,34 +1,48 @@
-## Goal
+# Supercharge Orby's planning mode
 
-Fix two bugs with the long-press (move-to-bottom) action on the slot 24 ↕️ Move sentence button.
+## What's actually wrong
 
-## Bug 1 — iOS text selection / callout on long press
+I traced the full planning pipeline (`plan-compose` → planner LLM → `plan-step` executor, with the shared tool catalog and fuzzy-lookup helpers). The planner is weak for a few concrete, fixable reasons — not because the model is bad:
 
-On iPhone, holding the button triggers the native text-selection highlight (blue) and copy menu.
+### 1. The planner is BLIND to your media (the biggest problem)
+Documents get a complete **DOCUMENT CATALOG** — every title in your workspace is listed for the planner to read and loosely match against. Media (images, videos, audio) gets **none of that**. Media titles are only shown when *both* a "reuse intent" keyword regex fires (regenerate/remix/edit/animate/etc.) *and* a strict "strong match" passes. For most requests the planner sees **zero image/video titles**, so it literally cannot loosely match "the sunset image" to an asset called "Golden hour over the bay." This guard was added to stop old images resurfacing on scheduled runs, but it over-corrected and hid the whole library.
 
-Fix in `MenuGridButton` (`src/routes/_authenticated/app.tsx`, ~lines 60-93):
-- Add `select-none` to the button `className`.
-- Add inline style to suppress the iOS callout/selection: `WebkitTouchCallout: "none"`, `WebkitUserSelect: "none"`, `userSelect: "none"`.
-- Add `onContextMenu={(e) => e.preventDefault()}` to block the long-press context/callout menu.
+### 2. Media lookup is dumb compared to document lookup
+`find_document_by_title` uses tokenized, emoji-aware, shortcode-aware fuzzy scoring. `find_media_by_title` is a plain substring (`ilike`) match — no emoji synonyms, no shortcode awareness, no real fuzzy scoring, returns only 5. So even when the planner does call it, loose titles miss.
 
-This is presentation-only and applies to all menu buttons (harmless — they're action buttons, not selectable text).
+### 3. There's no "look through ALL the titles" media step
+Documents have `find_documents_by_title` (plural — enumerate every match for bulk work). Media has no equivalent, and there's no media catalog to enumerate from. You explicitly want "look through all the titles and pick the ones I mean" as a single plan, for docs **and** images/videos. Right now that's only possible for docs.
 
-## Bug 2 — view jumps to the moved sentence instead of advancing
+### 4. Remix guidance is thin
+`remix_images` is described mechanically (combine 2-16 images) but the planner gets no guidance on *when* to remix vs regenerate vs generate, or how to resolve the multiple image ids it needs first. Combined with problem #1 (no media visibility), it can't reliably pick the ids to remix.
 
-Currently the long press calls `moveSentence(length - 1)`, which runs `setIndex(to)` and speaks the moved sentence — so the view follows the sentence to the bottom.
+## The fix
 
-Desired: after sending the current sentence to the bottom, the view stays in place so the *next* sentence takes the current slot, becomes active, and is read aloud. Repeating creates an endless cycle.
+All changes are in the planner backend (the edge functions that build the plan). No UI changes.
 
-Fix: add a dedicated handler (e.g. `moveCurrentToBottom`) used only by the long press, leaving the Move dialog's `moveSentence` unchanged:
-- Capture `from = currentIdx`, `to = sentences.length - 1`; bail if already at/after bottom or list empty.
-- Call the same `move_sentence` RPC (`p_from_index: from`, `p_to_index: to`).
-- Do NOT call `setIndex(to)`. Keep the index at `from` (after the move, the sentence formerly at `from + 1` shifts into index `from`).
-- Invalidate the `["sentences", activeDocId]` query.
-- Speak the sentence now at the current index (the next one), using a fresh `claimSpeech()` token.
-- Close the menu/move dialog as appropriate.
+### A. Give the planner a full MEDIA CATALOG (mirrors the doc catalog)
+In `plan-compose`, always inject a **MEDIA CATALOG** listing every media asset as `id — kind — title — src` (capped generously, most-recent first), exactly like the DOCUMENT CATALOG. Frame it identically: a **lookup table only**, "do NOT act on an asset just because it appears here; only use it if THIS request references it." This restores loose title matching while keeping the anti-stale-media isolation rule (the planner is told not to act on catalog items the request doesn't name). Keep the existing separate "strongly matched MEDIA" inlined section for assets the request clearly points at.
 
-Then update the slot's `onLongPress` (~line 1781) to call `moveCurrentToBottom()` instead of `moveSentence(length - 1)`, and add `moveCurrentToBottom` to the grid `useMemo` dependency array.
+### B. Make media matching as smart as document matching
+Rewrite `find_media_by_title` (in `plan-step`) to use the shared `tokenizeRich` + `applyEmojiSynonyms` + shortcode-aware scoring helpers already used for documents, scoring across title **and** the original generation prompt, returning best-first with a higher cap. Same loose-matching quality docs already enjoy.
 
-## Scope
+### C. Add a "look through all media" enumeration tool
+Add `find_all_media_by_title` (plural, mirrors `find_documents_by_title`) to the tool catalog and `plan-step`: returns **every** matching image/video/audio (not just 5) so the planner can emit a single "scan all titles, pick the ones the user means" step and pipe the chosen ids into later steps. Update the planner prompt to prefer enumerating from the MEDIA CATALOG directly, and to use this tool when the set may exceed the catalog window.
 
-Frontend only in `src/routes/_authenticated/app.tsx`. No backend, schema, or business-logic changes. The Move dialog's existing "move to bottom" option keeps its current behavior.
+### D. Strengthen the planner's instructions for media + remix
+Add an explicit **MEDIA REFERENCE & REMIX** section to the `plan-compose` system prompt (and the `expand_plan` runtime prompt) covering:
+- Resolve image/video references loosely against the MEDIA CATALOG the same way as docs (don't demand exact titles; match on keywords, emoji, source-prompt text).
+- A clear decision guide: `generate_image` (new), `regenerate_image` (one source + change), `remix_images` (2-16 sources combined) — with how to resolve and template the source ids first.
+- Make the `expand_plan` snapshot reuse the same catalog framing so per-item loops can target the right media ids.
+
+### E. Tighten the loose-match guidance so "loosely match a title" is a first-class behavior
+Update the matching rules in the prompt to state plainly: for documents *and* media, never require an exact title; pick the single closest catalog id by common-sense semantic match; only fall back to a `find_*` tool when nothing in the catalog plausibly fits.
+
+## Technical details / files touched
+- `supabase/functions/plan-compose/index.ts` — add MEDIA CATALOG injection (parallel to DOCUMENT CATALOG); extend system prompt with the media-reference + remix decision guide and stronger loose-match rules; register the new tool name in validation/`REQUIRED_TARGET_ARGS` if needed.
+- `supabase/functions/_shared/tools.ts` — add `find_all_media_by_title` tool def; sharpen `find_media_by_title` / `remix_images` descriptions.
+- `supabase/functions/plan-step/index.ts` — rewrite `find_media_by_title` to use `tokenizeRich`/emoji/shortcode scoring; add `find_all_media_by_title` handler; broaden the `expand_plan` snapshot framing.
+- After changes: deploy the three edge functions and run a couple of test plans ("remix the X and Y images into …", "find all my sunset images and …") to confirm the planner resolves media loosely and remixes correctly.
+
+## Out of scope
+No changes to the slot grid, the editor UI, or document/sentence behavior — this is purely about making the planner resolve media and build correct steps.

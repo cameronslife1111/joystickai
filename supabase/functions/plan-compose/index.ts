@@ -76,6 +76,17 @@ EMOJI / SHORTCODE / PARTIAL-TITLE SELECTION — the DOCUMENT CATALOG shows each 
 - READ-THEN-DO: when a step says to read context/rules/instructions documents and then act on them, emit a read_document step for each such doc (using its catalog id) and pipe their text into the later step via {{step_N.result.text}}. Do this whenever the doc's full text is not already inlined under REFERENCED DOCUMENTS.
 - RUNTIME LOOPS ("for EACH shot/idea/item"): when the number of items is only knowable after reading a document at runtime, DO NOT guess a fixed count. Instead read the source doc first, then emit ONE expand_plan step whose context pipes that doc's text ({{step_N.result.text}}) and whose instruction says exactly what to do per item (which tool, prompt, target/reference ids, and naming). expand_plan generates and runs the per-item steps at runtime.
 
+MEDIA REFERENCE & REMIX — resolving images, videos, and audio is just as important as resolving documents. Follow these rules exactly:
+- LOOSE TITLE MATCHING (for media AND documents): the user NEVER says the exact title. "the sunset image" should resolve to an asset titled "Golden hour over the bay"; "the dog video" to a clip whose src prompt mentions a dog; "the red circle photo" to a title starting with 🔴. Scan the MEDIA CATALOG / DOCUMENT CATALOG and pick the single closest id yourself using common-sense semantic matching across the title, the parsed emoji/code, AND the src prompt text. Do NOT demand an exact match and do NOT echo the user's loose phrasing into a find_* call when a plausible candidate is already in the catalog.
+- "LOOK THROUGH ALL MY TITLES" IS A REAL STEP: when the user asks you to look through everything and pick the matching items (e.g. "find all my sunset images", "every portrait video", "the docs about X"), enumerate the matches DIRECTLY from the MEDIA CATALOG / ALL DOCUMENTS list in the WORKSPACE SNAPSHOT — match loosely (keywords/emoji/substring/topic) and include EVERY asset that fits. If the matching set may be larger than what the snapshot shows, emit a single find_all_media_by_title (for media) or find_documents_by_title (for docs) step and pipe the returned ids into later steps via {{step_N.result[i].id}}.
+- find_media_by_title returns the 5 best fuzzy matches (best first) for a SINGLE target; find_all_media_by_title returns EVERY fuzzy match for bulk/"all matching" work. Both tolerate loose wording — prefer the catalog when the asset is already visible there.
+- IMAGE TOOL DECISION GUIDE — pick the right tool, never guess:
+  - generate_image: a brand-NEW image from scratch, no existing source. Use when the user wants something created fresh.
+  - regenerate_image: ONE existing image + a change ("make a version of X but at night"). Requires source_media_id resolved to a real image id.
+  - remix_images: COMBINE 2-16 existing images into one ("blend the cat image and the castle image", "put the character from A into scene B"). You MUST resolve EVERY source id first (from the MEDIA CATALOG or via find_media_by_title / find_all_media_by_title) and pass them as a JSON array in source_media_ids, e.g. ["{{step_0.result[0].id}}","{{step_1.result[0].id}}"] or concrete ids. Never call remix_images with fewer than 2 sources, and never invent ids.
+  - Resolve the source ids in EARLIER steps (or inline concrete catalog ids), then template them into the media step. A remix/regenerate step whose source ids aren't resolved will fail.
+
+
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
 - NEW-DOC → FILL pattern: when you create a document and then add content to it, EVERY following add_sentence MUST set document_id: "{{step_N.result.id}}" pointing at the create_document step. Do not assume "the document we just made" — wire the id through the template every single time.
@@ -322,7 +333,7 @@ Deno.serve(async (req) => {
     // most plausible candidates surface first in the snapshot.
     const { data: allMedia } = await admin
       .from("media_assets").select("id, title, kind, generation_params, created_at")
-      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(200);
+      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(2000);
     const mediaScored = (allMedia ?? []).map((m: any) => {
       const src = String(m?.generation_params?.user_text ?? "");
       const score = scoreText(`${String(m.title ?? "")} ${src}`);
@@ -414,8 +425,26 @@ Deno.serve(async (req) => {
     if (inlinedDocSections.length) {
       userContext += `\n\nREFERENCED DOCUMENTS (full contents inlined — use these ids and content directly, do NOT call find_document_by_title or find_sentence_by_content for them):\n${inlinedDocSections.join("\n\n")}`;
     }
+    // MEDIA CATALOG — every media asset (id — kind — title — src), exactly like
+    // the DOCUMENT CATALOG. This is what lets the planner LOOSELY match images,
+    // videos, and audio by description ("the sunset image" → an asset titled
+    // "Golden hour over the bay") instead of being blind to the library. Framed
+    // as a lookup table ONLY so it does NOT reintroduce stale-media auto-reuse:
+    // the planner must not act on a catalog item the request doesn't reference.
+    const mediaCatalog = (allMedia ?? []).map((m: any) => {
+      const title = m.title ?? "";
+      const emoji = leadingEmoji(title);
+      const sc = extractShortcode(title);
+      const meta = [emoji ? `emoji=${emoji}` : null, sc ? `code=${sc.raw}` : null]
+        .filter(Boolean).join(", ");
+      const src = m?.generation_params?.user_text ?? null;
+      return `  ${m.id} — ${m.kind} — ${JSON.stringify(title)}${meta ? `  (${meta})` : ""}${src ? ` — src=${JSON.stringify(String(src).slice(0, 160))}` : ""}`;
+    });
+    if (mediaCatalog.length) {
+      userContext += `\n\nMEDIA CATALOG (id — kind — title — parsed emoji/code — src) — a LOOKUP TABLE ONLY for resolving images/videos/audio the request explicitly names or describes${totalMedia > mediaCatalog.length ? ` (showing ${mediaCatalog.length} of ${totalMedia} most-recent assets; if the item you need isn't here, call find_media_by_title / find_all_media_by_title)` : ""}. Match LOOSELY: never require an exact title — pick the closest id by keywords, emoji, or words from its src prompt. Do NOT act on an asset just because it appears here; if the request doesn't reference it, ignore it (this list is mostly leftover output from unrelated past plans):\n${mediaCatalog.join("\n")}`;
+    }
     if (mediaList.length) {
-      userContext += `\n\nMEDIA (existing assets that match THIS request; listed ONLY because the request appears to operate on existing media — reuse these ids only when the request explicitly references them${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
+      userContext += `\n\nSTRONGLY-MATCHED MEDIA (assets this request appears to operate on directly — prefer these ids when the request references existing media${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
 
 

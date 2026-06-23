@@ -45,11 +45,24 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_media_by_title",
     description:
-      "Find media assets (images, videos, audio) whose TITLE or original generation prompt contains the query (case-insensitive substring). " +
-      "Returns up to 5 results, each with id, title, kind, and source_text (the original prompt if the asset was AI-generated, otherwise null). " +
-      "Use this whenever the user refers to media by description — even if they don't know the exact title (e.g. 'the cat image' will match an asset generated from a prompt containing 'cat').",
+      "Find a SINGLE media asset (image, video, or audio) by rough description. Tokenized, emoji-aware, and shortcode-aware FUZZY scoring across the title AND the original generation prompt — tolerates loose/approximate wording and NEVER requires the exact title (e.g. 'the cat image' matches an asset titled 'Whiskers on the couch' or generated from a prompt containing 'cat'; 'the red circle video' matches a title starting with 🔴). " +
+      "Returns up to 5 results, best match first, each with id, title, kind, and source_text (the original prompt if AI-generated, otherwise null). " +
+      "PREFER picking the id directly from the MEDIA CATALOG in the WORKSPACE SNAPSHOT over calling this tool. For acting on EVERY media asset matching a description, use find_all_media_by_title instead.",
     args: {
-      query: { type: "string", description: "Search text", required: true },
+      query: { type: "string", description: "Rough description of the media — title fragments, keywords, topic, emoji, or words from its original prompt", required: true },
+      kind: { type: "string", description: "Optional filter: 'image' | 'video' | 'audio'", required: false },
+    },
+  },
+  {
+    name: "find_all_media_by_title",
+    description:
+      "Find ALL media assets (images, videos, audio) matching a rough description. Unlike find_media_by_title (which returns only the 5 best matches), this returns EVERY fuzzy match, best match first — use it to 'look through all my titles and pick the ones I mean' or for bulk operations (e.g. 'remix all my sunset images', 'animate every portrait'). " +
+      "Returns an array of { id, title, kind, source_text }. Same emoji/shortcode-aware fuzzy scoring as find_media_by_title. " +
+      "PREFER enumerating matches directly from the MEDIA CATALOG in the WORKSPACE SNAPSHOT when the assets are visible there; only call this when the matching set may exceed what the snapshot shows.",
+    args: {
+      query: { type: "string", description: "Title fragment, keywords, topic, or emoji shared by the media to enumerate", required: true },
+      kind: { type: "string", description: "Optional filter: 'image' | 'video' | 'audio'", required: false },
+      limit: { type: "number", description: "Optional max number of results (default 100)", required: false },
     },
   },
   {
@@ -187,12 +200,13 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "remix_images",
     description:
-      "Create a NEW image by combining 2-16 existing images with a prompt describing how to combine them. " +
-      "source_media_ids is an array of image asset UUIDs (length 2-16). The new image is saved as a separate asset. " +
+      "Create a NEW image by COMBINING 2-16 existing images together, guided by a prompt describing how to merge them (e.g. 'put the character from image 1 into the background of image 2', 'blend these product shots into one collage'). " +
+      "Use remix_images ONLY when the result must draw from MULTIPLE existing source images. For a single source image, use regenerate_image. For a brand-new image from scratch (no source), use generate_image. " +
+      "source_media_ids is an array of 2-16 image asset UUIDs — you MUST resolve every source id first (pick them from the MEDIA CATALOG, or via find_media_by_title / find_all_media_by_title, then template them in, e.g. [\"{{step_0.result[0].id}}\", \"{{step_1.result[0].id}}\"]). The new image is saved as a separate asset; sources are untouched. " +
       "Optional overrides: image_size (one of 'portrait_16_9', 'portrait_4_3', 'square_hd', 'landscape_4_3', 'landscape_16_9'; default 'portrait_16_9' — do NOT pass 'auto', fal rejects it with multiple input images), quality, output_format.",
     args: {
-      source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs", required: true },
-      prompt: { type: "string", description: "How to combine them", required: true },
+      source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs (concrete ids from the MEDIA CATALOG or {{step_N.result[...].id}} templates)", required: true },
+      prompt: { type: "string", description: "How to combine the source images", required: true },
       image_size: { type: "string", description: "Optional aspect preset: portrait_16_9 | portrait_4_3 | square_hd | landscape_4_3 | landscape_16_9", required: false },
       quality: { type: "string", description: "Optional quality", required: false },
       output_format: { type: "string", description: "Optional output format", required: false },

@@ -158,6 +158,7 @@ Rules:
 - Every mutating/media step MUST carry its full target id in its own args — a concrete id from the snapshot, or a {{step_N.result.id}} template pointing at an EARLIER step.
 - ABSOLUTE INDEXING: your first generated step will be inserted at index {{BASE_INDEX}}. So reference your own generated steps by their absolute index: the first is step {{BASE_INDEX}}, the next is {{BASE_INDEX_PLUS_1}}, and so on. You may also reference any already-completed earlier step by its absolute index if its result id is given to you.
 - Image prompts must never exceed 3000 characters. Generate media one item at a time (one step per image).
+- MEDIA MATCHING: resolve images/videos/audio LOOSELY against the MEDIA CATALOG — never require an exact title; pick the closest id by keywords, emoji, or words from its src prompt. Image tool choice: generate_image (new, no source), regenerate_image (one source + change), remix_images (combine 2-16 existing sources — resolve every source id first and pass them as a JSON array in source_media_ids). Never remix with fewer than 2 sources and never invent ids.
 - Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
 
 
@@ -307,6 +308,59 @@ function capEditPrompt(prompt: string): string {
   return prompt.slice(0, MAX_EDIT_PROMPT_CHARS - 20).trimEnd() + " …[truncated]";
 }
 
+// Shared fuzzy media lookup used by find_media_by_title (top 5) and
+// find_all_media_by_title (enumerate all). Mirrors the document lookup:
+// emoji- and shortcode-aware token scoring across the title AND the original
+// generation prompt, best match first.
+async function findMediaMatches(
+  args: any,
+  { user_id, admin }: { user_id: string; admin: any },
+): Promise<Array<{ id: string; title: string; kind: string; source_text: string | null }>> {
+  const query = String(args.query ?? "").trim();
+  if (!query) return [];
+  const kindFilter = ["image", "video", "audio"].includes(String(args.kind))
+    ? String(args.kind)
+    : null;
+  const qTokens = tokenize(query);
+
+  // Pull a generous working set: token-OR ilike across title + source prompt,
+  // falling back to recent media so we always have candidates to rank.
+  const baseSelect = "id, title, kind, generation_params, created_at";
+  const runQuery = async (useOr: boolean) => {
+    let q = admin.from("media_assets").select(baseSelect).eq("user_id", user_id);
+    if (kindFilter) q = q.eq("kind", kindFilter);
+    if (useOr && qTokens.length > 0) {
+      const orFilter = qTokens
+        .flatMap((t) => [`title.ilike.%${t}%`, `generation_params->>user_text.ilike.%${t}%`])
+        .join(",");
+      q = q.or(orFilter);
+    }
+    const { data } = await q.order("created_at", { ascending: false }).limit(2000);
+    return (data ?? []) as any[];
+  };
+
+  let rows = qTokens.length > 0 ? await runQuery(true) : [];
+  if (rows.length === 0) rows = await runQuery(false);
+  if (rows.length === 0) return [];
+
+  const scored = rows
+    .map((m: any) => {
+      const hay = `${String(m.title ?? "")} ${String(m?.generation_params?.user_text ?? "")}`;
+      return { m, score: scoreCandidate(hay, query, qTokens) };
+    })
+    .filter(({ score }) => score > 0);
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return String(b.m.created_at ?? "").localeCompare(String(a.m.created_at ?? ""));
+  });
+  return scored.map(({ m }) => ({
+    id: m.id,
+    title: m.title,
+    kind: m.kind,
+    source_text: m?.generation_params?.user_text ?? null,
+  }));
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
@@ -452,48 +506,14 @@ const TOOL_HANDLERS: Record<string, any> = {
 
 
   async find_media_by_title(args, { user_id, admin }) {
-    const raw = String(args.query ?? "").trim();
-    if (!raw) return [];
-    const STOP = new Set([
-      "the", "a", "an", "of", "to", "and", "or", "with", "for", "this", "that",
-      "these", "those", "my", "image", "images", "photo", "photos", "picture",
-      "pic", "pics", "reference", "ref", "video", "videos", "audio", "clip",
-    ]);
-    const tokens = raw
-      .toLowerCase()
-      .split(/[^a-z0-9]+/i)
-      .filter((t) => t && !STOP.has(t));
-    const searchTerms = tokens.length > 0 ? tokens : [raw.toLowerCase()];
-
-    // Build OR filter across title and generation_params->user_text for every token.
-    const orFilter = searchTerms
-      .flatMap((t) => [
-        `title.ilike.%${t}%`,
-        `generation_params->>user_text.ilike.%${t}%`,
-      ])
-      .join(",");
-
-    const { data } = await admin
-      .from("media_assets")
-      .select("id, title, kind, generation_params, created_at")
-      .eq("user_id", user_id)
-      .or(orFilter)
-      .order("created_at", { ascending: false })
-      .limit(25);
-
-    // Score by number of tokens matched (in title or source_text), break ties by recency.
-    const scored = (data ?? []).map((m: any) => {
-      const hay = `${String(m.title ?? "").toLowerCase()} ${String(m?.generation_params?.user_text ?? "").toLowerCase()}`;
-      const score = searchTerms.reduce((n, t) => (hay.includes(t) ? n + 1 : n), 0);
-      return { m, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 5).map(({ m }) => ({
-      id: m.id,
-      title: m.title,
-      kind: m.kind,
-      source_text: m?.generation_params?.user_text ?? null,
-    }));
+    const matches = await findMediaMatches(args, { user_id, admin });
+    return matches.slice(0, 5);
+  },
+  async find_all_media_by_title(args, { user_id, admin }) {
+    const rawLimit = Number(args.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 100;
+    const matches = await findMediaMatches(args, { user_id, admin });
+    return matches.slice(0, limit);
   },
   async expand_plan(args, { user_id, admin, baseIndex }: any) {
     const instruction = String(args.instruction ?? "").trim();
