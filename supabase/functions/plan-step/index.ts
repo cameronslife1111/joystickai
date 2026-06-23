@@ -158,6 +158,7 @@ Rules:
 - Every mutating/media step MUST carry its full target id in its own args — a concrete id from the snapshot, or a {{step_N.result.id}} template pointing at an EARLIER step.
 - ABSOLUTE INDEXING: your first generated step will be inserted at index {{BASE_INDEX}}. So reference your own generated steps by their absolute index: the first is step {{BASE_INDEX}}, the next is {{BASE_INDEX_PLUS_1}}, and so on. You may also reference any already-completed earlier step by its absolute index if its result id is given to you.
 - Image prompts must never exceed 3000 characters. Generate media one item at a time (one step per image).
+- MEDIA MATCHING: resolve images/videos/audio LOOSELY against the MEDIA CATALOG — never require an exact title; pick the closest id by keywords, emoji, or words from its src prompt. Image tool choice: generate_image (new, no source), regenerate_image (one source + change), remix_images (combine 2-16 existing sources — resolve every source id first and pass them as a JSON array in source_media_ids). Never remix with fewer than 2 sources and never invent ids.
 - Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
 
 
