@@ -200,12 +200,13 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "remix_images",
     description:
-      "Create a NEW image by combining 2-16 existing images with a prompt describing how to combine them. " +
-      "source_media_ids is an array of image asset UUIDs (length 2-16). The new image is saved as a separate asset. " +
+      "Create a NEW image by COMBINING 2-16 existing images together, guided by a prompt describing how to merge them (e.g. 'put the character from image 1 into the background of image 2', 'blend these product shots into one collage'). " +
+      "Use remix_images ONLY when the result must draw from MULTIPLE existing source images. For a single source image, use regenerate_image. For a brand-new image from scratch (no source), use generate_image. " +
+      "source_media_ids is an array of 2-16 image asset UUIDs — you MUST resolve every source id first (pick them from the MEDIA CATALOG, or via find_media_by_title / find_all_media_by_title, then template them in, e.g. [\"{{step_0.result[0].id}}\", \"{{step_1.result[0].id}}\"]). The new image is saved as a separate asset; sources are untouched. " +
       "Optional overrides: image_size (one of 'portrait_16_9', 'portrait_4_3', 'square_hd', 'landscape_4_3', 'landscape_16_9'; default 'portrait_16_9' — do NOT pass 'auto', fal rejects it with multiple input images), quality, output_format.",
     args: {
-      source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs", required: true },
-      prompt: { type: "string", description: "How to combine them", required: true },
+      source_media_ids: { type: "string", description: "JSON array of 2-16 image asset UUIDs (concrete ids from the MEDIA CATALOG or {{step_N.result[...].id}} templates)", required: true },
+      prompt: { type: "string", description: "How to combine the source images", required: true },
       image_size: { type: "string", description: "Optional aspect preset: portrait_16_9 | portrait_4_3 | square_hd | landscape_4_3 | landscape_16_9", required: false },
       quality: { type: "string", description: "Optional quality", required: false },
       output_format: { type: "string", description: "Optional output format", required: false },
