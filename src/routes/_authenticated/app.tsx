@@ -70,8 +70,10 @@ function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
       onPointerUp={clearTimer}
       onPointerLeave={clearTimer}
       onPointerCancel={clearTimer}
+      onContextMenu={(e) => e.preventDefault()}
       disabled={!slot}
-      className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
+      style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+      className="relative h-20 select-none rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
     >
       <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
         {index + 1}
@@ -680,6 +682,25 @@ function AppPage() {
     if (moved) speak(moved.content, token);
     setMoveOpen(false);
   }, [activeDocId, sentences, currentIdx, setIndex, qc, speak, claimSpeech]);
+
+  const moveCurrentToBottom = useCallback(async () => {
+    if (!activeDocId || !sentences || sentences.length === 0) return;
+    const from = currentIdx;
+    const to = sentences.length - 1;
+    if (from >= to) { setMoveOpen(false); return; }
+    const token = claimSpeech();
+    const { error } = await supabase.rpc("move_sentence", {
+      p_document_id: activeDocId,
+      p_from_index: from,
+      p_to_index: to,
+    });
+    if (error) { toast.error(error.message || "Failed to move"); return; }
+    // Stay at the same index: the next sentence shifts into this slot.
+    const next = sentences.find((s) => s.order_index === from + 1);
+    await qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    if (next) speak(next.content, token);
+    setMoveOpen(false);
+  }, [activeDocId, sentences, currentIdx, qc, speak, claimSpeech]);
 
   const advanceSentence = useCallback(async () => {
     if (!activeDoc || !sentences) return;
@@ -1780,7 +1801,7 @@ function AppPage() {
       setMoveOpen(true);
     }, onLongPress: () => {
       setMenuOpen(false);
-      void moveSentence((sentences?.length ?? 1) - 1);
+      void moveCurrentToBottom();
     }},
     { e: "🔍", t: "Search docs", fn: () => {
       setMenuOpen(false);
@@ -1868,7 +1889,7 @@ function AppPage() {
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, sentences]);
+  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences]);
 
 
 
