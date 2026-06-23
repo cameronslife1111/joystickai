@@ -70,8 +70,10 @@ function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
       onPointerUp={clearTimer}
       onPointerLeave={clearTimer}
       onPointerCancel={clearTimer}
+      onContextMenu={(e) => e.preventDefault()}
       disabled={!slot}
-      className="relative h-20 rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
+      style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
+      className="relative h-20 select-none rounded-2xl border border-foreground/10 bg-foreground/5 p-1.5 text-center transition active:scale-95 disabled:opacity-30"
     >
       <span className="absolute left-1.5 top-0.5 text-[9px] text-muted-foreground">
         {index + 1}
