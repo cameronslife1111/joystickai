@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
     // most plausible candidates surface first in the snapshot.
     const { data: allMedia } = await admin
       .from("media_assets").select("id, title, kind, generation_params, created_at")
-      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(200);
+      .eq("user_id", user.id).order("created_at", { ascending: false }).limit(2000);
     const mediaScored = (allMedia ?? []).map((m: any) => {
       const src = String(m?.generation_params?.user_text ?? "");
       const score = scoreText(`${String(m.title ?? "")} ${src}`);
