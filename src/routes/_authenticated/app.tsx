@@ -1801,7 +1801,7 @@ function AppPage() {
       setMoveOpen(true);
     }, onLongPress: () => {
       setMenuOpen(false);
-      void moveSentence((sentences?.length ?? 1) - 1);
+      void moveCurrentToBottom();
     }},
     { e: "🔍", t: "Search docs", fn: () => {
       setMenuOpen(false);
