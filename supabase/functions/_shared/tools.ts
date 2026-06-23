@@ -45,11 +45,24 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "find_media_by_title",
     description:
-      "Find media assets (images, videos, audio) whose TITLE or original generation prompt contains the query (case-insensitive substring). " +
-      "Returns up to 5 results, each with id, title, kind, and source_text (the original prompt if the asset was AI-generated, otherwise null). " +
-      "Use this whenever the user refers to media by description — even if they don't know the exact title (e.g. 'the cat image' will match an asset generated from a prompt containing 'cat').",
+      "Find a SINGLE media asset (image, video, or audio) by rough description. Tokenized, emoji-aware, and shortcode-aware FUZZY scoring across the title AND the original generation prompt — tolerates loose/approximate wording and NEVER requires the exact title (e.g. 'the cat image' matches an asset titled 'Whiskers on the couch' or generated from a prompt containing 'cat'; 'the red circle video' matches a title starting with 🔴). " +
+      "Returns up to 5 results, best match first, each with id, title, kind, and source_text (the original prompt if AI-generated, otherwise null). " +
+      "PREFER picking the id directly from the MEDIA CATALOG in the WORKSPACE SNAPSHOT over calling this tool. For acting on EVERY media asset matching a description, use find_all_media_by_title instead.",
     args: {
-      query: { type: "string", description: "Search text", required: true },
+      query: { type: "string", description: "Rough description of the media — title fragments, keywords, topic, emoji, or words from its original prompt", required: true },
+      kind: { type: "string", description: "Optional filter: 'image' | 'video' | 'audio'", required: false },
+    },
+  },
+  {
+    name: "find_all_media_by_title",
+    description:
+      "Find ALL media assets (images, videos, audio) matching a rough description. Unlike find_media_by_title (which returns only the 5 best matches), this returns EVERY fuzzy match, best match first — use it to 'look through all my titles and pick the ones I mean' or for bulk operations (e.g. 'remix all my sunset images', 'animate every portrait'). " +
+      "Returns an array of { id, title, kind, source_text }. Same emoji/shortcode-aware fuzzy scoring as find_media_by_title. " +
+      "PREFER enumerating matches directly from the MEDIA CATALOG in the WORKSPACE SNAPSHOT when the assets are visible there; only call this when the matching set may exceed what the snapshot shows.",
+    args: {
+      query: { type: "string", description: "Title fragment, keywords, topic, or emoji shared by the media to enumerate", required: true },
+      kind: { type: "string", description: "Optional filter: 'image' | 'video' | 'audio'", required: false },
+      limit: { type: "number", description: "Optional max number of results (default 100)", required: false },
     },
   },
   {
