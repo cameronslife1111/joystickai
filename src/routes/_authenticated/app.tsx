@@ -280,6 +280,7 @@ function AppPage() {
   const { data: sentences } = useQuery({
     queryKey: ["sentences", activeDocId],
     enabled: !!activeDocId,
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<Sentence[]> => {
       const { data, error } = await supabase
         .from("sentences").select("*")
