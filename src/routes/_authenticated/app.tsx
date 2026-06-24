@@ -243,6 +243,7 @@ function AppPage() {
   // Load docs
   const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
     queryKey: ["documents"],
+    refetchOnWindowFocus: false,
     queryFn: async (): Promise<Doc[]> => {
       const { data, error } = await supabase
         .from("documents").select("*").order("position", { ascending: true });

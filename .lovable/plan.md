@@ -1,26 +1,29 @@
-The user wants to swap the positions of two buttons in the 4×6 menu grid:
+## What's happening
 
-- **Slot 6** currently holds the "Swap slot" button (⚡️). Move the "Move sentence" button (↕️) here instead, keeping its long-press behavior intact.
-- **Slot 24** currently holds the "Move sentence" button (↕️). Move the "Swap slot" button (⚡️) here instead.
+The current sentence position (`current_sentence_index`) is stored in the React Query cache for the `documents` query in `src/routes/_authenticated/app.tsx`. When you swipe, the code optimistically updates that cache and writes the new index to the database.
 
-### Technical details
-The mapping lives in `src/routes/_authenticated/app.tsx` inside the `slots` `useMemo` (~line 1897). The grid source items are in a `grid` array (~line 1789).  
-- `grid[10]` is the Move sentence button (includes the `onLongPress` handler that calls `moveCurrentToBottom`).  
-- `grid[23]` is the Swap slot button.
+React Query's default `refetchOnWindowFocus` is **on**. When you leave Orby and come back, the browser fires a "focus" event that triggers an automatic background refetch of the `documents` query. If you swipe in that same instant:
 
-Currently:
-```
-filled[5]  = grid[23];  // slot 6  → Swap slot
-filled[23] = grid[10];  // slot 24 → Move sentence
-```
+1. Your swipe optimistically sets the new index and saves it.
+2. The focus-triggered refetch (started a moment earlier) finishes and **overwrites the cache with the older server value** — so the screen snaps back to the previous sentence.
+3. The speech still reads the sentence you swiped to, which is why it sounds half-working before settling.
 
-Change to:
-```
-filled[5]  = grid[10];  // slot 6  → Move sentence (long-press preserved)
-filled[23] = grid[23];  // slot 24 → Swap slot
-```
+This is a classic refetch-on-focus race condition. It only shows up right after returning to the app because that's the only time a focus refetch is in flight.
 
-No other code needs to change; the long-press handler is attached to the `grid[10]` object, so it travels with the button when it is assigned to slot 6.
+## The fix
 
-### Files changed
-- `src/routes/_authenticated/app.tsx` — two lines in the `slots` useMemo mapping.
+Disable `refetchOnWindowFocus` for the two queries that drive the visible sentence, so returning to the app never kicks off a background refetch that can clobber an in-flight swipe:
+
+- The `documents` query (`~line 244`) — holds `current_sentence_index`.
+- The `sentences` query (`~line 279`) — holds the sentence list.
+
+Add `refetchOnWindowFocus: false` to each.
+
+### Why this is safe for save/load
+
+- The in-memory cache already holds the latest values while the app stays mounted (leaving to another app does not unmount Orby), so nothing is lost by skipping the focus refetch.
+- Saving still works exactly as before: every swipe/move still writes to the database and updates the cache optimistically.
+- Loading still works: on a genuine fresh load/mount the queries fetch normally, and `refetchOnReconnect` (for network drops) stays enabled.
+
+### File changed
+- `src/routes/_authenticated/app.tsx` — add `refetchOnWindowFocus: false` to the `documents` and `sentences` `useQuery` configs.
