@@ -1919,7 +1919,7 @@ function AppPage() {
     filled[20] = grid[21]; // 21 AI Plans
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = grid[10]; // 24 Move sentence
+    filled[23] = grid[23]; // 24 Swap slot
 
 
     return filled;
