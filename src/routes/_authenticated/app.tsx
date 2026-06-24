@@ -1901,7 +1901,7 @@ function AppPage() {
     filled[2] = grid[5];   // 3  New doc
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc
-    filled[5] = grid[23];  // 6  Swap slot
+    filled[5] = grid[10];  // 6  Move sentence (long-press preserved)
     filled[6] = grid[12];  // 7  Copy sentence
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
