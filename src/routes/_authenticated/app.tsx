@@ -1890,14 +1890,7 @@ function AppPage() {
     {
       e: lockFavorites ? "⛔️" : "🔓",
       t: lockFavorites ? "List locked" : "List unlocked",
-      fn: () => {
-        const next = !lockFavorites;
-        setMenuOpen(false);
-        void saveLockFavorites(next);
-        // Remember which list is being locked so a reload returns to it.
-        void saveLockedDoc(next ? activeDocId : null);
-        toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
-      },
+      fn: () => toggleListLock(true),
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
