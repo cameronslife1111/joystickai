@@ -2188,12 +2188,9 @@ function AppPage() {
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
             type="button"
-            onClick={() => {
-              const text = currentSentence?.content;
-              if (text) speak(text, claimSpeech());
-            }}
+            onClick={() => toggleListLock(false)}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Repeat sentence"
+            aria-label="Toggle list lock"
           />
           <button
             type="button"
