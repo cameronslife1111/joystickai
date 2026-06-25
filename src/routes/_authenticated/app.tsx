@@ -1707,6 +1707,17 @@ function AppPage() {
     }
   }, [downloadBlob, exportStamp]);
 
+  // Toggle list-cycling lock on/off (shared by the menu button and the
+  // left invisible button flanking the orb).
+  const toggleListLock = useCallback((closeMenu: boolean) => {
+    const next = !lockFavorites;
+    if (closeMenu) setMenuOpen(false);
+    void saveLockFavorites(next);
+    // Remember which list is being locked so a reload returns to it.
+    void saveLockedDoc(next ? activeDocId : null);
+    toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
+  }, [lockFavorites, saveLockFavorites, saveLockedDoc, activeDocId]);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
