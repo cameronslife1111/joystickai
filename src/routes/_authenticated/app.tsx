@@ -1707,6 +1707,17 @@ function AppPage() {
     }
   }, [downloadBlob, exportStamp]);
 
+  // Toggle list-cycling lock on/off (shared by the menu button and the
+  // left invisible button flanking the orb).
+  const toggleListLock = useCallback((closeMenu: boolean) => {
+    const next = !lockFavorites;
+    if (closeMenu) setMenuOpen(false);
+    void saveLockFavorites(next);
+    // Remember which list is being locked so a reload returns to it.
+    void saveLockedDoc(next ? activeDocId : null);
+    toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
+  }, [lockFavorites, saveLockFavorites, saveLockedDoc, activeDocId]);
+
   // Menu actions
   const grid = useMemo(() => [
     { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
@@ -1879,14 +1890,7 @@ function AppPage() {
     {
       e: lockFavorites ? "⛔️" : "🔓",
       t: lockFavorites ? "List locked" : "List unlocked",
-      fn: () => {
-        const next = !lockFavorites;
-        setMenuOpen(false);
-        void saveLockFavorites(next);
-        // Remember which list is being locked so a reload returns to it.
-        void saveLockedDoc(next ? activeDocId : null);
-        toast.success(next ? "Swipe-right list cycling locked" : "Swipe-right list cycling unlocked");
-      },
+      fn: () => toggleListLock(true),
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery(""); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
@@ -2184,12 +2188,9 @@ function AppPage() {
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
             type="button"
-            onClick={() => {
-              const text = currentSentence?.content;
-              if (text) speak(text, claimSpeech());
-            }}
+            onClick={() => toggleListLock(false)}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Repeat sentence"
+            aria-label="Toggle list lock"
           />
           <button
             type="button"

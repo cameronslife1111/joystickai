@@ -1,29 +1,37 @@
-## What's happening
+## Goal
 
-The current sentence position (`current_sentence_index`) is stored in the React Query cache for the `documents` query in `src/routes/_authenticated/app.tsx`. When you swipe, the code optimistically updates that cache and writes the new index to the database.
+Give the invisible button on the **left** side of Orby a new action: toggle the list lock/unlock (the same action as the "List unlocked / List locked" button in slot 22). The **right** side keeps repeating the current sentence. Works on mobile and desktop.
 
-React Query's default `refetchOnWindowFocus` is **on**. When you leave Orby and come back, the browser fires a "focus" event that triggers an automatic background refetch of the `documents` query. If you swipe in that same instant:
+## Current behavior
 
-1. Your swipe optimistically sets the new index and saves it.
-2. The focus-triggered refetch (started a moment earlier) finishes and **overwrites the cache with the older server value** — so the screen snaps back to the previous sentence.
-3. The speech still reads the sentence you swiped to, which is why it sounds half-working before settling.
+In `src/routes/_authenticated/app.tsx` there are two invisible buttons flanking the orb (around line 2184). Both currently do the same thing — `onClick` reads `currentSentence?.content` and calls `speak(...)`:
 
-This is a classic refetch-on-focus race condition. It only shows up right after returning to the app because that's the only time a focus refetch is in flight.
+- Left button: `className="... right-full ..."` → repeats sentence
+- Right button: `className="... left-full ..."` → repeats sentence
 
-## The fix
+The lock toggle lives in the grid menu (slot 22, line ~1879). Its action is:
 
-Disable `refetchOnWindowFocus` for the two queries that drive the visible sentence, so returning to the app never kicks off a background refetch that can clobber an in-flight swipe:
+```text
+const next = !lockFavorites;
+saveLockFavorites(next);
+saveLockedDoc(next ? activeDocId : null);
+toast.success(next ? "...locked" : "...unlocked");
+```
 
-- The `documents` query (`~line 244`) — holds `current_sentence_index`.
-- The `sentences` query (`~line 279`) — holds the sentence list.
+Pressing it again flips `lockFavorites`, so it toggles lock ↔ unlock exactly as requested.
 
-Add `refetchOnWindowFocus: false` to each.
+## Change
 
-### Why this is safe for save/load
+Update only the **left** invisible button's `onClick` so it runs the lock-toggle logic instead of repeating the sentence. The right button is left untouched (still repeats).
 
-- The in-memory cache already holds the latest values while the app stays mounted (leaving to another app does not unmount Orby), so nothing is lost by skipping the focus refetch.
-- Saving still works exactly as before: every swipe/move still writes to the database and updates the cache optimistically.
-- Loading still works: on a genuine fresh load/mount the queries fetch normally, and `refetchOnReconnect` (for network drops) stays enabled.
+To avoid duplicating logic, extract the toggle into a small reusable handler (e.g. `toggleListLock`) and call it from both the slot-22 menu button and the left invisible button. The handler reads the current `lockFavorites` value, flips it, persists via `saveLockFavorites` / `saveLockedDoc`, and shows the toast.
 
-### File changed
-- `src/routes/_authenticated/app.tsx` — add `refetchOnWindowFocus: false` to the `documents` and `sentences` `useQuery` configs.
+Also update the left button's `aria-label` from "Repeat sentence" to something like "Toggle list lock" for accessibility/clarity.
+
+Since this is a standard `onClick` on a `<button>`, it works for both touch (mobile) and mouse (desktop) automatically.
+
+## Files touched
+
+- `src/routes/_authenticated/app.tsx` — add `toggleListLock` handler, point slot-22 button and the left invisible button at it, update left button `aria-label`.
+
+No backend, schema, or save/load logic changes — it reuses the existing lock persistence already used by the menu.
