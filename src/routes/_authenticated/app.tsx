@@ -2256,9 +2256,21 @@ function AppPage() {
               value={pinPickerQuery}
               onChange={(e) => setPinPickerQuery(e.target.value)}
               placeholder="Search documents…"
-              className="mb-3"
-            />
-            {pinnedDocId && (
+               className="mb-3"
+             />
+             <div className="mb-3 flex flex-wrap gap-1.5">
+               {EMOJI_FILTERS.map((emoji) => (
+                 <button
+                   key={emoji}
+                   type="button"
+                   onClick={() => setPinPickerQuery(emoji)}
+                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-foreground/10 bg-foreground/5 text-lg transition active:scale-95 hover:bg-foreground/10"
+                 >
+                   {emoji}
+                 </button>
+               ))}
+             </div>
+             {pinnedDocId && (
               <button
                 onClick={() => {
                   void savePinnedDoc(null);
