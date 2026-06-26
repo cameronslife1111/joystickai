@@ -99,7 +99,10 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
                 {steps.map((s: any, i: number) => (
                   <li key={i} className="flex gap-2">
                     <span className="text-muted-foreground">{i + 1}.</span>
-                    <span>{s.description}</span>
+                    <div className="space-y-1">
+                      <span>{s.description}</span>
+                      <StepReasoning io={s.io} />
+                    </div>
                   </li>
                 ))}
               </ol>
