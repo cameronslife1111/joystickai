@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PlanRetryDialog } from "./PlanRetryDialog";
+import { StepReasoning } from "./plan/StepReasoning";
 
 interface Props {
   open: boolean;
