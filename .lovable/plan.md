@@ -1,37 +1,59 @@
+# Supercharge Orby Plan Mode with structured per-step reasoning
+
 ## Goal
+Right now the planner emits each step as just `{ tool, args, description }`. The model decides the "where/what/how" only implicitly, so it drifts: wrong documents, vague transforms, output landing nowhere. We'll force the planner to fill a strict reasoning contract for **every step**, validate it server-side, and show it to the user at approval — without changing how steps execute.
 
-Give the invisible button on the **left** side of Orby a new action: toggle the list lock/unlock (the same action as the "List unlocked / List locked" button in slot 22). The **right** side keeps repeating the current sentence. Works on mobile and desktop.
-
-## Current behavior
-
-In `src/routes/_authenticated/app.tsx` there are two invisible buttons flanking the orb (around line 2184). Both currently do the same thing — `onClick` reads `currentSentence?.content` and calls `speak(...)`:
-
-- Left button: `className="... right-full ..."` → repeats sentence
-- Right button: `className="... left-full ..."` → repeats sentence
-
-The lock toggle lives in the grid menu (slot 22, line ~1879). Its action is:
+## What changes (the per-step contract)
+Every step gains a required `io` object the planner must complete before the step is accepted. The fields map exactly to what you asked for:
 
 ```text
-const next = !lockFavorites;
-saveLockFavorites(next);
-saveLockedDoc(next ? activeDocId : null);
-toast.success(next ? "...locked" : "...unlocked");
+io: {
+  inputs:      "what data / media this step uses (named docs, media ids, prior step outputs, or 'none')",
+  inputSource: "WHERE each input comes from — a concrete workspace id, a {{step_N...}} ref, or 'user request'",
+  operation:   "how the data/media is used and transformed on this step (the actual action)",
+  output:      "what this step produces — e.g. 'new image asset', 'updated sentence', 'document text', 'web results', 'nothing persisted'",
+  destination: "WHERE the output goes — a concrete target id / new doc / media gallery, or 'feeds step_M'",
+  capability:  "which tool/capability is used and why it's the right one",
+  lookup:      "if a lookup is needed first: what to look up and what to do with the result; else 'none'"
+}
 ```
 
-Pressing it again flips `lockFavorites`, so it toggles lock ↔ unlock exactly as requested.
+The step description stays, but is now derived from `io` so it always names the source and destination in plain language.
 
-## Change
+## File-by-file
 
-Update only the **left** invisible button's `onClick` so it runs the lock-toggle logic instead of repeating the sentence. The right button is left untouched (still repeats).
+### `supabase/functions/plan-compose/index.ts`
+1. **System prompt — add a "PER-STEP REASONING CONTRACT" block** (the core of this request). It instructs the model that before choosing args for any step it must reason through, and emit, the `io` object above. Add explicit rules:
+   - Every input in `io.inputs` must have a matching concrete id or `{{step_N...}}` reference in `io.inputSource` AND in the step's actual `args` — no input may be "implied".
+   - If `io.lookup` is not "none", there MUST be an earlier `find_*`/`read_document`/`web_search` step, and its result must be referenced via template — never act on a described-but-unresolved item.
+   - `io.destination` must resolve to a real target id, a `create_document` step's id, or the media gallery; it must match the mutating arg (`document_id`/`target_document_id`/`media_id`/etc.).
+   - `io.capability` must be one of the catalog tools and must be the narrowest correct tool (reuse the existing IMAGE TOOL DECISION GUIDE).
+   - A "self-check before emitting" instruction: restate the request's target for this step, confirm the id is in the snapshot, confirm output destination — mirroring "what document am I using, where does the output go".
+2. **Update the JSON output shape** in the prompt to include `io` on each step, with a filled example.
+3. **Validation pass (deterministic, after parse)** — extend the existing loop:
+   - Require `io` to be an object with non-empty `inputs`, `operation`, `output`, `destination`, `capability` (lookup may be "none"). Reject the plan with a precise message if missing, so the failure is caught at compose time (consistent with current `REQUIRED_TARGET_ARGS` behavior).
+   - Cross-check `io.capability` against `s.tool` (must match the tool name).
+   - Keep the existing required-target-arg checks (they already enforce the "where" in `args`); the `io` check is the reasoning layer on top.
+   - If `description` is blank, synthesize it from `io` (`"<operation> → <destination>"`) instead of the generic `Run <tool>`.
 
-To avoid duplicating logic, extract the toggle into a small reusable handler (e.g. `toggleListLock`) and call it from both the slot-22 menu button and the left invisible button. The handler reads the current `lockFavorites` value, flips it, persists via `saveLockFavorites` / `saveLockedDoc`, and shows the toast.
+### `supabase/functions/_shared/tools.ts`
+No tool signature changes. Add one short sentence to the catalog preamble (via the prompt, not schemas) is handled in compose; tools file stays as-is unless we want the `io` note echoed — not required.
 
-Also update the left button's `aria-label` from "Repeat sentence" to something like "Toggle list lock" for accessibility/clarity.
+### `src/components/PlanApprovalDialog.tsx`
+Surface the new reasoning so you can see the planner is thinking correctly during approval. Under each step's `description`, render a compact `io` breakdown (Uses / Does / Output → Destination / Looks up) in muted text when `s.io` exists. Falls back gracefully to just the description for older plans.
 
-Since this is a standard `onClick` on a `<button>`, it works for both touch (mobile) and mouse (desktop) automatically.
+### `src/components/PlanDetailDialog.tsx`
+Same compact `io` breakdown rendered per step (read-only), so running/finished plans also show the structured reasoning.
 
-## Files touched
+## Execution safety
+- `plan-step` only reads `s.tool` and `s.args`, so adding `s.io` is inert at execution time — zero risk to the run path.
+- Scheduled plans use the same composer, so they get the stricter reasoning automatically.
+- The new validation rejects sloppy plans at compose time (status `failed` with a clear message) rather than letting them run wrong — this is the behavior that makes lookups reliable.
 
-- `src/routes/_authenticated/app.tsx` — add `toggleListLock` handler, point slot-22 button and the left invisible button at it, update left button `aria-label`.
+## Verification
+1. Deploy `plan-compose`, then use the edge-function curl tool to compose a few representative requests (a doc edit naming a colored-circle title, an image remix, a "for each shot" runtime loop) and confirm each returned step has a complete, sensible `io` block and resolves to the correct ids.
+2. Confirm the approval dialog shows the reasoning breakdown in the preview.
+3. Run a scheduled plan path once to confirm auto-approve still works with the new validation.
 
-No backend, schema, or save/load logic changes — it reuses the existing lock persistence already used by the menu.
+## Out of scope
+No changes to lookup scoring math, tool execution, or the runtime loop mechanics — this turn is purely about making the planner's per-step thinking explicit, strict, and validated.
