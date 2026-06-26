@@ -103,6 +103,7 @@ export function PlanDetailDialog({ open, onOpenChange, planId }: Props) {
                   <span className="text-muted-foreground">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
                     <div className="break-words">{s.description}</div>
+                    <StepReasoning io={s.io} />
                     <div className={`mt-0.5 text-xs ${STEP_STATUS_COLOR[s.status] ?? "text-muted-foreground"}`}>
                       {s.status ?? "pending"}
                     </div>
