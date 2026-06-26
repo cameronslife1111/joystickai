@@ -549,8 +549,34 @@ Deno.serve(async (req) => {
         }
       }
 
+      // PER-STEP REASONING CONTRACT — enforce the io object so the planner has
+      // explicitly thought through what data it uses, how, what it outputs, and
+      // where the output goes. A step without complete reasoning is rejected at
+      // compose time rather than running wrong.
+      const io = s.io;
+      const ioRequired = ["inputs", "inputSource", "operation", "output", "destination", "capability"];
+      if (!io || typeof io !== "object" || Array.isArray(io)) {
+        throw new Error(
+          `Step ${i + 1} (${s.tool}) is missing its "io" reasoning object. Every step must declare inputs, inputSource, operation, output, destination, and capability.`,
+        );
+      }
+      for (const f of ioRequired) {
+        if (typeof io[f] !== "string" || !io[f].trim()) {
+          throw new Error(
+            `Step ${i + 1} (${s.tool}) has an empty io.${f}. State concretely what data is used, how it's transformed, what is produced, and where it goes.`,
+          );
+        }
+      }
+      if (typeof io.lookup !== "string" || !io.lookup.trim()) io.lookup = "none";
+      // capability must name the actual tool used on this step.
+      if (!io.capability.includes(s.tool)) {
+        throw new Error(
+          `Step ${i + 1} io.capability ("${io.capability}") must reference the step's tool "${s.tool}".`,
+        );
+      }
+
       if (typeof s.description !== "string" || !s.description.trim()) {
-        s.description = `Run ${s.tool}`;
+        s.description = `${io.operation} → ${io.destination}`.slice(0, 240);
       }
       s.status = "pending";
       s.result = null;
