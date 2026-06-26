@@ -96,6 +96,17 @@ WHERE RULES — every step must lock its target (this is the #1 cause of plan fa
 - BULK / "ALL MATCHING" REQUESTS: When the user asks you to act on EVERY document matching a description (e.g. "all the docs that start with Ricky - Prompt", "every meme prompt doc", "all documents about X"), enumerate the matching titles DIRECTLY from the ALL DOCUMENTS (id — title) list in the WORKSPACE SNAPSHOT and emit one step per match (e.g. one add_sentence per matching title, with the literal title text inlined). The ALL DOCUMENTS list contains the user's complete document set — there is NO five-result limit when you read titles from the snapshot, so match loosely (prefix/substring/keywords) and include EVERY doc that fits, not just a few. Do NOT call find_document_by_title for this — it only returns the 5 best matches and cannot enumerate. Only if the matching set is clearly larger than what the snapshot shows, use find_documents_by_title (plural) which returns all matches.
 - Plan as few steps as possible. Combine where reasonable — BUT for bulk "act on all matching docs" requests, one step per matching document is correct and expected (do not artificially limit the count).
 
+PER-STEP REASONING CONTRACT — this is the most important rule. Before you choose a tool and its args for ANY step, you must think it through and EMIT your reasoning as an "io" object on that step. A step is invalid without a complete io. Think like a strict, super-intelligent planner: for every single step answer, concretely:
+- io.inputs: what data / media this step actually uses (named documents, specific media ids, the output of a prior step, the user's literal text, or "none"). Be specific — name the document title or asset, never "the doc".
+- io.inputSource: WHERE each input comes from — a concrete workspace id (from the snapshot), a {{step_N.result...}} reference to an earlier step, or "user request". Every input named in io.inputs must have a source here AND a matching concrete id / template in the step's actual args. No input may be implied by a previous step's prose.
+- io.operation: HOW the data/media is used and what is being done to it on this step (the real action — e.g. "rewrite the third sentence", "combine the two product photos", "summarize the brain dump").
+- io.output: WHAT this step produces — e.g. "new image asset", "updated sentence row", "new document", "document text for a later step", "web search results", or "nothing persisted".
+- io.destination: WHERE the output goes — a concrete target id, a {{step_N.result.id}} (e.g. a create_document step), the Media Gallery, or "feeds step_M". It MUST match the mutating arg in args (document_id / target_document_id / media_id / source_media_id / etc.).
+- io.capability: which tool/capability is used and WHY it is the right one (narrowest correct tool — follow the IMAGE TOOL DECISION GUIDE). This MUST equal the step's tool name.
+- io.lookup: if you must look something up first, state exactly what to look up and what to do with the result; otherwise "none". If io.lookup is not "none", there MUST be an EARLIER step (find_* / read_document / web_search) and its result must be referenced via a {{step_N...}} template here — never act on a described-but-unresolved item.
+
+SELF-CHECK before emitting each step: restate the step's target in one phrase, confirm its id is present in the WORKSPACE SNAPSHOT (or created/looked-up earlier in this plan), and confirm where the output lands. If you can't name the exact source id and the exact destination, the step is not ready — fix it or drop it. This is how you guarantee you are using the correct document and the output goes to the right place.
+
 Return your output as JSON with this exact shape:
 {
   "summary": "A one-or-two-sentence plain-language summary of what you'll do.",
@@ -103,9 +114,34 @@ Return your output as JSON with this exact shape:
     {
       "tool": "<tool_name from the catalog>",
       "args": { ...arguments matching the tool's schema... },
-      "description": "A short plain-language sentence describing this step that the user will see during approval."
+      "io": {
+        "inputs": "what data/media this step uses",
+        "inputSource": "concrete id / {{step_N...}} / user request",
+        "operation": "what is done to it",
+        "output": "what is produced",
+        "destination": "where the output goes (must match the args target)",
+        "capability": "<same tool_name>",
+        "lookup": "what to look up first, or 'none'"
+      },
+      "description": "A short plain-language sentence (naming the source and destination) that the user will see during approval."
     }
   ]
+}
+
+Filled example of one step:
+{
+  "tool": "add_sentence",
+  "args": { "document_id": "{{step_0.result.id}}", "content": "Welcome to the trip plan." },
+  "io": {
+    "inputs": "the intro line text from the user's request",
+    "inputSource": "user request",
+    "operation": "append a new sentence to the bottom of the freshly created document",
+    "output": "new sentence row",
+    "destination": "the \"Trip Plan\" document created in step_0 ({{step_0.result.id}})",
+    "capability": "add_sentence — adds one sentence to a known document",
+    "lookup": "none"
+  },
+  "description": "Add the intro line to the new \"Trip Plan\" document."
 }
 
 If the user's request is impossible, ambiguous, or would require deletion, respond with:
@@ -513,8 +549,34 @@ Deno.serve(async (req) => {
         }
       }
 
+      // PER-STEP REASONING CONTRACT — enforce the io object so the planner has
+      // explicitly thought through what data it uses, how, what it outputs, and
+      // where the output goes. A step without complete reasoning is rejected at
+      // compose time rather than running wrong.
+      const io = s.io;
+      const ioRequired = ["inputs", "inputSource", "operation", "output", "destination", "capability"];
+      if (!io || typeof io !== "object" || Array.isArray(io)) {
+        throw new Error(
+          `Step ${i + 1} (${s.tool}) is missing its "io" reasoning object. Every step must declare inputs, inputSource, operation, output, destination, and capability.`,
+        );
+      }
+      for (const f of ioRequired) {
+        if (typeof io[f] !== "string" || !io[f].trim()) {
+          throw new Error(
+            `Step ${i + 1} (${s.tool}) has an empty io.${f}. State concretely what data is used, how it's transformed, what is produced, and where it goes.`,
+          );
+        }
+      }
+      if (typeof io.lookup !== "string" || !io.lookup.trim()) io.lookup = "none";
+      // capability must name the actual tool used on this step.
+      if (!io.capability.includes(s.tool)) {
+        throw new Error(
+          `Step ${i + 1} io.capability ("${io.capability}") must reference the step's tool "${s.tool}".`,
+        );
+      }
+
       if (typeof s.description !== "string" || !s.description.trim()) {
-        s.description = `Run ${s.tool}`;
+        s.description = `${io.operation} → ${io.destination}`.slice(0, 240);
       }
       s.status = "pending";
       s.result = null;

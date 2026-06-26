@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { StepReasoning } from "./plan/StepReasoning";
 
 interface Props {
   open: boolean;
@@ -99,7 +100,10 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
                 {steps.map((s: any, i: number) => (
                   <li key={i} className="flex gap-2">
                     <span className="text-muted-foreground">{i + 1}.</span>
-                    <span>{s.description}</span>
+                    <div className="space-y-1">
+                      <span>{s.description}</span>
+                      <StepReasoning io={s.io} />
+                    </div>
                   </li>
                 ))}
               </ol>
