@@ -1883,7 +1883,7 @@ function AppPage() {
       setMenuOpen(false);
       setPlanComposerOpen(true);
     }},
-    { e: "📋", t: "AI Plans", fn: () => {
+    { e: "🤖", t: "AI Plans", fn: () => {
       setMenuOpen(false);
       setPlansScreenOpen(true);
     }, badge: pendingPlanCount },
@@ -1915,14 +1915,14 @@ function AppPage() {
     filled[10] = grid[20]; // 11 Plan mode
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
-    filled[13] = grid[24];  // 14 Recent docs
+    filled[13] = grid[21];  // 14 AI Plans
     filled[14] = grid[25]; // 15 Mark with trash
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
     filled[18] = grid[19]; // 19 Open link
     filled[19] = grid[11]; // 20 Search docs
-    filled[20] = grid[21]; // 21 AI Plans
+    filled[20] = grid[24]; // 21 Recent docs
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
     filled[23] = grid[23]; // 24 Swap slot
