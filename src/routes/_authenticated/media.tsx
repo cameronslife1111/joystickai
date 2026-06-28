@@ -620,8 +620,19 @@ function MediaPage() {
                   onContextMenu={(e) => {
                     e.preventDefault();
                     if (selectMode) return;
-                    if (isGenerating) return;
+                    if (isGenerating) { setStuckAsset(a); return; }
                     setSheetAsset(a);
+                  }}
+                  onTouchStart={() => {
+                    if (selectMode || !isGenerating) return;
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = setTimeout(() => setStuckAsset(a), 500);
+                  }}
+                  onTouchMove={() => {
+                    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                  }}
+                  onTouchEnd={() => {
+                    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                   }}
                   style={NO_CALLOUT_STYLE}
                   className={
