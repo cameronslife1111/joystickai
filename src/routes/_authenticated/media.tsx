@@ -123,6 +123,8 @@ function MediaPage() {
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
+  const [stuckAsset, setStuckAsset] = useState<Asset | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
@@ -618,8 +620,19 @@ function MediaPage() {
                   onContextMenu={(e) => {
                     e.preventDefault();
                     if (selectMode) return;
-                    if (isGenerating) return;
+                    if (isGenerating) { setStuckAsset(a); return; }
                     setSheetAsset(a);
+                  }}
+                  onTouchStart={() => {
+                    if (selectMode || !isGenerating) return;
+                    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = setTimeout(() => setStuckAsset(a), 500);
+                  }}
+                  onTouchMove={() => {
+                    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                  }}
+                  onTouchEnd={() => {
+                    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
                   }}
                   style={NO_CALLOUT_STYLE}
                   className={
@@ -942,6 +955,38 @@ function MediaPage() {
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button onClick={handleDelete}
                 className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stuck generation: stop & delete */}
+      {stuckAsset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setStuckAsset(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 font-display text-base">Stop this generation?</p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              This will stop and remove "{stuckAsset.title}" from your gallery.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setStuckAsset(null)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button
+                onClick={async () => {
+                  const a = stuckAsset;
+                  setStuckAsset(null);
+                  await deleteAsset(a);
+                }}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25"
+              >
+                Stop &amp; delete
+              </button>
             </div>
           </div>
         </div>
