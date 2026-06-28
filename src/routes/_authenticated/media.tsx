@@ -123,6 +123,8 @@ function MediaPage() {
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
+  const [stuckAsset, setStuckAsset] = useState<Asset | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
