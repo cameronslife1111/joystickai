@@ -49,12 +49,39 @@ function isTransientFalError(err: any): boolean {
   );
 }
 
-async function subscribeWithRetry(input: Record<string, unknown>) {
+// Submit to fal's queue (instead of fal.subscribe). The queue returns a
+// status_url / response_url immediately; the row stores those and the shared
+// poller (poll-video-job, kind-aware) drives it to completion. This survives
+// the edge worker being cut off mid-generation — the old subscribe pattern
+// left rows stuck in "generating" forever when the background task died.
+async function submitToQueueWithRetry(
+  modelId: string,
+  input: Record<string, unknown>,
+): Promise<{ status_url: string; response_url: string; request_id?: string }> {
   const maxAttempts = 3;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fal.subscribe("openai/gpt-image-2", { input, logs: false });
+      const res = await fetch(`https://queue.fal.run/${modelId}`, {
+        method: "POST",
+        headers: { Authorization: `Key ${FAL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        const err: any = new Error(`fal submit ${res.status}: ${t.slice(0, 400)}`);
+        err.status = res.status;
+        throw err;
+      }
+      const queued = await res.json();
+      if (!queued.status_url || !queued.response_url) {
+        throw new Error("fal queue returned no status/response url");
+      }
+      return {
+        status_url: queued.status_url,
+        response_url: queued.response_url,
+        request_id: queued.request_id,
+      };
     } catch (err) {
       lastErr = err;
       if (attempt === maxAttempts || !isTransientFalError(err)) throw err;
