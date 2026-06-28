@@ -93,68 +93,77 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  try {
-    const hostedImage = await hostOnFal(image_url);
+  // Heavy lifting (re-hosting source media to fal, then queue submit) can take
+  // longer than the client's invoke timeout, which produced a false
+  // "didn't start" error even though the job was submitted. Run it in the
+  // background and return immediately; failures mark the row "failed" so the
+  // gallery shows a real state instead of a phantom error.
+  // @ts-ignore EdgeRuntime is a global in Supabase Edge Functions
+  EdgeRuntime.waitUntil(
+    (async () => {
+      try {
+        const hostedImage = await hostOnFal(image_url);
 
-    const modelId = mode === "i2v"
-      ? "fal-ai/kling-video/v3/pro/image-to-video"
-      : "fal-ai/kling-video/v3/pro/motion-control";
+        const modelId = mode === "i2v"
+          ? "fal-ai/kling-video/v3/pro/image-to-video"
+          : "fal-ai/kling-video/v3/pro/motion-control";
 
-    const falBody: any = { prompt };
+        const falBody: any = { prompt };
 
-    if (mode === "i2v") {
-      falBody.start_image_url = hostedImage;
-      if (duration) falBody.duration = String(duration);
-      if (typeof generate_audio === "boolean") falBody.generate_audio = generate_audio;
-      if (end_image_url) falBody.end_image_url = await hostOnFal(end_image_url);
-      if (negative_prompt) falBody.negative_prompt = negative_prompt;
-      if (typeof cfg_scale === "number") falBody.cfg_scale = cfg_scale;
-    } else {
-      falBody.image_url = hostedImage;
-      falBody.video_url = await hostOnFal(video_url);
-      falBody.character_orientation = character_orientation === "video" ? "video" : "image";
-      if (typeof keep_original_sound === "boolean") falBody.keep_original_sound = keep_original_sound;
-      if (element_image_url && falBody.character_orientation === "video") {
-        const hostedElement = await hostOnFal(element_image_url);
-        falBody.elements = [{
-          frontal_image_url: hostedElement,
-          reference_image_urls: [hostedElement],
-        }];
+        if (mode === "i2v") {
+          falBody.start_image_url = hostedImage;
+          if (duration) falBody.duration = String(duration);
+          if (typeof generate_audio === "boolean") falBody.generate_audio = generate_audio;
+          if (end_image_url) falBody.end_image_url = await hostOnFal(end_image_url);
+          if (negative_prompt) falBody.negative_prompt = negative_prompt;
+          if (typeof cfg_scale === "number") falBody.cfg_scale = cfg_scale;
+        } else {
+          falBody.image_url = hostedImage;
+          falBody.video_url = await hostOnFal(video_url);
+          falBody.character_orientation = character_orientation === "video" ? "video" : "image";
+          if (typeof keep_original_sound === "boolean") falBody.keep_original_sound = keep_original_sound;
+          if (element_image_url && falBody.character_orientation === "video") {
+            const hostedElement = await hostOnFal(element_image_url);
+            falBody.elements = [{
+              frontal_image_url: hostedElement,
+              reference_image_urls: [hostedElement],
+            }];
+          }
+        }
+
+        const submit = await fetch(`https://queue.fal.run/${modelId}`, {
+          method: "POST",
+          headers: { Authorization: `Key ${FAL_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify(falBody),
+        });
+        if (!submit.ok) {
+          const t = await submit.text();
+          throw new Error(`fal submit ${submit.status}: ${t.slice(0, 400)}`);
+        }
+        const queued = await submit.json();
+
+        await admin
+          .from("media_assets")
+          .update({
+            fal_model_id: modelId,
+            fal_request_id: queued.request_id ?? null,
+            fal_status_url: queued.status_url,
+            fal_response_url: queued.response_url,
+          })
+          .eq("id", row_id)
+          .eq("user_id", user.id);
+      } catch (err: any) {
+        await admin
+          .from("media_assets")
+          .update({
+            status: "failed",
+            error_message: String(err?.message ?? err ?? "submission failed"),
+          })
+          .eq("id", row_id)
+          .eq("user_id", user.id);
       }
-    }
+    })(),
+  );
 
-    const submit = await fetch(`https://queue.fal.run/${modelId}`, {
-      method: "POST",
-      headers: { Authorization: `Key ${FAL_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(falBody),
-    });
-    if (!submit.ok) {
-      const t = await submit.text();
-      throw new Error(`fal submit ${submit.status}: ${t.slice(0, 400)}`);
-    }
-    const queued = await submit.json();
-
-    await admin
-      .from("media_assets")
-      .update({
-        fal_model_id: modelId,
-        fal_request_id: queued.request_id ?? null,
-        fal_status_url: queued.status_url,
-        fal_response_url: queued.response_url,
-      })
-      .eq("id", row_id)
-      .eq("user_id", user.id);
-
-    return json({ ok: true, request_id: queued.request_id });
-  } catch (err: any) {
-    await admin
-      .from("media_assets")
-      .update({
-        status: "failed",
-        error_message: String(err?.message ?? err ?? "submission failed"),
-      })
-      .eq("id", row_id)
-      .eq("user_id", user.id);
-    return json({ error: String(err?.message ?? err) }, 502);
-  }
+  return json({ ok: true });
 });
