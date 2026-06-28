@@ -1,4 +1,3 @@
-import { fal } from "npm:@fal-ai/client@^1.6.0";
 import { createClient } from "npm:@supabase/supabase-js@^2.45.0";
 
 const FAL_KEY = Deno.env.get("FAL_KEY")!;
@@ -6,7 +5,6 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-fal.config({ credentials: FAL_KEY });
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,12 +47,39 @@ function isTransientFalError(err: any): boolean {
   );
 }
 
-async function subscribeWithRetry(input: Record<string, unknown>) {
+// Submit to fal's queue (instead of fal.subscribe). The queue returns a
+// status_url / response_url immediately; the row stores those and the shared
+// poller (poll-video-job, kind-aware) drives it to completion. This survives
+// the edge worker being cut off mid-generation — the old subscribe pattern
+// left rows stuck in "generating" forever when the background task died.
+async function submitToQueueWithRetry(
+  modelId: string,
+  input: Record<string, unknown>,
+): Promise<{ status_url: string; response_url: string; request_id?: string }> {
   const maxAttempts = 3;
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fal.subscribe("openai/gpt-image-2", { input, logs: false });
+      const res = await fetch(`https://queue.fal.run/${modelId}`, {
+        method: "POST",
+        headers: { Authorization: `Key ${FAL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        const err: any = new Error(`fal submit ${res.status}: ${t.slice(0, 400)}`);
+        err.status = res.status;
+        throw err;
+      }
+      const queued = await res.json();
+      if (!queued.status_url || !queued.response_url) {
+        throw new Error("fal queue returned no status/response url");
+      }
+      return {
+        status_url: queued.status_url,
+        response_url: queued.response_url,
+        request_id: queued.request_id,
+      };
     } catch (err) {
       lastErr = err;
       if (attempt === maxAttempts || !isTransientFalError(err)) throw err;
@@ -110,15 +135,16 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const modelId = "openai/gpt-image-2";
+
   // @ts-ignore EdgeRuntime is a global in Supabase Edge Functions
   EdgeRuntime.waitUntil(
     (async () => {
       try {
         // fal's openai/gpt-image-2 occasionally returns a transient 5xx
-        // ("Internal Server Error") on otherwise valid prompts. A single
-        // upstream blip used to kill the whole plan step, so we retry a few
-        // times with exponential backoff before giving up.
-        const result = await subscribeWithRetry({
+        // ("Internal Server Error") on otherwise valid prompts; retry the
+        // submit a few times with backoff before giving up.
+        const queued = await submitToQueueWithRetry(modelId, {
           prompt,
           image_size: finalSize,
           quality: finalQuality,
@@ -126,33 +152,16 @@ Deno.serve(async (req) => {
           output_format: finalFormat,
         });
 
-        const img = result.data?.images?.[0];
-        if (!img?.url) throw new Error("fal returned no image");
-
-        const imgRes = await fetch(img.url);
-        if (!imgRes.ok) throw new Error(`download failed: ${imgRes.status}`);
-        const imgBuffer = new Uint8Array(await imgRes.arrayBuffer());
-
-        const storagePath = `${user.id}/${Date.now()}_generated.${finalFormat}`;
-        const mimeType = `image/${finalFormat === "jpeg" ? "jpeg" : finalFormat}`;
-
-        const { error: uploadErr } = await admin.storage
-          .from("joystick-media")
-          .upload(storagePath, imgBuffer, { contentType: mimeType, upsert: false });
-        if (uploadErr) throw new Error(`upload failed: ${uploadErr.message}`);
-
-        const { data: pub } = admin.storage.from("joystick-media").getPublicUrl(storagePath);
-
+        // Hand off to the shared poller. The result is completed and stored by
+        // poll-video-job (kind-aware) — both the foreground client hook and the
+        // backstop cron poll these rows by fal_status_url.
         await admin
           .from("media_assets")
           .update({
-            status: "completed",
-            url: pub.publicUrl,
-            storage_path: storagePath,
-            mime_type: mimeType,
-            width: img.width ?? null,
-            height: img.height ?? null,
-            size_bytes: imgBuffer.byteLength,
+            fal_model_id: modelId,
+            fal_request_id: queued.request_id ?? null,
+            fal_status_url: queued.status_url,
+            fal_response_url: queued.response_url,
           })
           .eq("id", row_id)
           .eq("user_id", user.id);

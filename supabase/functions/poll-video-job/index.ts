@@ -29,6 +29,19 @@ function extractVideoUrl(result: any): string | null {
   );
 }
 
+function extractImage(result: any): { url: string; width?: number; height?: number } | null {
+  const img =
+    result?.images?.[0] ??
+    result?.data?.images?.[0] ??
+    result?.output?.images?.[0] ??
+    result?.data?.output?.images?.[0] ??
+    null;
+  if (img?.url) return { url: img.url, width: img.width, height: img.height };
+  const direct = result?.image?.url ?? result?.data?.image?.url ?? null;
+  if (direct) return { url: direct };
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -102,6 +115,57 @@ Deno.serve(async (req) => {
     return json({ status: "FAILED", error: `fal response fetch ${resultRes.status}` });
   }
   const result = await resultRes.json();
+
+  // Image jobs (generate-image / edit-image) ride the same queue+poll path as
+  // videos. Branch on the row kind so we extract + store the right media.
+  if (row.kind === "image") {
+    const image = extractImage(result);
+    if (!image) {
+      await admin
+        .from("media_assets")
+        .update({ status: "failed", error_message: "fal completed but no image url" })
+        .eq("id", row_id);
+      return json({ status: "FAILED", error: "fal completed but no image url" });
+    }
+    try {
+      const fmt = (row.generation_params?.output_format as string) || "png";
+      const ext = ["jpeg", "png", "webp"].includes(fmt) ? fmt : "png";
+      const mimeType = `image/${ext === "jpeg" ? "jpeg" : ext}`;
+      const imgRes = await fetch(image.url);
+      if (!imgRes.ok) throw new Error(`download failed: ${imgRes.status}`);
+      const imgBuffer = new Uint8Array(await imgRes.arrayBuffer());
+      const storagePath = `${user.id}/${Date.now()}_generated.${ext}`;
+
+      const { error: uploadErr } = await admin.storage
+        .from("joystick-media")
+        .upload(storagePath, imgBuffer, { contentType: mimeType, upsert: false });
+      if (uploadErr) throw new Error(`upload failed: ${uploadErr.message}`);
+
+      const { data: pub } = admin.storage.from("joystick-media").getPublicUrl(storagePath);
+
+      await admin
+        .from("media_assets")
+        .update({
+          status: "completed",
+          url: pub.publicUrl,
+          storage_path: storagePath,
+          mime_type: mimeType,
+          width: image.width ?? null,
+          height: image.height ?? null,
+          size_bytes: imgBuffer.byteLength,
+        })
+        .eq("id", row_id);
+
+      return json({ status: "COMPLETED", url: pub.publicUrl });
+    } catch (err: any) {
+      await admin
+        .from("media_assets")
+        .update({ status: "failed", error_message: String(err?.message ?? err) })
+        .eq("id", row_id);
+      return json({ status: "FAILED", error: String(err?.message ?? err) });
+    }
+  }
+
   const videoUrl = extractVideoUrl(result);
   if (!videoUrl) {
     await admin
