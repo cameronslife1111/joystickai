@@ -2188,9 +2188,12 @@ function AppPage() {
           {/* Invisible repeat-speech buttons flanking the orb */}
           <button
             type="button"
-            onClick={() => toggleListLock(false)}
+            onClick={() => {
+              if (lockFavorites) { toast.error("List is locked"); return; }
+              void openPinnedDocument();
+            }}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Toggle list lock"
+            aria-label="Open pinned document"
           />
           <button
             type="button"
