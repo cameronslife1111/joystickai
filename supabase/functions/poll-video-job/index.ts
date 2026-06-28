@@ -29,6 +29,19 @@ function extractVideoUrl(result: any): string | null {
   );
 }
 
+function extractImage(result: any): { url: string; width?: number; height?: number } | null {
+  const img =
+    result?.images?.[0] ??
+    result?.data?.images?.[0] ??
+    result?.output?.images?.[0] ??
+    result?.data?.output?.images?.[0] ??
+    null;
+  if (img?.url) return { url: img.url, width: img.width, height: img.height };
+  const direct = result?.image?.url ?? result?.data?.image?.url ?? null;
+  if (direct) return { url: direct };
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
