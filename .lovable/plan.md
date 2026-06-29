@@ -1,26 +1,29 @@
-Change the invisible button to the left of the Orbi orb so it opens the pinned document (same behavior as the Pinned doc menu button in slot 19) instead of toggling the list lock.
+## Goal
+When the user pins a new document from the slot 19 pin picker, it should not only pin it (current behavior) but also immediately open that document — switching to it and triggering the normal speech for whatever sentence the user was on in that doc.
 
-### What to change
-**File: `src/routes/_authenticated/app.tsx`**
+## The change (one file: `src/routes/_authenticated/app.tsx`)
 
-Locate the invisible left-side button around line 2189-2194:
+### 1. Make the open helper accept a specific doc id
+`openPinnedDocument` (lines ~853-901) currently reads the pinned id from `pinnedDocId` state. Right after pinning, that state hasn't updated yet (stale closure), so it can't be reused as-is.
+
+Refactor it so the target id is a parameter:
+- Change signature to `openPinnedDocument(targetId?: string)` and use `const docId = targetId ?? pinnedDocId;` then operate on `docId` everywhere (existence check, fetches, query-cache updates, `setActiveDocId`, speech).
+- Existing callers (slot 19 button at line ~1877/2193) keep calling `openPinnedDocument()` with no argument — behavior unchanged.
+
+### 2. Open the doc when pinning from the picker
+In the pin picker list `onClick` (lines ~2302-2306), after pinning:
 
 ```
-<button
-  type="button"
-  onClick={() => toggleListLock(false)}
-  className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-  aria-label="Toggle list lock"
-/>
+onClick={() => {
+  void savePinnedDoc(d.id);
+  setPinPickerOpen(false);
+  toast.success(`Pinned "${d.title || "Untitled"}"`);
+  void openPinnedDocument(d.id);   // <- new: open it immediately
+}}
 ```
 
-Replace its `onClick` handler with:
-1. If `lockFavorites` is true, show the "List is locked" toast and return early.
-2. Otherwise, call `openPinnedDocument()`.
+This switches the active document to the newly pinned one and starts speech on the sentence the user last left off on in that doc — exactly like pressing the slot 19 open action.
 
-Update `aria-label` to `"Open pinned document"`.
-
-### Why only this change
-- Slot 22 (Lock/unlock list cycling) stays exactly as-is.
-- The pinned document logic (`openPinnedDocument`) already exists and handles the "no document pinned" and "not found" cases with toasts.
-- The lock check (`lockFavorites`) is the same guard used by the Pinned doc menu button.
+## Notes
+- No backend/database changes.
+- The lock guard on the slot 19 invisible button stays as-is; this only affects pinning from the picker.

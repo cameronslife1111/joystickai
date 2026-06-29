@@ -850,12 +850,13 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [currentSentence, docs, claimSpeech, speak, qc]);
 
-  const openPinnedDocument = useCallback(async () => {
-    if (!pinnedDocId) {
+  const openPinnedDocument = useCallback(async (targetId?: string) => {
+    const docId = targetId ?? pinnedDocId;
+    if (!docId) {
       toast("No document pinned", { description: "Long-press the pin button to choose one." });
       return;
     }
-    const exists = docs?.some((d) => d.id === pinnedDocId);
+    const exists = docs?.some((d) => d.id === docId);
     if (!exists) {
       toast.error("Pinned document not found");
       void savePinnedDoc(null);
@@ -868,12 +869,12 @@ function AppPage() {
       supabase
         .from("documents")
         .select("current_sentence_index, title")
-        .eq("id", pinnedDocId)
+        .eq("id", docId)
         .maybeSingle(),
       supabase
         .from("sentences")
         .select("*")
-        .eq("document_id", pinnedDocId)
+        .eq("document_id", docId)
         .order("order_index", { ascending: true })
         .order("created_at", { ascending: true }),
     ]);
@@ -886,17 +887,17 @@ function AppPage() {
       : Math.max(0, Math.min(savedIdx, list.length - 1));
     const resolved = list[clamped];
 
-    qc.setQueryData<Sentence[]>(["sentences", pinnedDocId], list);
+    qc.setQueryData<Sentence[]>(["sentences", docId], list);
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
-      prev?.map((d) => d.id === pinnedDocId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+      prev?.map((d) => d.id === docId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
       void supabase.from("documents")
         .update({ current_sentence_index: clamped })
-        .eq("id", pinnedDocId);
+        .eq("id", docId);
     }
 
-    setActiveDocId(pinnedDocId);
+    setActiveDocId(docId);
     if (resolved?.content) speak(resolved.content, token);
   }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
 
@@ -2303,6 +2304,7 @@ function AppPage() {
                             void savePinnedDoc(d.id);
                             setPinPickerOpen(false);
                             toast.success(`Pinned "${d.title || "Untitled"}"`);
+                            void openPinnedDocument(d.id);
                           }}
                           className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left transition ${
                             d.id === pinnedDocId
