@@ -2304,6 +2304,7 @@ function AppPage() {
                             void savePinnedDoc(d.id);
                             setPinPickerOpen(false);
                             toast.success(`Pinned "${d.title || "Untitled"}"`);
+                            void openPinnedDocument(d.id);
                           }}
                           className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left transition ${
                             d.id === pinnedDocId
