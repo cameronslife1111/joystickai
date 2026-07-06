@@ -19,21 +19,75 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          kind: string
+          plan_id: string | null
           role: string
+          thread_id: string
           user_id: string
         }
         Insert: {
           content: string
           created_at?: string
           id?: string
+          kind?: string
+          plan_id?: string | null
           role: string
+          thread_id: string
           user_id: string
         }
         Update: {
           content?: string
           created_at?: string
           id?: string
+          kind?: string
+          plan_id?: string | null
           role?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          attached_document_ids: string[]
+          capabilities: Json
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attached_document_ids?: string[]
+          capabilities?: Json
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attached_document_ids?: string[]
+          capabilities?: Json
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -252,6 +306,7 @@ export type Database = {
           status: string
           step_claim_at: string | null
           steps: Json | null
+          thread_id: string | null
           tick_count: number
           total_steps: number
           updated_at: string
@@ -281,6 +336,7 @@ export type Database = {
           status: string
           step_claim_at?: string | null
           steps?: Json | null
+          thread_id?: string | null
           tick_count?: number
           total_steps?: number
           updated_at?: string
@@ -310,6 +366,7 @@ export type Database = {
           status?: string
           step_claim_at?: string | null
           steps?: Json | null
+          thread_id?: string | null
           tick_count?: number
           total_steps?: number
           updated_at?: string
@@ -323,6 +380,13 @@ export type Database = {
             columns: ["origin_document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
             referencedColumns: ["id"]
           },
         ]
