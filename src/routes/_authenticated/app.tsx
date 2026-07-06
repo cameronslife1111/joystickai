@@ -532,7 +532,6 @@ function AppPage() {
     sendOpen ||
     linkPickerOpen ||
     chatOpen ||
-    planComposerOpen ||
     planApprovalOpen ||
     plansScreenOpen;
 
