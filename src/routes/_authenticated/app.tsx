@@ -16,13 +16,10 @@ import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
-import { PlanComposerDialog } from "@/components/PlanComposerDialog";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
-import { useCallMode } from "@/contexts/CallModeContext";
-import { Phone } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
@@ -136,7 +133,7 @@ function AppPage() {
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
-  const [planComposerOpen, setPlanComposerOpen] = useState(false);
+  
   const [planApprovalOpen, setPlanApprovalOpen] = useState(false);
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
@@ -158,16 +155,9 @@ function AppPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
-  // Call mode (live voice conversation with Orby)
-  const { inCall, overlayMinimized, setOverlayMinimized, registerCallController } = useCallMode();
+  // Call mode removed — Orby's capabilities now live in Chat. Kept as an
+  // always-false ref so remaining guards (e.g. speech muting) stay inert.
   const inCallRef = useRef(false);
-  useEffect(() => { inCallRef.current = inCall; }, [inCall]);
-  useEffect(() => {
-    // When entering a call, silence any in-flight sentence speech immediately.
-    if (inCall && typeof window !== "undefined" && "speechSynthesis" in window) {
-      try { window.speechSynthesis.cancel(); } catch {}
-    }
-  }, [inCall]);
 
   // Unseen media count (for menu badge). Invalidated whenever this page mounts
   // (i.e. after returning from /media) and whenever media is seen/changed.
@@ -542,7 +532,6 @@ function AppPage() {
     sendOpen ||
     linkPickerOpen ||
     chatOpen ||
-    planComposerOpen ||
     planApprovalOpen ||
     plansScreenOpen;
 
@@ -606,64 +595,8 @@ function AppPage() {
     setJumpOpen(false);
   }, [sentences, setIndex, speak, claimSpeech]);
 
-  // ---- Call mode bridge ----
-  // Expose live view state + actions so the voice call can drive the app.
-  const callBridgeRef = useRef({ activeDoc, sentences, currentIdx });
-  callBridgeRef.current = { activeDoc, sentences, currentIdx };
 
-  useEffect(() => {
-    registerCallController({
-      getActiveContext: () => {
-        const { activeDoc: ad, sentences: ss, currentIdx: ci } = callBridgeRef.current;
-        if (!ad) return null;
-        return {
-          docId: ad.id,
-          title: ad.title,
-          currentIndex: ci,
-          sentences: (ss ?? []).map((s) => ({ id: s.id, content: s.content })),
-        };
-      },
-      openDocumentById: async (id: string) => {
-        const token = claimSpeech();
-        const [{ data: freshDoc }, { data: rows }] = await Promise.all([
-          supabase
-            .from("documents")
-            .select("current_sentence_index, title")
-            .eq("id", id)
-            .maybeSingle(),
-          supabase
-            .from("sentences")
-            .select("*")
-            .eq("document_id", id)
-            .order("order_index", { ascending: true })
-            .order("created_at", { ascending: true }),
-        ]);
-        const list = (rows ?? []) as Sentence[];
-        qc.setQueryData<Sentence[]>(["sentences", id], list);
-        const savedIdx = freshDoc?.current_sentence_index ?? 0;
-        const clamped = list.length === 0 ? 0 : Math.max(0, Math.min(savedIdx, list.length - 1));
-        qc.setQueryData<Doc[]>(["documents"], (prev) =>
-          prev?.map((d) => (d.id === id ? { ...d, current_sentence_index: clamped } : d)) ?? prev,
-        );
-        setActiveDocId(id);
-        // Suppress the speech token so opening a doc during a call stays silent.
-        if (token === speechTokenRef.current) speechTokenRef.current++;
-        return freshDoc?.title ? { title: freshDoc.title } : null;
-      },
-      jumpToIndex: async (index: number) => {
-        const { activeDoc: ad, sentences: ss } = callBridgeRef.current;
-        if (!ad || !ss || ss.length === 0) return;
-        const clamped = Math.max(0, Math.min(index, ss.length - 1));
-        qc.setQueryData<Doc[]>(["documents"], (prev) =>
-          prev?.map((d) => (d.id === ad.id ? { ...d, current_sentence_index: clamped } : d)) ?? prev,
-        );
-        await supabase.from("documents")
-          .update({ current_sentence_index: clamped })
-          .eq("id", ad.id);
-      },
-    });
-    return () => registerCallController(null);
-  }, [registerCallController, qc, claimSpeech]);
+
 
 
   const moveSentence = useCallback(async (target: number) => {
@@ -1066,13 +999,13 @@ function AppPage() {
     setEditing(true);
   }, [editing, currentIdx, sentences]);
 
-  // Long press = open Plan Mode composer (voice capture removed)
+  // Long press = open Chat (on the most recent thread).
   const onLongPressStart = useCallback(() => {
-    setPlanComposerOpen(true);
+    setChatOpen(true);
   }, []);
 
   const onLongPressEnd = useCallback(() => {
-    // no-op; the composer takes over from here
+    // no-op; the chat takes over from here
   }, []);
 
   useOrbGestures(
@@ -1880,9 +1813,9 @@ function AppPage() {
       setPinPickerQuery("");
       setPinPickerOpen(true);
     }},
-    { e: "🧠", t: "Plan mode", fn: () => {
+    { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
-      setPlanComposerOpen(true);
+      setChatOpen(true);
     }},
     { e: "🤖", t: "AI Plans", fn: () => {
       setMenuOpen(false);
@@ -2183,7 +2116,7 @@ function AppPage() {
             ref={orbRef}
             state={orbState}
             size={0}
-            className={`!w-full !h-full${inCall ? " orb-call" : ""}`}
+            className="!w-full !h-full"
           />
           {/* Swipe gestures on the orb handle directional navigation. */}
           {/* Invisible repeat-speech buttons flanking the orb */}
@@ -2980,13 +2913,6 @@ function AppPage() {
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
         />
       )}
-      <PlanComposerDialog
-        open={planComposerOpen}
-        onOpenChange={setPlanComposerOpen}
-        originDocumentId={activeDocId}
-        originSentenceIndex={currentIdx}
-      />
-
       <PlanApprovalDialog
         open={planApprovalOpen}
         onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
@@ -3000,23 +2926,6 @@ function AppPage() {
         <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
       )}
 
-      {/* Minimized call indicator — small orb pinned top-right; tap to reopen. */}
-      {inCall && overlayMinimized && (
-        <div
-          className="pointer-events-none fixed right-3 z-[55]"
-          style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
-        >
-          <button
-            type="button"
-            onClick={() => setOverlayMinimized(false)}
-            aria-label="Return to call"
-            className="pointer-events-auto relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-lg transition active:scale-95"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-yellow-400/60" />
-            <Phone className="relative h-4 w-4" />
-          </button>
-        </div>
-      )}
 
       <Dialog open={exportChooserOpen} onOpenChange={setExportChooserOpen}>
         <DialogContent className="sm:max-w-sm">

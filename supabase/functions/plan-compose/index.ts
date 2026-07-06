@@ -44,11 +44,11 @@ async function callPlannerLLM(systemPrompt: string, userPrompt: string): Promise
   throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
 }
 
-const systemPrompt = `You are Orby's planner. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
+const buildSystemPrompt = (allowedGroups?: string[] | null) => `You are Orby's planner. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
 
 You have these tools (no others exist):
 
-${toolCatalogForPrompt()}
+${toolCatalogForPrompt(allowedGroups)}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
@@ -181,8 +181,11 @@ Deno.serve(async (req) => {
 
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  const { plan_id, user_id: bodyUserId, internal_secret } = body ?? {};
+  const { plan_id, user_id: bodyUserId, internal_secret, allowed_tool_groups } = body ?? {};
   if (typeof plan_id !== "string") return json({ error: "plan_id required" }, 400);
+  const allowedGroups: string[] | null = Array.isArray(allowed_tool_groups)
+    ? allowed_tool_groups.filter((g: unknown): g is string => typeof g === "string")
+    : null;
 
   const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET");
   const isInternal =
@@ -484,6 +487,7 @@ Deno.serve(async (req) => {
     }
 
 
+    const systemPrompt = buildSystemPrompt(allowedGroups);
     const effectiveSystemPrompt = userContext
       ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
       : systemPrompt;
@@ -589,7 +593,7 @@ Deno.serve(async (req) => {
     // Scheduled plans (those originating from a plan_schedule) auto-approve so
     // they run without a manual approval step — matching how regular plans
     // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
-    const isScheduled = !!(plan as any).schedule_id && steps.length > 0;
+    const isScheduled = (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
 
     await admin
       .from("plans")

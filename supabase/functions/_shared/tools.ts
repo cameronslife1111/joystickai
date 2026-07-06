@@ -258,11 +258,58 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
 ];
 
-export function toolCatalogForPrompt(): string {
-  return TOOL_CATALOG.map((t) => {
-    const args = Object.entries(t.args)
-      .map(([k, v]) => `    "${k}": <${v.type}${v.required ? "" : ", optional"}>  // ${v.description}`)
-      .join("\n");
-    return `- ${t.name}\n  ${t.description}\n  Args:\n${args}`;
-  }).join("\n\n");
+/**
+ * Capability groups used by Orby's chat toggles. A tool is available to the
+ * planner when its group is "base" (always on) or when the group is included
+ * in the caller's allowed set.
+ */
+export const TOOL_GROUPS: Record<string, string> = {
+  // base — always available (read/discovery/expansion/text)
+  find_document_by_title: "base",
+  find_documents_by_title: "base",
+  read_document: "base",
+  find_sentence_by_content: "base",
+  find_media_by_title: "base",
+  find_all_media_by_title: "base",
+  expand_plan: "base",
+  generate_text: "base",
+  // document_editing
+  create_document: "document_editing",
+  rename_document: "document_editing",
+  add_sentence: "document_editing",
+  update_sentence_content: "document_editing",
+  move_sentence: "document_editing",
+  link_sentence_to_document: "document_editing",
+  mark_sentence_for_deletion: "document_editing",
+  mark_document_for_deletion: "document_editing",
+  mark_media_for_deletion: "document_editing",
+  rename_media: "document_editing",
+  // web_search
+  web_search: "web_search",
+  // image_generation
+  generate_image: "image_generation",
+  regenerate_image: "image_generation",
+  remix_images: "image_generation",
+  // video_generation
+  image_to_video: "video_generation",
+  video_to_video: "video_generation",
+  audio_image_to_video: "video_generation",
+};
+
+export function isToolAllowed(name: string, allowedGroups?: string[] | null): boolean {
+  const group = TOOL_GROUPS[name] ?? "base";
+  if (group === "base") return true;
+  if (!allowedGroups) return true; // no restriction
+  return allowedGroups.includes(group);
+}
+
+export function toolCatalogForPrompt(allowedGroups?: string[] | null): string {
+  return TOOL_CATALOG.filter((t) => isToolAllowed(t.name, allowedGroups))
+    .map((t) => {
+      const args = Object.entries(t.args)
+        .map(([k, v]) => `    "${k}": <${v.type}${v.required ? "" : ", optional"}>  // ${v.description}`)
+        .join("\n");
+      return `- ${t.name}\n  ${t.description}\n  Args:\n${args}`;
+    })
+    .join("\n\n");
 }
