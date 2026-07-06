@@ -2914,13 +2914,6 @@ function AppPage() {
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
         />
       )}
-      <PlanComposerDialog
-        open={planComposerOpen}
-        onOpenChange={setPlanComposerOpen}
-        originDocumentId={activeDocId}
-        originSentenceIndex={currentIdx}
-      />
-
       <PlanApprovalDialog
         open={planApprovalOpen}
         onOpenChange={(v) => { setPlanApprovalOpen(v); if (!v) setPlanApprovalId(null); }}
@@ -2934,23 +2927,6 @@ function AppPage() {
         <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
       )}
 
-      {/* Minimized call indicator — small orb pinned top-right; tap to reopen. */}
-      {inCall && overlayMinimized && (
-        <div
-          className="pointer-events-none fixed right-3 z-[55]"
-          style={{ top: "max(0.5rem, env(safe-area-inset-top))" }}
-        >
-          <button
-            type="button"
-            onClick={() => setOverlayMinimized(false)}
-            aria-label="Return to call"
-            className="pointer-events-auto relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 text-black shadow-lg transition active:scale-95"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-yellow-400/60" />
-            <Phone className="relative h-4 w-4" />
-          </button>
-        </div>
-      )}
 
       <Dialog open={exportChooserOpen} onOpenChange={setExportChooserOpen}>
         <DialogContent className="sm:max-w-sm">
