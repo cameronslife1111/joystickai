@@ -133,7 +133,7 @@ function AppPage() {
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
-  const [planComposerOpen, setPlanComposerOpen] = useState(false);
+  
   const [planApprovalOpen, setPlanApprovalOpen] = useState(false);
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
