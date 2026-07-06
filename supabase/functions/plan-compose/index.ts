@@ -487,6 +487,7 @@ Deno.serve(async (req) => {
     }
 
 
+    const systemPrompt = buildSystemPrompt(allowedGroups);
     const effectiveSystemPrompt = userContext
       ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
       : systemPrompt;
