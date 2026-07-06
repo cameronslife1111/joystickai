@@ -1814,9 +1814,9 @@ function AppPage() {
       setPinPickerQuery("");
       setPinPickerOpen(true);
     }},
-    { e: "🧠", t: "Plan mode", fn: () => {
+    { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
-      setPlanComposerOpen(true);
+      setChatOpen(true);
     }},
     { e: "🤖", t: "AI Plans", fn: () => {
       setMenuOpen(false);
