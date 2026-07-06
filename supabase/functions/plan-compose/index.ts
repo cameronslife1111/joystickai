@@ -181,8 +181,11 @@ Deno.serve(async (req) => {
 
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid json" }, 400); }
-  const { plan_id, user_id: bodyUserId, internal_secret } = body ?? {};
+  const { plan_id, user_id: bodyUserId, internal_secret, allowed_tool_groups } = body ?? {};
   if (typeof plan_id !== "string") return json({ error: "plan_id required" }, 400);
+  const allowedGroups: string[] | null = Array.isArray(allowed_tool_groups)
+    ? allowed_tool_groups.filter((g: unknown): g is string => typeof g === "string")
+    : null;
 
   const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET");
   const isInternal =
