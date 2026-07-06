@@ -155,16 +155,9 @@ function AppPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
 
-  // Call mode (live voice conversation with Orby)
-  const { inCall, overlayMinimized, setOverlayMinimized, registerCallController } = useCallMode();
+  // Call mode removed — Orby's capabilities now live in Chat. Kept as an
+  // always-false ref so remaining guards (e.g. speech muting) stay inert.
   const inCallRef = useRef(false);
-  useEffect(() => { inCallRef.current = inCall; }, [inCall]);
-  useEffect(() => {
-    // When entering a call, silence any in-flight sentence speech immediately.
-    if (inCall && typeof window !== "undefined" && "speechSynthesis" in window) {
-      try { window.speechSynthesis.cancel(); } catch {}
-    }
-  }, [inCall]);
 
   // Unseen media count (for menu badge). Invalidated whenever this page mounts
   // (i.e. after returning from /media) and whenever media is seen/changed.
