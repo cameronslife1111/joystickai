@@ -2117,7 +2117,7 @@ function AppPage() {
             ref={orbRef}
             state={orbState}
             size={0}
-            className={`!w-full !h-full${inCall ? " orb-call" : ""}`}
+            className="!w-full !h-full"
           />
           {/* Swipe gestures on the orb handle directional navigation. */}
           {/* Invisible repeat-speech buttons flanking the orb */}
