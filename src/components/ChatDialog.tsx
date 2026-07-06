@@ -245,7 +245,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data, error } = await supabase
         .from("chat_messages")
         .select("id, role, content, created_at, kind, plan_id")
-        .eq("thread_id", activeThreadId)
+        .eq("thread_id", activeThreadId as string)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as ChatRow[];
