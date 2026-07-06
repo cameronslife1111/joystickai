@@ -1011,7 +1011,7 @@ function AppPage() {
   useOrbGestures(
     orbRef,
     {
-      onTap: openNewIdea,
+      onTap: onSwipeLeft,
       onDoubleTap,
       onTripleTap: deleteCurrent,
       onLongPressStart,
@@ -1020,7 +1020,7 @@ function AppPage() {
         (orbRef.current as any)?.boostMood?.();
         if (dir === "up") void advanceSentence();
         else if (dir === "down") void onSwipeUp();
-        else if (dir === "left") onSwipeLeft();
+        else if (dir === "left") openNewIdea();
         else if (dir === "right") void onSwipeRight();
       },
     },
@@ -2165,6 +2165,13 @@ function AppPage() {
                 <MenuGridButton key={i} index={i} slot={slot} />
               ))}
             </div>
+            <button
+              onClick={() => setMenuOpen(false)}
+              aria-label="Close menu"
+              className="mt-3 flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 hover:text-foreground hover:bg-card"
+            >
+              <span className="text-lg">←</span>
+            </button>
           </div>
         </div>
       )}
