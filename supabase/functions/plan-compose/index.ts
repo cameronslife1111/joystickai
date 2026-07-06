@@ -44,11 +44,11 @@ async function callPlannerLLM(systemPrompt: string, userPrompt: string): Promise
   throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
 }
 
-const systemPrompt = `You are Orby's planner. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
+const buildSystemPrompt = (allowedGroups?: string[] | null) => `You are Orby's planner. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
 
 You have these tools (no others exist):
 
-${toolCatalogForPrompt()}
+${toolCatalogForPrompt(allowedGroups)}
 
 Critical rules:
 - You CANNOT delete user data. There is no delete tool. To "remove" something, use the appropriate mark_*_for_deletion tool, which only prepends the wastebasket emoji to the title or content so the user can find and remove it manually.
