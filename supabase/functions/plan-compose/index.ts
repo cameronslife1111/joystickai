@@ -593,7 +593,7 @@ Deno.serve(async (req) => {
     // Scheduled plans (those originating from a plan_schedule) auto-approve so
     // they run without a manual approval step — matching how regular plans
     // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
-    const isScheduled = !!(plan as any).schedule_id && steps.length > 0;
+    const isScheduled = (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
 
     await admin
       .from("plans")
