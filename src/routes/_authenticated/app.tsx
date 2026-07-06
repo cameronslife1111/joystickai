@@ -1000,13 +1000,13 @@ function AppPage() {
     setEditing(true);
   }, [editing, currentIdx, sentences]);
 
-  // Long press = open Plan Mode composer (voice capture removed)
+  // Long press = open Chat (on the most recent thread).
   const onLongPressStart = useCallback(() => {
-    setPlanComposerOpen(true);
+    setChatOpen(true);
   }, []);
 
   const onLongPressEnd = useCallback(() => {
-    // no-op; the composer takes over from here
+    // no-op; the chat takes over from here
   }, []);
 
   useOrbGestures(
