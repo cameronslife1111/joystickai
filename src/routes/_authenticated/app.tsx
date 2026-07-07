@@ -695,11 +695,42 @@ function AppPage() {
         onClick: async () => {
           const { data: u } = await supabase.auth.getUser();
           if (!u.user || !activeDocId) return;
-          await supabase.from("sentences").insert({
+          // Try to restore at the original slot; if that collides with the
+          // unique (document_id, order_index) index, append at the end.
+          let restoreIdx = deleted.order_index;
+          let { error: insErr } = await supabase.from("sentences").insert({
             user_id: u.user.id, document_id: activeDocId,
-            content: deleted.content, order_index: deleted.order_index,
+            content: deleted.content, order_index: restoreIdx,
           });
-          qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+          if (insErr) {
+            const { data: maxRow } = await supabase
+              .from("sentences")
+              .select("order_index")
+              .eq("document_id", activeDocId)
+              .order("order_index", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            restoreIdx = ((maxRow?.order_index as number | undefined) ?? -1) + 1;
+            const retry = await supabase.from("sentences").insert({
+              user_id: u.user.id, document_id: activeDocId,
+              content: deleted.content, order_index: restoreIdx,
+            });
+            insErr = retry.error;
+          }
+          if (insErr) {
+            toast.error("Couldn't undo delete");
+            return;
+          }
+          // Refetch, then navigate the view to the restored sentence so it's
+          // visibly back (the app shows one sentence at a time).
+          const { data: fresh } = await supabase
+            .from("sentences").select("*")
+            .eq("document_id", activeDocId)
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: true });
+          qc.setQueryData(["sentences", activeDocId], fresh ?? []);
+          const pos = (fresh ?? []).findIndex((s) => s.order_index === restoreIdx);
+          if (pos >= 0) await setIndex(pos);
         },
       },
     });
