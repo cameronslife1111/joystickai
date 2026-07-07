@@ -2149,15 +2149,15 @@ function AppPage() {
             className="!w-full !h-full"
           />
           {/* Swipe gestures on the orb handle directional navigation. */}
-          {/* Invisible repeat-speech buttons flanking the orb */}
+          {/* Invisible flanking buttons: left = delete, right = repeat */}
           <button
             type="button"
             onClick={() => {
               if (lockFavorites) { toast.error("List is locked"); return; }
-              void openPinnedDocument();
+              void deleteCurrent();
             }}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Open pinned document"
+            aria-label="Delete sentence"
           />
           <button
             type="button"
