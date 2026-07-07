@@ -1044,7 +1044,6 @@ function AppPage() {
     {
       onTap: onSwipeLeft,
       onDoubleTap,
-      onTripleTap: deleteCurrent,
       onLongPressStart,
       onLongPressEnd,
       onSwipe: (dir) => {
