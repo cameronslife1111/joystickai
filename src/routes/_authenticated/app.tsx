@@ -2153,7 +2153,6 @@ function AppPage() {
           <button
             type="button"
             onClick={() => {
-              if (lockFavorites) { toast.error("List is locked"); return; }
               void deleteCurrent();
             }}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
