@@ -1857,7 +1857,25 @@ function AppPage() {
       fn: () => toggleListLock(true),
     },
     { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery("🟢"); setFavoritesOpen(true); setPickerSlot(0); } },
-    { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); } },
+    { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); }, onLongPress: () => {
+      const prevId = recentIds[1];
+      if (!prevId || !docs?.some((d) => d.id === prevId)) return;
+      setMenuOpen(false);
+      const token = claimSpeech();
+      setActiveDocId(prevId);
+      void (async () => {
+        try {
+          const { data: sents } = await supabase
+            .from("sentences")
+            .select("content, order_index")
+            .eq("document_id", prevId)
+            .order("order_index", { ascending: true })
+            .limit(1);
+          const first = sents?.[0]?.content;
+          if (first) speak(first, token);
+        } catch {}
+      })();
+    } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
   ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences]);
 
