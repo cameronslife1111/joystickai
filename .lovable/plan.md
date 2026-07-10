@@ -1,35 +1,23 @@
 ## Goal
-Make deleting a sentence a hidden "press the left side of the orb" gesture, remove the triple-tap/triple-click delete, keep right-side press as repeat, and fix the broken Undo.
+Add a long-press gesture to the "🕘 Recent docs" grid button (Slot 14 in the menu) that takes the user back to the document they were viewing *before* the current one — without opening the Recent docs list. A normal tap keeps opening the Recent docs list as it does today.
 
-## Context (current behavior)
-In `src/routes/_authenticated/app.tsx`, two invisible buttons flank the orb (lines ~2122-2140):
-- **Left of orb** (`right-full`, aria-label "Open pinned document") → calls `openPinnedDocument()`.
-- **Right of orb** (`left-full`, aria-label "Repeat sentence") → speaks the current sentence. (Working correctly — leave as-is.)
+## How it works today
+- `recentIds` (in `src/routes/_authenticated/app.tsx`) is a most-recent-first, de-duplicated list of opened document IDs, persisted to `localStorage` (`orby-recent-docs`). It updates every time `activeDocId` changes: the active doc is moved to the front (`recentIds[0]`).
+- This means `recentIds[1]` is always the previously-viewed distinct document.
+- The grid button (`{ e: "🕘", t: "Recent docs", fn: ... }`, ~line 1860) currently has only a tap `fn` that opens the Recent docs overlay, and no `onLongPress`. The grid renderer (`MenuGridButton`) already supports an `onLongPress` handler via a 500ms timer.
 
-Delete currently fires from `onTripleTap: deleteCurrent` in the `useOrbGestures` config (line ~1016). Undo lives inside `deleteCurrent`'s toast action (lines ~690-705).
+## Change (single file: `src/routes/_authenticated/app.tsx`)
+Add an `onLongPress` to the "Recent docs" grid item that:
+1. Reads the previous document ID = `recentIds[1]`.
+2. Verifies it still exists in `docs`.
+3. If it exists: close the menu (`setMenuOpen(false)`), set it as active (`setActiveDocId(prevId)`), and speak its current sentence (mirroring the existing Recent-docs `pickDoc` speak behavior) so the experience matches selecting from the list.
+4. If there is no valid previous document, do nothing (or show a brief "No previous document" toast).
 
-## Changes (all in `src/routes/_authenticated/app.tsx`)
+No changes to business logic, data, or the `recentIds` tracking itself.
 
-### 1. Move delete to the left orb-press zone
-Repurpose the left invisible button (~lines 2123-2131) to trigger delete instead of opening the pinned document:
-- Change its `onClick` to call `deleteCurrent()`.
-- Change `aria-label` to "Delete sentence".
-- Keep it visually invisible (`opacity-0`) and same size/position.
-
-Note: the "open pinned document" tap on that zone goes away. Pinned-document access remains available elsewhere (the menu); if you still want a tap shortcut for it, tell me and I'll relocate it.
-
-### 2. Remove triple-tap / triple-click delete
-- In the `useOrbGestures` config (~line 1016) remove `onTripleTap: deleteCurrent` so triple tap no longer deletes (and no longer does anything).
-
-### 3. Fix Undo
-Rework the toast's Undo handler (and `deleteCurrent`) so a restore reliably brings the sentence back and shows it:
-- `await` the re-insert and check for errors; if the insert fails (e.g. a `(document_id, order_index)` unique-index collision), fall back to appending the sentence at the end (`max(order_index)+1`) so it always comes back.
-- After a successful insert, `await qc.invalidateQueries(["sentences", activeDocId])` and refetch, then **navigate the view to the restored sentence** via `setIndex(...)` so the user actually sees it return (the app shows one sentence at a time, so restoring silently in the background currently looks like "nothing happened").
-- Surface a small error toast if the restore ultimately fails, instead of failing silently.
+## Note on behavior
+Because opening the previous doc pushes it to the front of `recentIds`, repeated long-presses will toggle back and forth between the two most recent documents — a natural "back" behavior. If you'd prefer a deeper multi-step history stack instead of a simple toggle, tell me and I'll track a separate navigation history.
 
 ## Verification
-- Press the left side of the orb → current sentence deletes, "Sentence deleted" toast appears.
-- Press Undo → the sentence reappears and the view lands on it.
-- Press the right side of the orb → repeats the sentence (unchanged).
-- Triple tap / triple click → no longer deletes.
-- Single press (menu), double press (edit), and swipes remain unchanged.
+- Open Doc A, then open Doc B. Open the menu and long-press 🕘 Recent docs → lands on Doc A and reads its current sentence.
+- A normal tap on 🕘 Recent docs still opens the Recent docs list.
