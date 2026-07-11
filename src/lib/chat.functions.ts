@@ -54,12 +54,28 @@ async function buildContext(
       .select("title")
       .eq("id", docId)
       .single();
-    const { data: rows } = await supabase
-      .from("sentences")
-      .select("content")
-      .eq("document_id", docId)
-      .order("order_index", { ascending: true });
-    const joined = (rows ?? []).map((r: { content: string }) => r.content).join(" ").trim();
+
+    // Pull the COMPLETE document. The Data API caps a single query at ~1000
+    // rows, so paginate until every sentence is fetched — otherwise long
+    // documents are silently truncated to their beginning.
+    const PAGE = 1000;
+    const contents: string[] = [];
+    let from = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data: rows, error } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", docId)
+        .order("order_index", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) break;
+      const batch = rows ?? [];
+      for (const r of batch) contents.push(r.content);
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+    const joined = contents.join(" ").trim();
     if (joined) {
       parts.push(`[document: "${doc?.title ?? "Untitled"}"]\n${joined}`);
     }
