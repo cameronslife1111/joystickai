@@ -54,12 +54,28 @@ async function buildContext(
       .select("title")
       .eq("id", docId)
       .single();
-    const { data: rows } = await supabase
-      .from("sentences")
-      .select("content")
-      .eq("document_id", docId)
-      .order("order_index", { ascending: true });
-    const joined = (rows ?? []).map((r: { content: string }) => r.content).join(" ").trim();
+
+    // Pull the COMPLETE document. The Data API caps a single query at ~1000
+    // rows, so paginate until every sentence is fetched — otherwise long
+    // documents are silently truncated to their beginning.
+    const PAGE = 1000;
+    const contents: string[] = [];
+    let from = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data: rows, error } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", docId)
+        .order("order_index", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) break;
+      const batch = rows ?? [];
+      for (const r of batch) contents.push(r.content);
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+    const joined = contents.join(" ").trim();
     if (joined) {
       parts.push(`[document: "${doc?.title ?? "Untitled"}"]\n${joined}`);
     }
@@ -213,10 +229,16 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "Have a natural back-and-forth conversation. Be clear and useful. " +
       "You may use light markdown formatting (paragraphs, bold, and short lists when helpful). " +
       (contextText
-        ? "The user has attached one or more documents as context, shown below. Treat them as authoritative reference for the conversation and refer to them by title when helpful.\n\n" +
-          contextText +
-          "\n\n"
+        ? "The user has attached one or more documents as reference. Their full content is appended to the end of the user's latest message. Treat the attached documents as authoritative reference, use their complete content, and refer to them by title when helpful.\n\n"
         : "");
+
+    // Attach documents LAST — after whatever the user typed. The block is
+    // appended to the end of the latest user message so the model reads the
+    // question first, then the full, freshly-pulled reference documents.
+    const docBlock = contextText
+      ? `\n\n[Attached documents — authoritative reference]\n${contextText}`
+      : "";
+    const latestWithDocs = `${latestText}${docBlock}`;
 
     // Vision route — attach the image to the latest user message (gated by capability).
     if (caps.image_analysis && data.imageUrl) {
@@ -232,7 +254,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           {
             role: "user",
             content: [
-              { type: "text", text: latestText || "Describe this image." },
+              { type: "text", text: latestWithDocs || "Describe this image." },
               { type: "image", image: data.imageUrl },
             ],
           },
@@ -256,19 +278,28 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (route === "web") {
-      const query = contextText
-        ? `${latestText}\n\nReference material:\n${contextText}`
-        : latestText;
+      // User question first, then the full attached documents as reference.
+      const query = latestWithDocs;
       const { ok, text } = await runWebSearch(query);
       if (!ok) throw new Error(text);
       return { route: "chat", text };
     }
 
-    // Normal chat route.
+    // Normal chat route — append the documents to the final user message so
+    // they come after the user's text, and rebuild fresh on every send.
+    const outgoing = data.messages.map((m) => ({ role: m.role, content: m.content }));
+    if (docBlock) {
+      for (let i = outgoing.length - 1; i >= 0; i--) {
+        if (outgoing[i].role === "user") {
+          outgoing[i] = { ...outgoing[i], content: `${outgoing[i].content}${docBlock}` };
+          break;
+        }
+      }
+    }
     const { text } = await aiSdkGenerateText({
       model,
       system,
-      messages: data.messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: outgoing,
     });
     const out = (text ?? "").trim();
     if (!out) throw new Error("AI returned an empty response");
