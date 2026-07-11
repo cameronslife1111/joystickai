@@ -229,10 +229,16 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "Have a natural back-and-forth conversation. Be clear and useful. " +
       "You may use light markdown formatting (paragraphs, bold, and short lists when helpful). " +
       (contextText
-        ? "The user has attached one or more documents as context, shown below. Treat them as authoritative reference for the conversation and refer to them by title when helpful.\n\n" +
-          contextText +
-          "\n\n"
+        ? "The user has attached one or more documents as reference. Their full content is appended to the end of the user's latest message. Treat the attached documents as authoritative reference, use their complete content, and refer to them by title when helpful.\n\n"
         : "");
+
+    // Attach documents LAST — after whatever the user typed. The block is
+    // appended to the end of the latest user message so the model reads the
+    // question first, then the full, freshly-pulled reference documents.
+    const docBlock = contextText
+      ? `\n\n[Attached documents — authoritative reference]\n${contextText}`
+      : "";
+    const latestWithDocs = `${latestText}${docBlock}`;
 
     // Vision route — attach the image to the latest user message (gated by capability).
     if (caps.image_analysis && data.imageUrl) {
@@ -248,7 +254,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           {
             role: "user",
             content: [
-              { type: "text", text: latestText || "Describe this image." },
+              { type: "text", text: latestWithDocs || "Describe this image." },
               { type: "image", image: data.imageUrl },
             ],
           },
@@ -272,19 +278,28 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (route === "web") {
-      const query = contextText
-        ? `${latestText}\n\nReference material:\n${contextText}`
-        : latestText;
+      // User question first, then the full attached documents as reference.
+      const query = latestWithDocs;
       const { ok, text } = await runWebSearch(query);
       if (!ok) throw new Error(text);
       return { route: "chat", text };
     }
 
-    // Normal chat route.
+    // Normal chat route — append the documents to the final user message so
+    // they come after the user's text, and rebuild fresh on every send.
+    const outgoing = data.messages.map((m) => ({ role: m.role, content: m.content }));
+    if (docBlock) {
+      for (let i = outgoing.length - 1; i >= 0; i--) {
+        if (outgoing[i].role === "user") {
+          outgoing[i] = { ...outgoing[i], content: `${outgoing[i].content}${docBlock}` };
+          break;
+        }
+      }
+    }
     const { text } = await aiSdkGenerateText({
       model,
       system,
-      messages: data.messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: outgoing,
     });
     const out = (text ?? "").trim();
     if (!out) throw new Error("AI returned an empty response");
