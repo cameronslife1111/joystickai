@@ -930,6 +930,8 @@ type PlanRow = {
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
 
 function PlanProgressCard({ planId }: { planId: string }) {
+  const qc = useQueryClient();
+  const [stopping, setStopping] = useState(false);
   const { data: plan } = useQuery({
     queryKey: ["chat_plan", planId],
     refetchInterval: (q) => {
@@ -945,6 +947,21 @@ function PlanProgressCard({ planId }: { planId: string }) {
       return (data as any) ?? null;
     },
   });
+
+  const stopPlan = async () => {
+    setStopping(true);
+    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
+    if (error) {
+      setStopping(false);
+      toast.error(`Couldn't stop: ${error.message}`);
+      return;
+    }
+    qc.setQueryData<PlanRow | null>(["chat_plan", planId], (cur) =>
+      cur ? { ...cur, status: "cancelled" } : cur,
+    );
+    toast.success("Plan stopped");
+  };
+
 
   if (!plan) {
     return (
