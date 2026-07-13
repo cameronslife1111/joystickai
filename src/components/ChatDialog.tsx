@@ -482,6 +482,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       });
       // bump thread ordering
       void supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+
+      // Auto-name the thread from the first message (background, non-blocking).
+      const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
+      const curTitle = (activeThread?.title ?? "").trim().toLowerCase();
+      const isDefaultTitle = curTitle === "" || curTitle === "chat" || curTitle === "new chat";
+      if (isFirstMessage && isDefaultTitle) {
+        void (async () => {
+          try {
+            const { title } = await nameThread({ data: { message: text } });
+            if (title) await updateThread(threadId, { title });
+          } catch {
+            /* naming is best-effort */
+          }
+        })();
+      }
     } catch (err) {
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
       toast.error(err instanceof Error ? err.message : "Chat failed");
