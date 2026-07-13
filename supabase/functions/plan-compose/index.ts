@@ -595,6 +595,8 @@ Deno.serve(async (req) => {
     // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
     const isScheduled = (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
 
+    // Never revive a plan the user stopped mid-compose: skip the write if the
+    // plan was cancelled while we were composing.
     await admin
       .from("plans")
       .update({
@@ -604,7 +606,8 @@ Deno.serve(async (req) => {
         steps,
         total_steps: steps.length,
       })
-      .eq("id", plan_id);
+      .eq("id", plan_id)
+      .neq("status", "cancelled");
 
     return json({ ok: true, summary, step_count: steps.length });
   } catch (err: any) {
