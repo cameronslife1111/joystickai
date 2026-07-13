@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import ReactMarkdown from "react-markdown";
+
 import {
   Dialog,
   DialogContent,
@@ -579,17 +579,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       <div
                         className={
                           m.role === "user"
-                            ? "max-w-[85%] rounded-2xl bg-primary px-3.5 py-2 text-sm text-primary-foreground"
-                            : "max-w-[90%] text-sm"
+                            ? "max-w-[85%] rounded-2xl bg-primary px-3.5 py-2 text-[25px] text-primary-foreground"
+                            : "max-w-[90%] text-[25px]"
                         }
                       >
-                        {m.role === "assistant" ? (
-                          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1.5 prose-headings:my-2 prose-li:my-0.5">
-                            <ReactMarkdown>{m.content}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          <span className="whitespace-pre-wrap">{m.content}</span>
-                        )}
+                        <span className="whitespace-pre-wrap">{m.content}</span>
                       </div>
                       <div className="mt-1 flex items-center gap-1">
                         <button
