@@ -996,8 +996,20 @@ function PlanProgressCard({ planId }: { planId: string }) {
         ) : (
           <AlertCircle className="h-4 w-4 text-destructive" />
         )}
-        {headerLabel}
+        <span className="flex-1">{headerLabel}</span>
+        {running && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 border-destructive/40 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={stopping}
+            onClick={() => void stopPlan()}
+          >
+            <Square className="h-3 w-3" /> Stop
+          </Button>
+        )}
       </div>
+
       {plan.plan_summary && (
         <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
       )}
