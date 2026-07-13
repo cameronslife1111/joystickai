@@ -618,7 +618,8 @@ Deno.serve(async (req) => {
         error_message: String(err?.message ?? err ?? "compose failed"),
         error_lovable_prompt: buildLovablePrompt(plan, null, String(err?.message ?? err)),
       })
-      .eq("id", plan_id);
+      .eq("id", plan_id)
+      .neq("status", "cancelled");
     return json({ error: String(err?.message ?? err) }, 500);
   }
 });
