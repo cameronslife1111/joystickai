@@ -47,7 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { sendChatMessage, type ChatCapabilities } from "@/lib/chat.functions";
+import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
@@ -142,6 +142,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
+  const nameThread = useServerFn(generateThreadTitle);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -215,7 +216,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     return t;
   };
 
-  // Bootstrap: pick a thread when the dialog opens.
+  // Bootstrap: pick a thread when the dialog opens. Prefer the explicitly
+  // requested thread, then the last chat the user was on, then the most
+  // recent thread. Only create a new thread when the user has none.
   useEffect(() => {
     if (!open) {
       bootstrappedRef.current = false;
@@ -226,8 +229,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (threads === undefined) return;
     bootstrappedRef.current = true;
     (async () => {
+      const savedId =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("orby_last_thread")
+          : null;
       if (openThreadId && threads.some((t) => t.id === openThreadId)) {
         setActiveThreadId(openThreadId);
+      } else if (savedId && threads.some((t) => t.id === savedId)) {
+        setActiveThreadId(savedId);
       } else if (threads.length > 0) {
         setActiveThreadId(threads[0].id);
       } else {
@@ -237,6 +246,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId, threads, openThreadId]);
+
+  // Remember the last chat the user was on so re-opening returns to it.
+  useEffect(() => {
+    if (activeThreadId && typeof window !== "undefined") {
+      window.localStorage.setItem("orby_last_thread", activeThreadId);
+    }
+  }, [activeThreadId]);
 
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
@@ -466,6 +482,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       });
       // bump thread ordering
       void supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+
+      // Auto-name the thread from the first message (background, non-blocking).
+      const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
+      const curTitle = (activeThread?.title ?? "").trim().toLowerCase();
+      const isDefaultTitle = curTitle === "" || curTitle === "chat" || curTitle === "new chat";
+      if (isFirstMessage && isDefaultTitle) {
+        void (async () => {
+          try {
+            const { title } = await nameThread({ data: { message: text } });
+            if (title) await updateThread(threadId, { title });
+          } catch {
+            /* naming is best-effort */
+          }
+        })();
+      }
     } catch (err) {
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
       toast.error(err instanceof Error ? err.message : "Chat failed");

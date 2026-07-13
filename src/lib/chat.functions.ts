@@ -222,7 +222,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       "You are Orby, a warm, helpful chat assistant inside a writing app. " +
@@ -304,4 +304,35 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const out = (text ?? "").trim();
     if (!out) throw new Error("AI returned an empty response");
     return { route: "chat", text: out };
+  });
+
+/**
+ * Generate a short (2–5 word) title for a chat thread based on the user's first
+ * message. Kept off the critical reply path — the client calls this in the
+ * background after the first exchange.
+ */
+const titleSchema = z.object({
+  message: z.string().min(1).max(4000),
+});
+
+export const generateThreadTitle = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => titleSchema.parse(input))
+  .handler(async ({ data }): Promise<{ title: string }> => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+    const provider = createOpenAiProvider(apiKey);
+    const model = provider("gpt-5.6-sol");
+
+    const { text } = await aiSdkGenerateText({
+      model,
+      system:
+        "You create very short chat titles. Given the user's first message, " +
+        "reply with a concise 2–5 word title that captures the topic. " +
+        "No quotes, no punctuation at the end, no emoji, Title Case.",
+      messages: [{ role: "user", content: data.message }],
+    });
+    let title = (text ?? "").trim().replace(/^["']|["']$/g, "").slice(0, 60);
+    if (!title) title = "New chat";
+    return { title };
   });
