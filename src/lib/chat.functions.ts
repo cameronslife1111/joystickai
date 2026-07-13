@@ -275,7 +275,19 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .slice(-6)
       .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
       .join("\n");
-    const route = await classifyRoute(model, latestText, recent, caps);
+    let route = await classifyRoute(model, latestText, recent, caps);
+
+    // Attached-documents safety net: when the user has documents attached, only
+    // let the request become a plan if they clearly asked to CHANGE something.
+    // Otherwise fall back to a normal text answer so the full attached documents
+    // are always sent and answered — regardless of which toggles are on.
+    if (route === "plan" && contextText) {
+      const wantsAction =
+        /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
+          latestText,
+        );
+      if (!wantsAction) route = "chat";
+    }
 
     if (route === "plan") {
       // The client creates and auto-runs the plan; nothing to answer here.
