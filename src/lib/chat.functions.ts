@@ -164,17 +164,22 @@ async function classifyRoute(
   if (caps.planning) enabled.push("planning (multi-step tasks combining the above)");
 
   const system =
-    "You are the router for Orby, a writing assistant. Decide how to handle the user's latest message. " +
+    "You are the strict intent router for Orby, a writing assistant. Decide how to handle the user's latest message. " +
     "Return STRICT JSON only: {\"route\":\"chat\"|\"web\"|\"plan\"}.\n\n" +
+    "DEFAULT TO \"chat\". Only escalate to \"web\" or \"plan\" when the user's intent is unmistakable.\n\n" +
     "Routes:\n" +
-    "- chat: normal conversation, questions, explanations, writing help that needs no live web lookup and no changes to the user's documents or media.\n" +
+    "- chat: normal conversation, questions, explanations, brainstorming, opinions, and writing help — including reading, summarizing, analyzing, or answering questions ABOUT attached documents. This is the fallback for anything ambiguous.\n" +
     (caps.web_search
-      ? "- web: the user wants current, factual, or real-world info best answered by searching the web.\n"
+      ? "- web: the user explicitly wants current, real-world, or factual info that requires looking it up online (news, prices, live facts, 'search for', 'look up', 'what's the latest').\n"
       : "") +
     (actionEnabled
-      ? "- plan: the user wants Orby to DO something to their workspace — create/edit/organize documents or sentences, or generate/edit images or videos, or any multi-step task.\n"
+      ? "- plan: the user gives a CLEAR, EXPLICIT INSTRUCTION for Orby to DO something to their workspace — e.g. 'edit/rewrite/add to/organize/rename this document', 'generate/make/create this image', 'make these videos'. There must be an imperative action verb aimed at their documents or media.\n"
       : "") +
-    `Only these capabilities are ENABLED right now: ${enabled.join("; ") || "none"}. ` +
+    "\nCRITICAL RULES:\n" +
+    "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n" +
+    "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n" +
+    "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n" +
+    `Only these capabilities are ENABLED: ${enabled.join("; ") || "none"}. ` +
     "Never choose a route whose capability is disabled — fall back to chat instead.";
 
   try {
@@ -270,7 +275,19 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .slice(-6)
       .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
       .join("\n");
-    const route = await classifyRoute(model, latestText, recent, caps);
+    let route = await classifyRoute(model, latestText, recent, caps);
+
+    // Attached-documents safety net: when the user has documents attached, only
+    // let the request become a plan if they clearly asked to CHANGE something.
+    // Otherwise fall back to a normal text answer so the full attached documents
+    // are always sent and answered — regardless of which toggles are on.
+    if (route === "plan" && contextText) {
+      const wantsAction =
+        /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
+          latestText,
+        );
+      if (!wantsAction) route = "chat";
+    }
 
     if (route === "plan") {
       // The client creates and auto-runs the plan; nothing to answer here.

@@ -930,6 +930,8 @@ type PlanRow = {
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
 
 function PlanProgressCard({ planId }: { planId: string }) {
+  const qc = useQueryClient();
+  const [stopping, setStopping] = useState(false);
   const { data: plan } = useQuery({
     queryKey: ["chat_plan", planId],
     refetchInterval: (q) => {
@@ -945,6 +947,21 @@ function PlanProgressCard({ planId }: { planId: string }) {
       return (data as any) ?? null;
     },
   });
+
+  const stopPlan = async () => {
+    setStopping(true);
+    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
+    if (error) {
+      setStopping(false);
+      toast.error(`Couldn't stop: ${error.message}`);
+      return;
+    }
+    qc.setQueryData<PlanRow | null>(["chat_plan", planId], (cur) =>
+      cur ? { ...cur, status: "cancelled" } : cur,
+    );
+    toast.success("Plan stopped");
+  };
+
 
   if (!plan) {
     return (
@@ -979,8 +996,20 @@ function PlanProgressCard({ planId }: { planId: string }) {
         ) : (
           <AlertCircle className="h-4 w-4 text-destructive" />
         )}
-        {headerLabel}
+        <span className="flex-1">{headerLabel}</span>
+        {running && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 border-destructive/40 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={stopping}
+            onClick={() => void stopPlan()}
+          >
+            <Square className="h-3 w-3" /> Stop
+          </Button>
+        )}
       </div>
+
       {plan.plan_summary && (
         <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
       )}
