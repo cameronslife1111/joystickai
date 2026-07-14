@@ -355,15 +355,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   // Speak a short cue not tied to a specific message bubble.
   const speakCue = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
     setSpeakingId(null);
-    const clean = stripEmoji(text);
-    if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
-    u.rate = 1;
-    u.pitch = 1;
-    window.speechSynthesis.speak(u);
+    speakPlain(text);
   };
 
   const toggleSpeak = (row: ChatRow) => {
