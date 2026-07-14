@@ -680,7 +680,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
                     <div key={m.id} className="flex flex-col items-start">
-                      <PlanProgressCard planId={m.plan_id} />
+                      <PlanProgressCard planId={m.plan_id} autoSpeak={autoSpeak && open} />
                     </div>
                   ) : (
                     <div
