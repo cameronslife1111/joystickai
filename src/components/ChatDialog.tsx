@@ -169,6 +169,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
 
+  // Load the client-only "read replies aloud" preference.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setAutoSpeak(window.localStorage.getItem("orby_chat_autospeak") === "1");
+    } catch {}
+  }, []);
+
+  const setAutoSpeakPref = (next: boolean) => {
+    setAutoSpeak(next);
+    try {
+      window.localStorage.setItem("orby_chat_autospeak", next ? "1" : "0");
+    } catch {}
+    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+    }
+  };
+
   const { data: threads = [] } = useQuery({
     queryKey: ["chat_threads", userId],
     enabled: !!userId && open,
