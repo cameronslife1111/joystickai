@@ -311,6 +311,35 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [open]);
 
+  // Speak a message's text and mark it as the actively-spoken message so the
+  // per-message Play/Stop button reflects state (and can stop it).
+  const speakMessage = (id: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const clean = stripEmoji(text);
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 1;
+    u.pitch = 1;
+    u.onend = () => setSpeakingId((cur) => (cur === id ? null : cur));
+    u.onerror = () => setSpeakingId((cur) => (cur === id ? null : cur));
+    setSpeakingId(id);
+    window.speechSynthesis.speak(u);
+  };
+
+  // Speak a short cue not tied to a specific message bubble.
+  const speakCue = (text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    setSpeakingId(null);
+    const clean = stripEmoji(text);
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 1;
+    u.pitch = 1;
+    window.speechSynthesis.speak(u);
+  };
+
   const toggleSpeak = (row: ChatRow) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (speakingId === row.id) {
@@ -318,16 +347,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       setSpeakingId(null);
       return;
     }
-    window.speechSynthesis.cancel();
-    const clean = stripEmoji(row.content);
-    if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
-    u.rate = 1;
-    u.pitch = 1;
-    u.onend = () => setSpeakingId((cur) => (cur === row.id ? null : cur));
-    u.onerror = () => setSpeakingId((cur) => (cur === row.id ? null : cur));
-    setSpeakingId(row.id);
-    window.speechSynthesis.speak(u);
+    speakMessage(row.id, row.content);
   };
 
   const handleCopy = async (text: string) => {
