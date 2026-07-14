@@ -1009,7 +1009,8 @@ type PlanRow = {
 
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
 
-function PlanProgressCard({ planId }: { planId: string }) {
+function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoSpeak?: boolean }) {
+  const announcedRef = useRef(false);
   const qc = useQueryClient();
   const [stopping, setStopping] = useState(false);
   const { data: plan } = useQuery({
