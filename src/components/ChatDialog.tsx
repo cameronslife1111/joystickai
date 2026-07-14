@@ -112,6 +112,32 @@ const stripEmoji = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// Speak a short phrase with no message-bubble binding (cues, plan announcements).
+function speakPlain(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const clean = stripEmoji(text);
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  u.rate = 1;
+  u.pitch = 1;
+  window.speechSynthesis.speak(u);
+}
+
+// Pick a cute spoken cue from a plan's summary + step descriptions.
+function planActionCue(plan: { plan_summary: string | null; steps: PlanStep[] | null }): string {
+  const text = [
+    plan.plan_summary ?? "",
+    ...(Array.isArray(plan.steps) ? plan.steps.map((s) => s?.description ?? "") : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/\bvideo/.test(text)) return "Making those videos now";
+  if (/\bimage|picture|photo|remix/.test(text)) return "Generating that image now";
+  if (/\bdocument|sentence|rewrite|edit|organiz/.test(text)) return "Editing your document now";
+  return "Working on that now";
+}
+
 function normalizeCaps(raw: any): ChatCapabilities {
   return { ...DEFAULT_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
 }
@@ -154,6 +180,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
@@ -167,6 +194,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
+
+  // Load the client-only "read replies aloud" preference.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setAutoSpeak(window.localStorage.getItem("orby_chat_autospeak") === "1");
+    } catch {}
+  }, []);
+
+  const setAutoSpeakPref = (next: boolean) => {
+    setAutoSpeak(next);
+    try {
+      window.localStorage.setItem("orby_chat_autospeak", next ? "1" : "0");
+    } catch {}
+    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+    }
+  };
 
   const { data: threads = [] } = useQuery({
     queryKey: ["chat_threads", userId],
@@ -291,6 +337,28 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [open]);
 
+  // Speak a message's text and mark it as the actively-spoken message so the
+  // per-message Play/Stop button reflects state (and can stop it).
+  const speakMessage = (id: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const clean = stripEmoji(text);
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 1;
+    u.pitch = 1;
+    u.onend = () => setSpeakingId((cur) => (cur === id ? null : cur));
+    u.onerror = () => setSpeakingId((cur) => (cur === id ? null : cur));
+    setSpeakingId(id);
+    window.speechSynthesis.speak(u);
+  };
+
+  // Speak a short cue not tied to a specific message bubble.
+  const speakCue = (text: string) => {
+    setSpeakingId(null);
+    speakPlain(text);
+  };
+
   const toggleSpeak = (row: ChatRow) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (speakingId === row.id) {
@@ -298,16 +366,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       setSpeakingId(null);
       return;
     }
-    window.speechSynthesis.cancel();
-    const clean = stripEmoji(row.content);
-    if (!clean) return;
-    const u = new SpeechSynthesisUtterance(clean);
-    u.rate = 1;
-    u.pitch = 1;
-    u.onend = () => setSpeakingId((cur) => (cur === row.id ? null : cur));
-    u.onerror = () => setSpeakingId((cur) => (cur === row.id ? null : cur));
-    setSpeakingId(row.id);
-    window.speechSynthesis.speak(u);
+    speakMessage(row.id, row.content);
   };
 
   const handleCopy = async (text: string) => {
@@ -480,6 +539,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const base = (cur ?? []).filter((m) => m.id !== optimisticUser.id);
         return [...base, insertedUser as ChatRow, insertedAssistant];
       });
+
+      // Auto-read the reply aloud when enabled. Plans get a short cue; the
+      // per-step cues are handled inside PlanProgressCard.
+      if (autoSpeak && open) {
+        if (insertedAssistant.kind === "plan") {
+          speakCue("Planning now.");
+        } else if (insertedAssistant.content) {
+          speakMessage(insertedAssistant.id, insertedAssistant.content);
+        }
+      }
       // bump thread ordering
       void supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
@@ -558,6 +627,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         />
                       </div>
                     ))}
+                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
+                      <div className="min-w-0">
+                        <Label htmlFor="cap-autospeak" className="text-sm">Read replies aloud</Label>
+                        <p className="text-[11px] leading-tight text-muted-foreground">Automatically speak Orby's answers</p>
+                      </div>
+                      <Switch
+                        id="cap-autospeak"
+                        checked={autoSpeak}
+                        onCheckedChange={setAutoSpeakPref}
+                      />
+                    </div>
                     {caps.image_analysis && (
                       <Button
                         variant="outline"
@@ -600,7 +680,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
                     <div key={m.id} className="flex flex-col items-start">
-                      <PlanProgressCard planId={m.plan_id} />
+                      <PlanProgressCard planId={m.plan_id} autoSpeak={autoSpeak && open} />
                     </div>
                   ) : (
                     <div
@@ -929,7 +1009,8 @@ type PlanRow = {
 
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
 
-function PlanProgressCard({ planId }: { planId: string }) {
+function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoSpeak?: boolean }) {
+  const announcedRef = useRef(false);
   const qc = useQueryClient();
   const [stopping, setStopping] = useState(false);
   const { data: plan } = useQuery({
@@ -947,6 +1028,15 @@ function PlanProgressCard({ planId }: { planId: string }) {
       return (data as any) ?? null;
     },
   });
+
+  // Announce the plan's action once, when it starts running (after composing).
+  useEffect(() => {
+    if (!autoSpeak || announcedRef.current || !plan) return;
+    if (plan.status === "composing" || plan.status === "proposed" || PLAN_DONE.has(plan.status)) return;
+    announcedRef.current = true;
+    speakPlain(planActionCue(plan));
+  }, [autoSpeak, plan]);
+
 
   const stopPlan = async () => {
     setStopping(true);
