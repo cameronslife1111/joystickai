@@ -520,6 +520,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const base = (cur ?? []).filter((m) => m.id !== optimisticUser.id);
         return [...base, insertedUser as ChatRow, insertedAssistant];
       });
+
+      // Auto-read the reply aloud when enabled. Plans get a short cue; the
+      // per-step cues are handled inside PlanProgressCard.
+      if (autoSpeak && open) {
+        if (insertedAssistant.kind === "plan") {
+          speakCue("Planning now.");
+        } else if (insertedAssistant.content) {
+          speakMessage(insertedAssistant.id, insertedAssistant.content);
+        }
+      }
       // bump thread ordering
       void supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
 
