@@ -608,6 +608,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         />
                       </div>
                     ))}
+                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
+                      <div className="min-w-0">
+                        <Label htmlFor="cap-autospeak" className="text-sm">Read replies aloud</Label>
+                        <p className="text-[11px] leading-tight text-muted-foreground">Automatically speak Orby's answers</p>
+                      </div>
+                      <Switch
+                        id="cap-autospeak"
+                        checked={autoSpeak}
+                        onCheckedChange={setAutoSpeakPref}
+                      />
+                    </div>
                     {caps.image_analysis && (
                       <Button
                         variant="outline"
