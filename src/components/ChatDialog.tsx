@@ -1029,6 +1029,15 @@ function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoS
     },
   });
 
+  // Announce the plan's action once, when it starts running (after composing).
+  useEffect(() => {
+    if (!autoSpeak || announcedRef.current || !plan) return;
+    if (plan.status === "composing" || plan.status === "proposed" || PLAN_DONE.has(plan.status)) return;
+    announcedRef.current = true;
+    speakPlain(planActionCue(plan));
+  }, [autoSpeak, plan]);
+
+
   const stopPlan = async () => {
     setStopping(true);
     const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", planId);
