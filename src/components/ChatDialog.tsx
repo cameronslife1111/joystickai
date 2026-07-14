@@ -112,6 +112,32 @@ const stripEmoji = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// Speak a short phrase with no message-bubble binding (cues, plan announcements).
+function speakPlain(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const clean = stripEmoji(text);
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  u.rate = 1;
+  u.pitch = 1;
+  window.speechSynthesis.speak(u);
+}
+
+// Pick a cute spoken cue from a plan's summary + step descriptions.
+function planActionCue(plan: { plan_summary: string | null; steps: PlanStep[] | null }): string {
+  const text = [
+    plan.plan_summary ?? "",
+    ...(Array.isArray(plan.steps) ? plan.steps.map((s) => s?.description ?? "") : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/\bvideo/.test(text)) return "Making those videos now";
+  if (/\bimage|picture|photo|remix/.test(text)) return "Generating that image now";
+  if (/\bdocument|sentence|rewrite|edit|organiz/.test(text)) return "Editing your document now";
+  return "Working on that now";
+}
+
 function normalizeCaps(raw: any): ChatCapabilities {
   return { ...DEFAULT_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
 }
