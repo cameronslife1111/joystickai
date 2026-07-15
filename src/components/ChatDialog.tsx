@@ -271,8 +271,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       return;
     }
     if (bootstrappedRef.current || !userId) return;
-    // wait for threads query
-    if (threads === undefined) return;
+    // Wait until the threads query has actually finished — the default `[]`
+    // from useQuery would otherwise trick us into creating a new thread
+    // before the real list arrives.
+    if (!threadsFetched) return;
     bootstrappedRef.current = true;
     (async () => {
       const savedId =
@@ -291,7 +293,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, userId, threads, openThreadId]);
+  }, [open, userId, threadsFetched, threads, openThreadId]);
 
   // Remember the last chat the user was on so re-opening returns to it.
   useEffect(() => {
