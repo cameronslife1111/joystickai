@@ -6,7 +6,7 @@ import { createOpenAiProvider } from "./ai-gateway";
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(12000),
+  content: z.string().min(1).max(1_000_000),
 });
 
 const capabilities = z.object({
@@ -329,7 +329,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
  * background after the first exchange.
  */
 const titleSchema = z.object({
-  message: z.string().min(1).max(4000),
+  message: z.string().min(1).max(20_000),
 });
 
 export const generateThreadTitle = createServerFn({ method: "POST" })

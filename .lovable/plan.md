@@ -1,65 +1,23 @@
-## Goal
+## Problem
 
-Rewire the orb gestures and two menu slots so:
+Sending a chat message with several attached documents fails Zod validation with "String must contain at most 12,000 characters". The 12k cap in `src/lib/chat.functions.ts` is far below what GPT-5.6 SOL supports (~400k-token context, roughly 1M+ characters of input).
 
-- **Single tap on Orby** → open the full-document editor (what double-tap does today).
-- **Swipe left on Orby** → open the menu grid (what single tap does today).
-- **Slot 11 (menu)** → 💬 Chat — opens the most recent thread (no new thread created). This behavior already works, just make the wiring explicit.
-- **Slot 13 (menu)** → 💡 New Idea — opens the composer that swipe-left used to open.
+## Change (single file: `src/lib/chat.functions.ts`)
 
-Long-press on Orby (open chat) and all other swipes (up/down/right) stay exactly as they are.
+Keep the model (`gpt-5.6-sol`) and everything else exactly as-is. Only raise the two string caps that block large attachments:
 
-## Changes — all in `src/routes/_authenticated/app.tsx`
+1. Line 9 — chat message `content`: `.max(12000)` → `.max(1_000_000)`
+   - This is the per-message string that already contains the user's typed text plus the appended attached-document context built by `buildContext`.
+2. Line 332 — `sendChatMessage` `message` input: `.max(4000)` → `.max(20_000)`
+   - This is only the user's typed text (attachments are fetched server-side by id), so a generous 20k is plenty and keeps a sane guard.
 
-### 1. Orb gesture wiring (lines ~1042–1058)
+Leave untouched: model id, `messages` array cap (60), `contextDocumentIds` cap (20), prompt construction, and everything outside these two `.max(...)` numbers.
 
-In the `useOrbGestures` call:
+## Why these numbers
 
-- `onTap: onSwipeLeft` → change to `onTap: onDoubleTap` (single tap now opens the editor).
-- Inside `onSwipe`, `dir === "left"` currently calls `openNewIdea()` → change to `setMenuOpen(true)`.
-- Remove the now-unused `onSwipeLeft` const on line 1014 (menu open is inlined in the swipe handler).
-
-Spacebar keyboard shortcut (lines 1060–1083) is left as-is — space still triggers new idea / edit like before, since it's a keyboard convenience, not the orb.
-
-### 2. Slot 11 → Chat (opens most recent thread)
-
-In the `slots` `useMemo` (line 1897):
-
-```text
-filled[10] = grid[20];  →  filled[10] = grid[2];   // 11 Chat (most recent thread)
-```
-
-`grid[2]` is already `{ e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); } }`, and `ChatDialog` already restores the most-recent thread from `localStorage` on open — no new thread is created. Nothing else to change here.
-
-### 3. Slot 13 → 💡 New Idea
-
-In the `slots` `useMemo` (line 1899):
-
-```text
-filled[12] = grid[2];  →  filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } };
-```
-
-Inlining the slot (rather than repointing to a `grid[...]` entry) keeps the `grid` array's numeric indices untouched, so no other slot mappings shift.
-
-### 4. Leftover chat duplicates in `grid`
-
-`grid[3]` and `grid[4]` are inert duplicate Chat entries kept only to preserve grid indices (comment on line 1727). They stay as-is; nothing references them after this change either, so leaving them avoids any index drift risk.
-
-## What is intentionally NOT changing
-
-- Long-press on Orby → still opens Chat on the most recent thread.
-- Swipe up / down / right on Orby → unchanged (Next / Menu-ish / Favorites).
-- Chat button in the header of ChatDialog, thread drawer, capability toggles → unchanged.
-- Emoji filter in doc search, plan engine, speech logic, aurora, slot 14 Recent docs, slot 24 Swap slot → all untouched.
-- `openNewIdea` implementation itself is unchanged — it just gets called from Slot 13 instead of from swipe-left.
+GPT-5.6 SOL's context window is far larger than 12k characters; 1M chars for the fully-assembled message comfortably fits realistic multi-document attachments while still preventing a runaway payload. The typed-message cap stays small because attachments don't flow through it.
 
 ## Verification
 
-1. Typecheck.
-2. Manual on mobile viewport:
-   - Single tap orb → full-doc editor opens (no menu).
-   - Swipe left on orb → menu opens (no composer).
-   - Long-press orb → chat opens on the most recent thread.
-   - Menu Slot 11 (💬 Chat) → opens chat, most recent thread, no new thread created.
-   - Menu Slot 13 (💡 New idea) → composer opens exactly like the old swipe-left did.
-   - Swipe up/down/right on orb still do Next / Menu / Favorites resume.
+- Typecheck passes.
+- Send a chat message with multiple large documents attached — no more "String must contain at most 12000 characters" error.
