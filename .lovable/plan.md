@@ -1,72 +1,65 @@
-# Auto-read Orby's chat replies aloud
+## Goal
 
-Add an opt-in "read replies aloud" mode to the chat. When on, every AI text
-reply is spoken automatically the moment it appears, and plan actions get a
-short cute spoken cue ("Planning now", "Generating that image now", etc.).
-Everything reuses the chat's existing speech plumbing, so it never interferes
-with how documents are read on the main screen.
+Rewire the orb gestures and two menu slots so:
 
-## How it stays isolated (no cross-talk with document speech)
+- **Single tap on Orby** → open the full-document editor (what double-tap does today).
+- **Swipe left on Orby** → open the menu grid (what single tap does today).
+- **Slot 11 (menu)** → 💬 Chat — opens the most recent thread (no new thread created). This behavior already works, just make the wiring explicit.
+- **Slot 13 (menu)** → 💡 New Idea — opens the composer that swipe-left used to open.
 
-- All new speech lives inside `ChatDialog.tsx` and uses `window.speechSynthesis`
-  exactly like the existing per-message Play button.
-- The main screen already stops speaking whenever the chat is open: the
-  auto-repeat timer skips while `chatOpen` is true, and document gestures are
-  blocked behind the chat overlay. So no changes to `app.tsx` are needed.
-- On chat close, speech is already cancelled (existing effect). We keep that.
-- When the chat is closed, the main screen resumes reading sentences on swipe /
-  jump exactly as before — untouched.
+Long-press on Orby (open chat) and all other swipes (up/down/right) stay exactly as they are.
 
-## Changes (all in `src/components/ChatDialog.tsx`)
+## Changes — all in `src/routes/_authenticated/app.tsx`
 
-### 1. New toggle in the "Orby capabilities" panel
-- Add a client-only preference `autoSpeak`, stored in `localStorage`
-  (key `orby_chat_autospeak`), default **off**. Read on mount, write on change.
-- Render a switch labeled "Read replies aloud" (hint: "Automatically speak
-  Orby's answers") directly under the existing capability toggles.
-- Keep it OUT of the `caps` object so the server tool logic and the
-  "N/6 capabilities on" count are unaffected.
+### 1. Orb gesture wiring (lines ~1042–1058)
 
-### 2. Shared speak helper (reuse existing Stop button)
-- Refactor the current `toggleSpeak` into a small `speakMessage(id, text)` that
-  cancels any current utterance, sets `speakingId = id`, and speaks. Keep
-  `toggleSpeak` behavior for the manual button (tap again = stop).
-- Because auto-speak sets `speakingId` to the message's id, the existing
-  Play/Stop button under that message immediately shows as **Stop**, so the
-  user can tap it to stop — satisfying the "stop button underneath the output"
-  requirement with the control already there.
+In the `useOrbGestures` call:
 
-### 3. Auto-speak text replies
-- In `handleSend`, right after the assistant text message is inserted, if
-  `autoSpeak` is on and the chat is open, call `speakMessage(msg.id, result.text)`.
-- Works on iOS because `speechSynthesis` is already unlocked once on first
-  gesture in `__root.tsx`, so speaking after the network round-trip is honored.
+- `onTap: onSwipeLeft` → change to `onTap: onDoubleTap` (single tap now opens the editor).
+- Inside `onSwipe`, `dir === "left"` currently calls `openNewIdea()` → change to `setMenuOpen(true)`.
+- Remove the now-unused `onSwipeLeft` const on line 1014 (menu open is inlined in the swipe handler).
 
-### 4. Cute spoken cues for plan actions
-- When a plan message is created (route === "plan"), if `autoSpeak` is on,
-  speak a short cue immediately: "Planning now."
-- In `PlanProgressCard`, when `autoSpeak` is on, announce the action once as the
-  plan starts running, chosen from the plan's steps/tools:
-  - image generation → "Generating that image now"
-  - video generation → "Making those videos now"
-  - document editing → "Editing your document now"
-  - otherwise → "Working on that now"
-  Use a ref to announce each phase only once (no repeats on the 2.5s poll), and
-  only while the chat is open. `autoSpeak` is passed into `PlanProgressCard` as a
-  prop.
+Spacebar keyboard shortcut (lines 1060–1083) is left as-is — space still triggers new idea / edit like before, since it's a keyboard convenience, not the orb.
 
-### 5. Cleanup / safety
-- Keep the existing on-close `speechSynthesis.cancel()` effect.
-- Guard every auto-speak call with `open === true` and `autoSpeak === true`.
-- Strip emojis before speaking (existing `stripEmoji` helper).
+### 2. Slot 11 → Chat (opens most recent thread)
 
-## Out of scope
-- No changes to `app.tsx`, the document reading logic, the global mute, or any
-  server / edge functions.
-- Uses the browser Web Speech API already in use — no new voice provider.
+In the `slots` `useMemo` (line 1897):
+
+```text
+filled[10] = grid[20];  →  filled[10] = grid[2];   // 11 Chat (most recent thread)
+```
+
+`grid[2]` is already `{ e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); } }`, and `ChatDialog` already restores the most-recent thread from `localStorage` on open — no new thread is created. Nothing else to change here.
+
+### 3. Slot 13 → 💡 New Idea
+
+In the `slots` `useMemo` (line 1899):
+
+```text
+filled[12] = grid[2];  →  filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } };
+```
+
+Inlining the slot (rather than repointing to a `grid[...]` entry) keeps the `grid` array's numeric indices untouched, so no other slot mappings shift.
+
+### 4. Leftover chat duplicates in `grid`
+
+`grid[3]` and `grid[4]` are inert duplicate Chat entries kept only to preserve grid indices (comment on line 1727). They stay as-is; nothing references them after this change either, so leaving them avoids any index drift risk.
+
+## What is intentionally NOT changing
+
+- Long-press on Orby → still opens Chat on the most recent thread.
+- Swipe up / down / right on Orby → unchanged (Next / Menu-ish / Favorites).
+- Chat button in the header of ChatDialog, thread drawer, capability toggles → unchanged.
+- Emoji filter in doc search, plan engine, speech logic, aurora, slot 14 Recent docs, slot 24 Swap slot → all untouched.
+- `openNewIdea` implementation itself is unchanged — it just gets called from Slot 13 instead of from swipe-left.
 
 ## Verification
-- Typecheck the project.
-- Manually confirm on mobile viewport: toggle on → send a message → reply is
-  read aloud, Stop button under it works; toggle off → silent; close chat →
-  document reading works normally on swipe.
+
+1. Typecheck.
+2. Manual on mobile viewport:
+   - Single tap orb → full-doc editor opens (no menu).
+   - Swipe left on orb → menu opens (no composer).
+   - Long-press orb → chat opens on the most recent thread.
+   - Menu Slot 11 (💬 Chat) → opens chat, most recent thread, no new thread created.
+   - Menu Slot 13 (💡 New idea) → composer opens exactly like the old swipe-left did.
+   - Swipe up/down/right on orb still do Next / Menu / Favorites resume.

@@ -1011,7 +1011,7 @@ function AppPage() {
 
 
 
-  const onSwipeLeft = useCallback(() => setMenuOpen(true), []);
+  
 
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
@@ -1042,7 +1042,7 @@ function AppPage() {
   useOrbGestures(
     orbRef,
     {
-      onTap: onSwipeLeft,
+      onTap: onDoubleTap,
       onDoubleTap,
       onLongPressStart,
       onLongPressEnd,
@@ -1050,7 +1050,7 @@ function AppPage() {
         (orbRef.current as any)?.boostMood?.();
         if (dir === "up") void advanceSentence();
         else if (dir === "down") void onSwipeUp();
-        else if (dir === "left") openNewIdea();
+        else if (dir === "left") setMenuOpen(true);
         else if (dir === "right") void onSwipeRight();
       },
     },
@@ -1894,9 +1894,9 @@ function AppPage() {
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
-    filled[10] = grid[20]; // 11 Plan mode
+    filled[10] = grid[2];  // 11 Chat (most recent thread)
     filled[11] = grid[9];  // 12 Jump to
-    filled[12] = grid[2];  // 13 Chat (combines Gen text / Analyze img / Web search)
+    filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } }; // 13 New idea
     filled[13] = grid[21];  // 14 AI Plans
     filled[14] = grid[25]; // 15 Mark with trash
     filled[15] = grid[8];  // 16 Favorites
