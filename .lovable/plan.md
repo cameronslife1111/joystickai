@@ -1,23 +1,27 @@
 ## Problem
 
-Sending a chat message with several attached documents fails Zod validation with "String must contain at most 12,000 characters". The 12k cap in `src/lib/chat.functions.ts` is far below what GPT-5.6 SOL supports (~400k-token context, roughly 1M+ characters of input).
+Every time the chat opens (orb long-press or Slot 11), a new "Chat" thread is created instead of resuming the previous one.
 
-## Change (single file: `src/lib/chat.functions.ts`)
+Root cause in `src/components/ChatDialog.tsx`:
 
-Keep the model (`gpt-5.6-sol`) and everything else exactly as-is. Only raise the two string caps that block large attachments:
+- `useQuery` destructures with `data: threads = []`, so while the query is still loading, `threads` is `[]` (not `undefined`).
+- The bootstrap effect's guard `if (threads === undefined) return;` never fires.
+- Bootstrap sees `threads.length === 0`, hits the `else` branch, and calls `createThread("Chat")` before the real threads arrive.
 
-1. Line 9 — chat message `content`: `.max(12000)` → `.max(1_000_000)`
-   - This is the per-message string that already contains the user's typed text plus the appended attached-document context built by `buildContext`.
-2. Line 332 — `sendChatMessage` `message` input: `.max(4000)` → `.max(20_000)`
-   - This is only the user's typed text (attachments are fetched server-side by id), so a generous 20k is plenty and keeps a sane guard.
+The saved `orby_last_thread` id in localStorage is discarded because the list appears empty at that moment.
 
-Leave untouched: model id, `messages` array cap (60), `contextDocumentIds` cap (20), prompt construction, and everything outside these two `.max(...)` numbers.
+## Fix
 
-## Why these numbers
+In `src/components/ChatDialog.tsx`:
 
-GPT-5.6 SOL's context window is far larger than 12k characters; 1M chars for the fully-assembled message comfortably fits realistic multi-document attachments while still preventing a runaway payload. The typed-message cap stays small because attachments don't flow through it.
+1. Pull `isFetched` (or `isSuccess`) from the `useQuery({ queryKey: ["chat_threads", userId] })` call.
+2. In the bootstrap effect, wait for `isFetched` before deciding what to do — do NOT rely on `threads === undefined`.
+3. Only call `createThread("Chat")` when `isFetched === true` AND `threads.length === 0` AND there is no matching saved/openThreadId. Otherwise pick `openThreadId` → saved `orby_last_thread` → most recent thread, exactly as today.
 
-## Verification
+No other behavior changes. The explicit "＋ New chat" button in the thread drawer (line ~437, `createThread("New chat")`) remains the only user-facing way to create a thread, matching what the user asked for.
 
-- Typecheck passes.
-- Send a chat message with multiple large documents attached — no more "String must contain at most 12000 characters" error.
+## Files touched
+
+- `src/components/ChatDialog.tsx` — bootstrap effect + `useQuery` destructure only.
+
+No changes needed in `src/routes/_authenticated/app.tsx`: both orb long-press and Slot 11 already just call `setChatOpen(true)` without passing `openThreadId`, so once the bootstrap is fixed both entry points correctly resume the last thread.

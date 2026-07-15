@@ -214,7 +214,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
-  const { data: threads = [] } = useQuery({
+  const { data: threads = [], isFetched: threadsFetched } = useQuery({
     queryKey: ["chat_threads", userId],
     enabled: !!userId && open,
     queryFn: async (): Promise<Thread[]> => {
