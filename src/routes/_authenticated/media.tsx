@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
-  CheckSquare, CheckCircle2, FileText,
+  CheckSquare, CheckCircle2, FileText, ImageIcon,
 } from "lucide-react";
+import { AssignDocumentIconDialog } from "@/components/AssignDocumentIconDialog";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
@@ -128,6 +129,7 @@ function MediaPage() {
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
+  const [iconAssignAsset, setIconAssignAsset] = useState<Asset | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
@@ -890,6 +892,15 @@ function MediaPage() {
                   }}
                 />
               )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<ImageIcon className="h-4 w-4" />} label="Set as document icon"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setIconAssignAsset(a);
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
@@ -1142,6 +1153,17 @@ function MediaPage() {
           onSubmitted={() => setV2vAsset(null)}
         />
       )}
+
+      {iconAssignAsset && (
+        <AssignDocumentIconDialog
+          open={!!iconAssignAsset}
+          onOpenChange={(o) => { if (!o) setIconAssignAsset(null); }}
+          mediaAssetId={iconAssignAsset.id}
+          mediaAssetTitle={iconAssignAsset.title}
+        />
+      )}
+
+
 
       {/* Failed asset dialog */}
       {failedAsset && (

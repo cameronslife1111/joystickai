@@ -92,6 +92,42 @@ export type Database = {
         }
         Relationships: []
       }
+      document_icons: {
+        Row: {
+          created_at: string
+          document_id: string
+          media_asset_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          media_asset_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          media_asset_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_icons_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: true
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_icons_media_asset_id_fkey"
+            columns: ["media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           created_at: string

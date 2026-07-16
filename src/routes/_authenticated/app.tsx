@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Orb } from "@/components/Orb";
+import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
@@ -281,6 +282,24 @@ function AppPage() {
       return data ?? [];
     },
   });
+
+  // Icon assigned to the active document (replaces Orby's visual).
+  const { data: docIconUrl } = useQuery({
+    queryKey: ["document_icon", activeDocId],
+    enabled: !!activeDocId,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase
+        .from("document_icons")
+        .select("media_asset_id, media_assets(url)")
+        .eq("document_id", activeDocId!)
+        .maybeSingle();
+      if (error) return null;
+      const url = (data as any)?.media_assets?.url;
+      return typeof url === "string" && url ? url : null;
+    },
+  });
+
+
 
   // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
@@ -2160,12 +2179,21 @@ function AppPage() {
           }}
         >
           {/* Linked-document pill moved to the header, under the title. */}
-          <Orb
-            ref={orbRef}
-            state={orbState}
-            size={0}
-            className="!w-full !h-full"
-          />
+          {docIconUrl ? (
+            <DocumentIconAvatar
+              ref={orbRef}
+              url={docIconUrl}
+              state={orbState}
+              className="!w-full !h-full"
+            />
+          ) : (
+            <Orb
+              ref={orbRef}
+              state={orbState}
+              size={0}
+              className="!w-full !h-full"
+            />
+          )}
           {/* Swipe gestures on the orb handle directional navigation. */}
           {/* Invisible flanking buttons: left = delete, right = repeat */}
           <button
