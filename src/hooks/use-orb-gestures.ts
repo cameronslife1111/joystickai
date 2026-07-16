@@ -143,5 +143,5 @@ export function useOrbGestures(
       clearLongPress();
       if (tapTimer) clearTimeout(tapTimer);
     };
-  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx]);
+  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
 }
