@@ -102,6 +102,7 @@ function AppPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [flare, setFlare] = useState<null | "up" | "down" | "left" | "right">(null);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
