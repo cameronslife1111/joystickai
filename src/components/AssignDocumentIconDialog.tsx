@@ -115,7 +115,7 @@ export function AssignDocumentIconDialog({
       }
 
       qc.invalidateQueries({ queryKey: ["document_icons_for_asset", mediaAssetId] });
-      qc.invalidateQueries({ queryKey: ["document_icon"] });
+      qc.invalidateQueries({ queryKey: ["document_icon"], refetchType: "active" });
       toast.success(
         selected.size === 0
           ? "Icon removed from all documents"
