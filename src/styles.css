@@ -304,6 +304,7 @@
   z-index: 0;
   filter: blur(18px) saturate(1.5);
   mix-blend-mode: screen;
+  opacity: 0.25;
   animation: orb-aura-hue 20s linear infinite;
   will-change: filter, transform, opacity;
 }
@@ -337,7 +338,7 @@
 }
 .light .orb-aura {
   mix-blend-mode: multiply;
-  opacity: 0.85;
+  opacity: 0.25;
 }
 
 @keyframes orb-aura-spin {
