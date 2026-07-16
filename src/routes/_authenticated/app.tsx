@@ -283,6 +283,24 @@ function AppPage() {
     },
   });
 
+  // Icon assigned to the active document (replaces Orby's visual).
+  const { data: docIconUrl } = useQuery({
+    queryKey: ["document_icon", activeDocId],
+    enabled: !!activeDocId,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase
+        .from("document_icons")
+        .select("media_asset_id, media_assets(url)")
+        .eq("document_id", activeDocId!)
+        .maybeSingle();
+      if (error) return null;
+      const url = (data as any)?.media_assets?.url;
+      return typeof url === "string" && url ? url : null;
+    },
+  });
+
+
+
   // Load user preferences (favorites array + muted flag + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
