@@ -129,6 +129,7 @@ function MediaPage() {
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
+  const [iconAssignAsset, setIconAssignAsset] = useState<Asset | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
