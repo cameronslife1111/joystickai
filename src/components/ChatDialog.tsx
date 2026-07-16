@@ -459,14 +459,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || busy || !userId || !activeThreadId) return;
+    if (!text || !userId || !activeThreadId) return;
     const threadId = activeThreadId;
+    if (busyThreadIds.has(threadId)) return;
     if (caps.image_analysis && pickedImage && !pickedImage.url) {
       toast.error("That image has no URL yet");
       return;
     }
 
-    setBusy(true);
+    markBusy(threadId);
     setInput("");
 
     const optimisticUser: ChatRow = {
