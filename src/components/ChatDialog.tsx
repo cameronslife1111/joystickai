@@ -173,7 +173,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set());
+  const markBusy = (id: string) =>
+    setBusyThreadIds((cur) => {
+      const next = new Set(cur);
+      next.add(id);
+      return next;
+    });
+  const markIdle = (id: string) =>
+    setBusyThreadIds((cur) => {
+      if (!cur.has(id)) return cur;
+      const next = new Set(cur);
+      next.delete(id);
+      return next;
+    });
   const [pickedImage, setPickedImage] = useState<MediaAsset | null>(null);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
