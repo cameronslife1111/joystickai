@@ -295,14 +295,14 @@
   z-index: 2;
 }
 
-/* Tight glowing ring around the orb (~1 mm) */
+/* Big pulsing energy aura behind the orb */
 .orb-aura {
   position: absolute;
-  inset: -2%;
+  inset: -22%;
   border-radius: 9999px;
   pointer-events: none;
   z-index: 0;
-  filter: blur(2px) saturate(1.5);
+  filter: blur(18px) saturate(1.5);
   mix-blend-mode: screen;
   animation: orb-aura-hue 20s linear infinite;
   will-change: filter, transform, opacity;
@@ -348,8 +348,8 @@
   50%      { transform: scale(1.08); opacity: 0.95; }
 }
 @keyframes orb-aura-hue {
-  0%   { filter: blur(2px) saturate(1.5) hue-rotate(0deg); }
-  100% { filter: blur(2px) saturate(1.5) hue-rotate(360deg); }
+  0%   { filter: blur(18px) saturate(1.5) hue-rotate(0deg); }
+  100% { filter: blur(18px) saturate(1.5) hue-rotate(360deg); }
 }
 
 /* Directional solar-flare — one-shot on swipe */
