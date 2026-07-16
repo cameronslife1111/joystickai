@@ -280,43 +280,131 @@
   }
 }
 
-/* ============ App aurora (top-down rainbow light) ============ */
-.app-aurora {
+/* ============ Orb stage: aura + directional flare ============ */
+.orb-stage {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+}
+.orb-stage > .orb,
+.orb-stage > button.orb {
+  position: relative;
+  z-index: 2;
+}
+
+/* Big pulsing energy aura behind the orb */
+.orb-aura {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 55vh;
+  inset: -120%;
+  border-radius: 9999px;
   pointer-events: none;
-  opacity: 0.55;
-  filter: blur(36px) saturate(1.3);
-  background:
-    radial-gradient(120% 80% at 20% -10%, color-mix(in oklab, var(--aurora-1) 80%, transparent), transparent 60%),
-    radial-gradient(120% 80% at 80% -10%, color-mix(in oklab, var(--aurora-3) 80%, transparent), transparent 60%),
-    radial-gradient(140% 90% at 50% -20%, color-mix(in oklab, var(--aurora-2) 85%, transparent), transparent 65%),
-    linear-gradient(180deg, color-mix(in oklab, var(--aurora-4) 70%, transparent), transparent 70%);
-  -webkit-mask-image: linear-gradient(180deg, black 0%, black 45%, transparent 100%);
-  mask-image: linear-gradient(180deg, black 0%, black 45%, transparent 100%);
-  animation: app-aurora-hue 14s linear infinite, app-aurora-drift 9s ease-in-out infinite;
+  z-index: 0;
+  filter: blur(60px) saturate(1.5);
+  mix-blend-mode: screen;
+  animation: orb-aura-hue 20s linear infinite;
   will-change: filter, transform, opacity;
 }
-
-.light .app-aurora {
-  opacity: 0.4;
-  filter: blur(40px) saturate(1.4);
+.orb-aura::before,
+.orb-aura::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+.orb-aura::before {
+  background: conic-gradient(
+    from 0deg,
+    var(--aurora-1),
+    var(--aurora-2),
+    var(--aurora-3),
+    var(--aurora-4),
+    var(--aurora-1)
+  );
+  opacity: 0.75;
+  animation: orb-aura-spin 18s linear infinite;
+}
+.orb-aura::after {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--aurora-2) 90%, transparent),
+    color-mix(in oklab, var(--aurora-3) 60%, transparent) 45%,
+    transparent 72%
+  );
+  animation: orb-aura-pulse 4.5s ease-in-out infinite;
+}
+.light .orb-aura {
   mix-blend-mode: multiply;
+  opacity: 0.85;
 }
 
-@keyframes app-aurora-hue {
-  0%   { filter: blur(36px) saturate(1.3) hue-rotate(0deg); }
-  100% { filter: blur(36px) saturate(1.3) hue-rotate(360deg); }
+@keyframes orb-aura-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes orb-aura-pulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.55; }
+  50%      { transform: scale(1.15); opacity: 0.95; }
+}
+@keyframes orb-aura-hue {
+  0%   { filter: blur(60px) saturate(1.5) hue-rotate(0deg); }
+  100% { filter: blur(60px) saturate(1.5) hue-rotate(360deg); }
 }
 
-@keyframes app-aurora-drift {
-  0%, 100% { transform: translateX(-4%) translateY(-2%) scale(1.05); opacity: 0.45; }
-  50%      { transform: translateX(4%) translateY(2%) scale(1.15); opacity: 0.6; }
+/* Directional solar-flare — one-shot on swipe */
+.orb-flare {
+  position: absolute;
+  inset: -20%;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  filter: blur(30px) saturate(1.6);
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--aurora-3) 95%, transparent),
+    color-mix(in oklab, var(--aurora-2) 70%, transparent) 45%,
+    color-mix(in oklab, var(--aurora-1) 40%, transparent) 70%,
+    transparent 85%
+  );
+  will-change: transform, opacity, filter;
+}
+.light .orb-flare { mix-blend-mode: multiply; }
+
+.orb-flare-up    { animation: orb-flare-up 750ms cubic-bezier(.22,.61,.36,1) forwards; }
+.orb-flare-down  { animation: orb-flare-down 750ms cubic-bezier(.22,.61,.36,1) forwards; }
+.orb-flare-left  { animation: orb-flare-left 750ms cubic-bezier(.22,.61,.36,1) forwards; }
+.orb-flare-right { animation: orb-flare-right 750ms cubic-bezier(.22,.61,.36,1) forwards; }
+
+@keyframes orb-flare-up {
+  0%   { transform: translateY(0) scale(0.6); opacity: 0; filter: blur(20px) saturate(1.6); }
+  25%  { opacity: 1; transform: translateY(-8vh) scaleY(1.6) scaleX(0.85); filter: blur(36px) saturate(1.8); }
+  100% { transform: translateY(-60vh) scaleY(2.2) scaleX(0.7); opacity: 0; filter: blur(48px) saturate(1.6); }
+}
+@keyframes orb-flare-down {
+  0%   { transform: translateY(0) scale(0.6); opacity: 0; filter: blur(20px) saturate(1.6); }
+  25%  { opacity: 1; transform: translateY(8vh) scaleY(1.6) scaleX(0.85); filter: blur(36px) saturate(1.8); }
+  100% { transform: translateY(60vh) scaleY(2.2) scaleX(0.7); opacity: 0; filter: blur(48px) saturate(1.6); }
+}
+@keyframes orb-flare-left {
+  0%   { transform: translateX(0) scale(0.6); opacity: 0; filter: blur(20px) saturate(1.6); }
+  25%  { opacity: 1; transform: translateX(-8vw) scaleX(1.6) scaleY(0.85); filter: blur(36px) saturate(1.8); }
+  100% { transform: translateX(-60vw) scaleX(2.2) scaleY(0.7); opacity: 0; filter: blur(48px) saturate(1.6); }
+}
+@keyframes orb-flare-right {
+  0%   { transform: translateX(0) scale(0.6); opacity: 0; filter: blur(20px) saturate(1.6); }
+  25%  { opacity: 1; transform: translateX(8vw) scaleX(1.6) scaleY(0.85); filter: blur(36px) saturate(1.8); }
+  100% { transform: translateX(60vw) scaleX(2.2) scaleY(0.7); opacity: 0; filter: blur(48px) saturate(1.6); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-aurora { animation: none; }
+  .orb-aura,
+  .orb-aura::before,
+  .orb-aura::after { animation: none; }
+  .orb-flare-up, .orb-flare-down, .orb-flare-left, .orb-flare-right {
+    animation-duration: 300ms;
+  }
 }
+
