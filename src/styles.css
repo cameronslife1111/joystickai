@@ -298,11 +298,11 @@
 /* Big pulsing energy aura behind the orb */
 .orb-aura {
   position: absolute;
-  inset: -120%;
+  inset: -22%;
   border-radius: 9999px;
   pointer-events: none;
   z-index: 0;
-  filter: blur(60px) saturate(1.5);
+  filter: blur(18px) saturate(1.5);
   mix-blend-mode: screen;
   animation: orb-aura-hue 20s linear infinite;
   will-change: filter, transform, opacity;
