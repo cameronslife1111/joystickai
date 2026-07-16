@@ -2168,15 +2168,22 @@ function AppPage() {
         </div>
       )}
 
-      {/* Orb — sized to fit any viewport (never causes scroll) */}
-      <section className="flex shrink-0 items-center justify-center pb-4">
+      <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
-          className="relative"
+          className="orb-stage"
           style={{
             width: "min(55vw, 28svh, 220px)",
             height: "min(55vw, 28svh, 220px)",
           }}
         >
+          <div className="orb-aura" aria-hidden />
+          {flare && (
+            <div
+              className={`orb-flare orb-flare-${flare}`}
+              aria-hidden
+              onAnimationEnd={() => setFlare(null)}
+            />
+          )}
           {/* Linked-document pill moved to the header, under the title. */}
           {docIconUrl ? (
             <DocumentIconAvatar
