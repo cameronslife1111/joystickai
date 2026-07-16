@@ -1968,7 +1968,7 @@ function AppPage() {
 
 
       {/* Top: doc title */}
-      <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
+      <header className="relative z-10 px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
           {composing ? (
             <span className="text-primary">New idea · {activeDoc?.title ?? "—"}</span>
