@@ -1068,6 +1068,7 @@ function AppPage() {
       onLongPressEnd,
       onSwipe: (dir) => {
         (orbRef.current as any)?.boostMood?.();
+        setFlare(dir);
         if (dir === "up") void advanceSentence();
         else if (dir === "down") void onSwipeUp();
         else if (dir === "left") setMenuOpen(true);
