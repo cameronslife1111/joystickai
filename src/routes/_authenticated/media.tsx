@@ -892,6 +892,15 @@ function MediaPage() {
                   }}
                 />
               )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<ImageIcon className="h-4 w-4" />} label="Set as document icon"
+                  onClick={() => {
+                    const a = sheetAsset;
+                    setSheetAsset(null);
+                    setIconAssignAsset(a);
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
