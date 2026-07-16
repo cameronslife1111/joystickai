@@ -1154,6 +1154,17 @@ function MediaPage() {
         />
       )}
 
+      {iconAssignAsset && (
+        <AssignDocumentIconDialog
+          open={!!iconAssignAsset}
+          onOpenChange={(o) => { if (!o) setIconAssignAsset(null); }}
+          mediaAssetId={iconAssignAsset.id}
+          mediaAssetTitle={iconAssignAsset.title}
+        />
+      )}
+
+
+
       {/* Failed asset dialog */}
       {failedAsset && (
         <div
