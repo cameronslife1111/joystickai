@@ -173,7 +173,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set());
+  const markBusy = (id: string) =>
+    setBusyThreadIds((cur) => {
+      const next = new Set(cur);
+      next.add(id);
+      return next;
+    });
+  const markIdle = (id: string) =>
+    setBusyThreadIds((cur) => {
+      if (!cur.has(id)) return cur;
+      const next = new Set(cur);
+      next.delete(id);
+      return next;
+    });
   const [pickedImage, setPickedImage] = useState<MediaAsset | null>(null);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -239,6 +252,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
   const caps = activeThread?.capabilities ?? DEFAULT_CAPS;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
+  const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
@@ -330,7 +344,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
       });
     }
-  }, [messages, busy, open]);
+  }, [messages, isActiveBusy, open]);
 
   useEffect(() => {
     if (!open && typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -446,14 +460,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || busy || !userId || !activeThreadId) return;
+    if (!text || !userId || !activeThreadId) return;
     const threadId = activeThreadId;
+    if (busyThreadIds.has(threadId)) return;
     if (caps.image_analysis && pickedImage && !pickedImage.url) {
       toast.error("That image has no URL yet");
       return;
     }
 
-    setBusy(true);
+    markBusy(threadId);
     setInput("");
 
     const optimisticUser: ChatRow = {
@@ -544,7 +559,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
       // Auto-read the reply aloud when enabled. Plans get a short cue; the
       // per-step cues are handled inside PlanProgressCard.
-      if (autoSpeak && open) {
+      if (autoSpeak && open && threadId === activeThreadId) {
         if (insertedAssistant.kind === "plan") {
           speakCue("Planning now.");
         } else if (insertedAssistant.content) {
@@ -572,8 +587,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
       toast.error(err instanceof Error ? err.message : "Chat failed");
     } finally {
-      setBusy(false);
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      markIdle(threadId);
+      if (threadId === activeThreadId) {
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      }
     }
   };
 
@@ -672,7 +689,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
-            {messages.length === 0 && !busy ? (
+            {messages.length === 0 && !isActiveBusy ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
                 <MessagesSquare className="mb-1 h-6 w-6 opacity-50" />
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
@@ -729,7 +746,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </div>
                   ),
                 )}
-                {busy && (
+                {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
                     Thinking…
@@ -807,7 +824,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               <Button
                 size="icon"
                 onClick={() => void handleSend()}
-                disabled={busy || !input.trim()}
+                disabled={isActiveBusy || !input.trim()}
                 aria-label="Send"
               >
                 <Send className="h-4 w-4" />
