@@ -102,6 +102,7 @@ function AppPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [flare, setFlare] = useState<null | "up" | "down" | "left" | "right">(null);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
@@ -1067,6 +1068,7 @@ function AppPage() {
       onLongPressEnd,
       onSwipe: (dir) => {
         (orbRef.current as any)?.boostMood?.();
+        setFlare(dir);
         if (dir === "up") void advanceSentence();
         else if (dir === "down") void onSwipeUp();
         else if (dir === "left") setMenuOpen(true);
@@ -1940,12 +1942,9 @@ function AppPage() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      {/* Background */}
+      {/* Background — pure black in dark, pure white in light */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-background" />
-        <div className="app-aurora" />
-        <div className="absolute left-1/2 top-1/2 h-[60vh] w-[80vw] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl"
-          style={{ background: "radial-gradient(closest-side, var(--aurora-2), transparent 70%)" }} />
       </div>
 
       {/* Connection error fallback — never leave the user stuck on a blank shell */}
@@ -1969,7 +1968,7 @@ function AppPage() {
 
 
       {/* Top: doc title */}
-      <header className="relative px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
+      <header className="relative z-10 px-6 pt-[env(safe-area-inset-top,1rem)] pt-4 text-center">
         <div className="text-xs uppercase tracking-widest text-muted-foreground">
           {composing ? (
             <span className="text-primary">New idea · {activeDoc?.title ?? "—"}</span>
@@ -2003,7 +2002,7 @@ function AppPage() {
       </header>
 
       {/* Sentence */}
-      <section className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-4">
+      <section className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 pb-4">
         <div className="w-full max-w-2xl max-h-full overflow-y-auto text-center">
           {composing ? (
             <textarea
@@ -2169,15 +2168,22 @@ function AppPage() {
         </div>
       )}
 
-      {/* Orb — sized to fit any viewport (never causes scroll) */}
-      <section className="flex shrink-0 items-center justify-center pb-4">
+      <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
-          className="relative"
+          className="orb-stage"
           style={{
             width: "min(55vw, 28svh, 220px)",
             height: "min(55vw, 28svh, 220px)",
           }}
         >
+          <div className="orb-aura" aria-hidden />
+          {flare && (
+            <div
+              className={`orb-flare orb-flare-${flare}`}
+              aria-hidden
+              onAnimationEnd={() => setFlare(null)}
+            />
+          )}
           {/* Linked-document pill moved to the header, under the title. */}
           {docIconUrl ? (
             <DocumentIconAvatar
