@@ -2179,12 +2179,21 @@ function AppPage() {
           }}
         >
           {/* Linked-document pill moved to the header, under the title. */}
-          <Orb
-            ref={orbRef}
-            state={orbState}
-            size={0}
-            className="!w-full !h-full"
-          />
+          {docIconUrl ? (
+            <DocumentIconAvatar
+              ref={orbRef}
+              url={docIconUrl}
+              state={orbState}
+              className="!w-full !h-full"
+            />
+          ) : (
+            <Orb
+              ref={orbRef}
+              state={orbState}
+              size={0}
+              className="!w-full !h-full"
+            />
+          )}
           {/* Swipe gestures on the orb handle directional navigation. */}
           {/* Invisible flanking buttons: left = delete, right = repeat */}
           <button
