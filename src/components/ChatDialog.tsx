@@ -344,7 +344,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
       });
     }
-  }, [messages, busy, open]);
+  }, [messages, isActiveBusy, open]);
 
   useEffect(() => {
     if (!open && typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -689,7 +689,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
-            {messages.length === 0 && !busy ? (
+            {messages.length === 0 && !isActiveBusy ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
                 <MessagesSquare className="mb-1 h-6 w-6 opacity-50" />
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
@@ -746,7 +746,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </div>
                   ),
                 )}
-                {busy && (
+                {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
                     Thinking…
@@ -824,7 +824,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               <Button
                 size="icon"
                 onClick={() => void handleSend()}
-                disabled={busy || !input.trim()}
+                disabled={isActiveBusy || !input.trim()}
                 aria-label="Send"
               >
                 <Send className="h-4 w-4" />
