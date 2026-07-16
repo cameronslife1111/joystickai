@@ -1067,6 +1067,7 @@ function AppPage() {
       onLongPressStart,
       onLongPressEnd,
       onSwipe: (dir) => {
+        if (editing) return; // disable all swipes while in edit mode
         (orbRef.current as any)?.boostMood?.();
         setFlare(dir);
         if (dir === "up") void advanceSentence();
