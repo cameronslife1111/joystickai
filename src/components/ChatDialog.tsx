@@ -586,8 +586,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
       toast.error(err instanceof Error ? err.message : "Chat failed");
     } finally {
-      setBusy(false);
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      markIdle(threadId);
+      if (threadId === activeThreadId) {
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      }
     }
   };
 
