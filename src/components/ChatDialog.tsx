@@ -558,7 +558,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
       // Auto-read the reply aloud when enabled. Plans get a short cue; the
       // per-step cues are handled inside PlanProgressCard.
-      if (autoSpeak && open) {
+      if (autoSpeak && open && threadId === activeThreadId) {
         if (insertedAssistant.kind === "plan") {
           speakCue("Planning now.");
         } else if (insertedAssistant.content) {
