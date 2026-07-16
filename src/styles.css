@@ -39,7 +39,7 @@
 :root {
   --radius: 1rem;
   /* Dark by default — feels right for a focus app */
-  --background: oklch(0.13 0.02 280);
+  --background: oklch(0 0 0);
   --foreground: oklch(0.98 0.005 280);
   --card: oklch(0.18 0.03 280);
   --card-foreground: oklch(0.98 0.005 280);
