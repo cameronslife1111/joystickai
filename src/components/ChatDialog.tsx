@@ -252,6 +252,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
   const caps = activeThread?.capabilities ?? DEFAULT_CAPS;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
+  const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
