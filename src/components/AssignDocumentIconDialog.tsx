@@ -51,14 +51,21 @@ export function AssignDocumentIconDialog({
     },
   });
 
+  const existingKey = useMemo(
+    () => [...existing].sort().join(","),
+    [existing],
+  );
+
   useEffect(() => {
-    if (open) {
-      const s = new Set(existing);
-      setSelected(s);
-      setInitial(s);
-      setSearch("");
-    }
-  }, [open, existing]);
+    if (!open) return;
+    const s = new Set(existing);
+    setSelected(s);
+    setInitial(s);
+    setSearch("");
+    // Only reseed when the dialog opens or the underlying set of ids actually
+    // changes — not on every new array reference from React Query refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, existingKey]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -108,7 +115,7 @@ export function AssignDocumentIconDialog({
       }
 
       qc.invalidateQueries({ queryKey: ["document_icons_for_asset", mediaAssetId] });
-      qc.invalidateQueries({ queryKey: ["document_icon"] });
+      qc.invalidateQueries({ queryKey: ["document_icon"], refetchType: "active" });
       toast.success(
         selected.size === 0
           ? "Icon removed from all documents"

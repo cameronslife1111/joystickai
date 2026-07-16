@@ -1073,7 +1073,7 @@ function AppPage() {
         else if (dir === "right") void onSwipeRight();
       },
     },
-    { swipeThreshold: 38, moveCancelPx: 16 },
+    { swipeThreshold: 38, moveCancelPx: 16, rebindKey: docIconUrl ?? "orb" },
   );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.

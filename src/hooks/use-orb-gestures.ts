@@ -16,6 +16,8 @@ interface Options {
   doubleTapMs?: number;
   swipeThreshold?: number;
   moveCancelPx?: number;
+  /** Change this value to force listeners to re-bind to the current ref.current. */
+  rebindKey?: string | number | boolean | null;
 }
 
 export function useOrbGestures(
@@ -141,5 +143,5 @@ export function useOrbGestures(
       clearLongPress();
       if (tapTimer) clearTimeout(tapTimer);
     };
-  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx]);
+  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
 }
