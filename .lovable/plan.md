@@ -1,38 +1,24 @@
-
 ## Problem
 
-In `src/components/ChatDialog.tsx` the "Thinking…" indicator and send-disabled state use a single global `busy` boolean. When you send a message in Chat A and switch to Chat B while it's still running, Chat B shows "Thinking…" even though nothing was submitted there. The same global also blocks sending from Chat B until Chat A finishes.
+In `src/routes/_authenticated/app.tsx` (`deleteCurrent`, lines ~715–754), Undo tries a raw `INSERT` at the deleted row's original `order_index`. That collides with the unique `(document_id, order_index)` index whenever the compaction after delete has renumbered sentences, so the catch branch fires and re-inserts the sentence at `max(order_index)+1` — i.e. at the bottom of the document.
 
-The underlying send code already correctly writes to the right thread (it captures `threadId` locally, inserts messages by that id, and invalidates that thread's query). Only the UI busy state is global. Plan messages already render only in their own thread because they're stored per-thread in `chat_messages`.
+The project already has an RPC (`insert_sentences_at`) that compacts and shifts subsequent rows before inserting at a given index — the same one Chat, plan-step, and orby-call use. Undo should use it too instead of hand-rolling an insert.
 
 ## Fix
 
-Convert the single `busy` boolean into a per-thread set of in-flight thread IDs, and gate all UI on the *active* thread's entry.
+In `src/routes/_authenticated/app.tsx`, replace the Undo handler's insert logic with a single RPC call and simplify the follow-up:
 
-### Changes in `src/components/ChatDialog.tsx`
+- Call `supabase.rpc("insert_sentences_at", { p_document_id: activeDocId, p_contents: [deleted.content], p_insert_at: deleted.order_index })`.
+  - This makes room at the original slot (shifting later sentences down) and inserts the restored sentence there. No collision fallback needed.
+- On error, show the existing `toast.error("Couldn't undo delete")` and stop.
+- After success, refetch sentences the same way it does now, but locate the restored sentence by content + `order_index === deleted.order_index` (fallback: first row at that index) and call `setIndex(pos)` so the view jumps back to where the sentence used to be.
+- Remove the max-order fallback branch entirely — it was the source of the "appears at the bottom" behavior.
 
-1. Replace `const [busy, setBusy] = useState(false)` with `const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set())`, plus helpers `markBusy(id)` / `markIdle(id)` that immutably add/remove.
-2. Derive `const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false`.
-3. In `handleSend`:
-   - Guard with `busyThreadIds.has(threadId)` (not global) so each thread has its own in-flight lock; other threads stay free.
-   - Call `markBusy(threadId)` at start and `markIdle(threadId)` in `finally`.
-   - After the reply arrives, only auto-speak / auto-scroll-focus if the user is still on that same thread (`threadId === activeThreadId`), so a reply to Chat A never speaks while Chat B is open.
-4. Replace remaining `busy` references:
-   - Empty-state check (`messages.length === 0 && !busy`) → `!isActiveBusy`.
-   - "Thinking…" indicator → render when `isActiveBusy`.
-   - Send button `disabled` and Enter-key guard → `isActiveBusy || !input.trim()`.
-   - Auto-scroll effect dep list → use `isActiveBusy` instead of `busy` so scrolling is tied to the active thread.
-5. Keep the existing local `threadId` capture in `handleSend`; all DB writes and query updates already use it, so cross-thread bleed of *messages* is already correct — this change only fixes the *UI* bleed.
+No changes to the optimistic delete, the toast UI, RLS, RPC, DB schema, or any other file.
 
-### Not changing
+## Verification
 
-- Server function `sendChatMessage` — no change; it's already stateless per call.
-- Plan running/monitoring — `PlanProgressCard` is rendered from the plan message in its own thread's message list, so plans continue in the background and only show in their own thread. No change needed.
-- Thread bootstrap logic, storage, or DB schema.
-
-### Verification
-
-- Send in Chat A, immediately switch to Chat B → Chat B shows empty state, no "Thinking…", composer is enabled.
-- Switch back to Chat A → "Thinking…" still visible until reply arrives; reply appears in Chat A only.
-- Send in Chat A, then send in Chat B while A is still running → both threads show their own "Thinking…" independently; both replies land in their own thread.
-- Auto-speak: reply to a background thread does not speak; switching back does not retroactively speak.
+- Delete a sentence in the middle of a document → press Undo → the sentence reappears at its original position, later sentences shift back down, and the view lands on that sentence.
+- Delete the last sentence → Undo restores it as the last sentence.
+- Delete then wait past the toast timeout → no regression; nothing changes.
+- Delete + Undo repeatedly on the same sentence → order stays stable.

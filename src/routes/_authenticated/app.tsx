@@ -713,44 +713,33 @@ function AppPage() {
       action: {
         label: "Undo",
         onClick: async () => {
-          const { data: u } = await supabase.auth.getUser();
-          if (!u.user || !activeDocId) return;
-          // Try to restore at the original slot; if that collides with the
-          // unique (document_id, order_index) index, append at the end.
-          let restoreIdx = deleted.order_index;
-          let { error: insErr } = await supabase.from("sentences").insert({
-            user_id: u.user.id, document_id: activeDocId,
-            content: deleted.content, order_index: restoreIdx,
+          if (!activeDocId) return;
+          // Use the insert_sentences_at RPC so the restored sentence lands
+          // at its original slot; later sentences shift down to make room.
+          const restoreIdx = deleted.order_index;
+          const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
+            p_document_id: activeDocId,
+            p_contents: [deleted.content],
+            p_insert_at: restoreIdx,
           });
-          if (insErr) {
-            const { data: maxRow } = await supabase
-              .from("sentences")
-              .select("order_index")
-              .eq("document_id", activeDocId)
-              .order("order_index", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            restoreIdx = ((maxRow?.order_index as number | undefined) ?? -1) + 1;
-            const retry = await supabase.from("sentences").insert({
-              user_id: u.user.id, document_id: activeDocId,
-              content: deleted.content, order_index: restoreIdx,
-            });
-            insErr = retry.error;
-          }
-          if (insErr) {
+          if (rpcErr) {
             toast.error("Couldn't undo delete");
             return;
           }
-          // Refetch, then navigate the view to the restored sentence so it's
-          // visibly back (the app shows one sentence at a time).
+          // Refetch, then navigate the view to the restored sentence.
           const { data: fresh } = await supabase
             .from("sentences").select("*")
             .eq("document_id", activeDocId)
             .order("order_index", { ascending: true })
             .order("created_at", { ascending: true });
           qc.setQueryData(["sentences", activeDocId], fresh ?? []);
-          const pos = (fresh ?? []).findIndex((s) => s.order_index === restoreIdx);
-          if (pos >= 0) await setIndex(pos);
+          const pos =
+            (fresh ?? []).findIndex(
+              (s) => s.order_index === restoreIdx && s.content === deleted.content,
+            );
+          const fallback = (fresh ?? []).findIndex((s) => s.order_index === restoreIdx);
+          const target = pos >= 0 ? pos : fallback;
+          if (target >= 0) await setIndex(target);
         },
       },
     });
