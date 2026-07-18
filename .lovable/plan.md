@@ -1,24 +1,37 @@
 ## Problem
 
-In `src/routes/_authenticated/app.tsx` (`deleteCurrent`, lines ~715–754), Undo tries a raw `INSERT` at the deleted row's original `order_index`. That collides with the unique `(document_id, order_index)` index whenever the compaction after delete has renumbered sentences, so the catch branch fires and re-inserts the sentence at `max(order_index)+1` — i.e. at the bottom of the document.
+Right now each document's icon loads lazily: when you swipe to a new doc, we (1) run a per-document query against `document_icons` to find the URL, then (2) the browser starts downloading the image. That's a two-step waterfall on every first visit to a doc, which is exactly the "little glitch on the first swipe, fast afterward" you're seeing (afterward it's cached).
 
-The project already has an RPC (`insert_sentences_at`) that compacts and shifts subsequent rows before inserting at a given index — the same one Chat, plan-step, and orby-call use. Undo should use it too instead of hand-rolling an insert.
+Root cause in `src/routes/_authenticated/app.tsx` (lines 287–301): the `["document_icon", activeDocId]` query is keyed per active doc, so it can't answer until you've already switched.
 
 ## Fix
 
-In `src/routes/_authenticated/app.tsx`, replace the Undo handler's insert logic with a single RPC call and simplify the follow-up:
+Two small, low-risk changes — no schema changes, no visual changes, gestures untouched.
 
-- Call `supabase.rpc("insert_sentences_at", { p_document_id: activeDocId, p_contents: [deleted.content], p_insert_at: deleted.order_index })`.
-  - This makes room at the original slot (shifting later sentences down) and inserts the restored sentence there. No collision fallback needed.
-- On error, show the existing `toast.error("Couldn't undo delete")` and stop.
-- After success, refetch sentences the same way it does now, but locate the restored sentence by content + `order_index === deleted.order_index` (fallback: first row at that index) and call `setIndex(pos)` so the view jumps back to where the sentence used to be.
-- Remove the max-order fallback branch entirely — it was the source of the "appears at the bottom" behavior.
+### 1. One query for all icons, look up synchronously
 
-No changes to the optimistic delete, the toast UI, RLS, RPC, DB schema, or any other file.
+Replace the per-doc query with a single global query that fetches the full `{ document_id → icon url }` map once (and revalidates when assignments change). Deriving `docIconUrl` from that map is synchronous, so the moment `activeDocId` changes the correct URL is already known — no fetch on swipe.
 
-## Verification
+- New query: `["document_icons_map"]` selecting `document_id, media_assets(url)` from `document_icons` for the current user. Small table (one row per doc that has an icon), fine to load whole.
+- `docIconUrl = iconMap.get(activeDocId) ?? null`.
+- Update `AssignDocumentIconDialog`'s post-save invalidation to invalidate `["document_icons_map"]` instead of `["document_icon"]`.
 
-- Delete a sentence in the middle of a document → press Undo → the sentence reappears at its original position, later sentences shift back down, and the view lands on that sentence.
-- Delete the last sentence → Undo restores it as the last sentence.
-- Delete then wait past the toast timeout → no regression; nothing changes.
-- Delete + Undo repeatedly on the same sentence → order stays stable.
+### 2. Preload the image bytes for current + neighbors
+
+Even with the URL known synchronously, the `<img>` still has to download on first view. Add a tiny effect that calls `new Image().src = proxyMediaUrl(url)` for:
+- the current doc's icon,
+- the next doc's icon (right swipe),
+- the previous doc's icon (left swipe).
+
+That way the neighbor images are already in the browser's HTTP cache before you swipe, so the `<img>` in `DocumentIconAvatar` paints from cache immediately. Runs off the same `iconMap` + docs list already in memory; no extra network on hot paths.
+
+### Files touched
+
+- `src/routes/_authenticated/app.tsx` — swap the per-doc query for the map query; derive `docIconUrl`; add the neighbor-preload effect.
+- `src/components/AssignDocumentIconDialog.tsx` — invalidate the new `["document_icons_map"]` key after save.
+
+### Not changing
+
+- No resizing / thumbnail pipeline (would require storage transforms we don't have set up, and the images are already reasonable). If lag ever remains after this, we can revisit adding a `?width=` transform through the proxy as a separate task.
+- `DocumentIconAvatar` and orb gestures are untouched.
+- `proxyMediaUrl` behavior is untouched.
