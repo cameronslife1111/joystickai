@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
@@ -284,21 +285,48 @@ function AppPage() {
     },
   });
 
-  // Icon assigned to the active document (replaces Orby's visual).
-  const { data: docIconUrl } = useQuery({
-    queryKey: ["document_icon", activeDocId],
-    enabled: !!activeDocId,
-    queryFn: async (): Promise<string | null> => {
+  // All document icons in one query — deriving `docIconUrl` synchronously
+  // means the correct image URL is already known the instant `activeDocId`
+  // changes, so swipes don't trigger a per-doc round-trip.
+  const { data: iconMap } = useQuery({
+    queryKey: ["document_icons_map"],
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<Record<string, string>> => {
       const { data, error } = await supabase
         .from("document_icons")
-        .select("media_asset_id, media_assets(url)")
-        .eq("document_id", activeDocId!)
-        .maybeSingle();
-      if (error) return null;
-      const url = (data as any)?.media_assets?.url;
-      return typeof url === "string" && url ? url : null;
+        .select("document_id, media_assets(url)");
+      if (error) return {};
+      const map: Record<string, string> = {};
+      for (const row of (data ?? []) as any[]) {
+        const url = row?.media_assets?.url;
+        if (row?.document_id && typeof url === "string" && url) {
+          map[row.document_id as string] = url;
+        }
+      }
+      return map;
     },
   });
+  const docIconUrl = activeDocId ? iconMap?.[activeDocId] ?? null : null;
+
+  // Warm the browser HTTP cache for the current doc's icon and its immediate
+  // neighbors so left/right swipes paint from cache instantly.
+  useEffect(() => {
+    if (!iconMap || !docs || docs.length === 0) return;
+    const idx = docs.findIndex((d) => d.id === activeDocId);
+    if (idx < 0) return;
+    const neighbors = [
+      docs[idx],
+      docs[(idx + 1) % docs.length],
+      docs[(idx - 1 + docs.length) % docs.length],
+    ];
+    for (const d of neighbors) {
+      const url = d && iconMap[d.id];
+      if (!url) continue;
+      const img = new Image();
+      img.decoding = "async";
+      img.src = proxyMediaUrl(url);
+    }
+  }, [iconMap, docs, activeDocId]);
 
 
 
