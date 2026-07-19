@@ -170,6 +170,9 @@ function AppPage() {
   const editOriginIdxRef = useRef<number>(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
+  const transcribe = useServerFn(transcribeAudio);
+  const sendChat = useServerFn(sendChatMessage);
+  const nameChatThread = useServerFn(generateThreadTitle);
 
   // Call mode removed — Orby's capabilities now live in Chat. Kept as an
   // always-false ref so remaining guards (e.g. speech muting) stay inert.
