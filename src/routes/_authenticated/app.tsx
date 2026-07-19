@@ -1355,7 +1355,20 @@ function AppPage() {
 
   const onLongPressStart = useCallback(() => {
     if (editing) return;
-    if (recorderRef.current) return; // already recording
+    // Toggle: if already recording, this long-press stops and dispatches.
+    if (recorderRef.current) {
+      const rec = recorderRef.current;
+      const durationMs = Date.now() - recordStartMsRef.current;
+      recorderRef.current = null;
+      setRecording(false);
+      void (async () => {
+        const blob = await rec.stop();
+        if (durationMs < 400 || blob.size < 4096) return;
+        void dispatchVoiceMessage(blob);
+      })();
+      return;
+    }
+    // Otherwise start a new recording.
     setRecording(true);
     recordStartMsRef.current = Date.now();
     void (async () => {
@@ -1371,21 +1384,11 @@ function AppPage() {
         );
       }
     })();
-  }, [editing]);
+  }, [editing, dispatchVoiceMessage]);
 
-  const onLongPressEnd = useCallback(() => {
-    const rec = recorderRef.current;
-    const durationMs = Date.now() - recordStartMsRef.current;
-    recorderRef.current = null;
-    setRecording(false);
-    if (!rec) return;
-    void (async () => {
-      const blob = await rec.stop();
-      // Discard accidental taps and clips with no meaningful audio.
-      if (durationMs < 400 || blob.size < 4096) return;
-      void dispatchVoiceMessage(blob);
-    })();
-  }, [dispatchVoiceMessage]);
+  // Release no longer stops recording — stop is triggered by a second long-press.
+  const onLongPressEnd = useCallback(() => {}, []);
+
 
   useOrbGestures(
     orbRef,
