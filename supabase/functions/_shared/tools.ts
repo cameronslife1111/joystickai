@@ -256,6 +256,86 @@ export const TOOL_CATALOG: ToolDef[] = [
       caption: { type: "boolean", description: "Burn captions into the video", required: false },
     },
   },
+  {
+    name: "find_schedule_by_title",
+    description:
+      "Find one of the user's plan schedules by rough title/description (fuzzy). Returns up to 5 matches, each with id, title, cadence, enabled, next_run_at. PREFER picking the id directly from the SCHEDULED PLANS list in the WORKSPACE SNAPSHOT over calling this tool.",
+    args: {
+      query: { type: "string", description: "Rough description of the schedule — title fragments or keywords", required: true },
+    },
+  },
+  {
+    name: "list_schedules",
+    description:
+      "List ALL of the user's plan schedules (id, title, cadence, interval_n, time_of_day, weekdays, month_days, year_month_days, timezone, starts_at, ends_at, max_runs, enabled, next_run_at). PREFER reading the SCHEDULED PLANS list from the WORKSPACE SNAPSHOT; only call this when you need every field on every schedule.",
+    args: {},
+  },
+  {
+    name: "create_schedule",
+    description:
+      "Create a new scheduled plan (same as the 'New schedule' UI on the AI Plans → Scheduled tab). When it fires, Orby will run `user_request` as a fresh plan for the user, with `attached_document_ids` treated as attachments. Computes and stores next_run_at automatically; throws if the schedule has no future fire time. " +
+      "Cadence controls which of the other fields matter: " +
+      "'once' uses starts_at (an ISO datetime); " +
+      "'hourly' uses interval_n; " +
+      "'daily' uses interval_n + time_of_day; " +
+      "'weekly' uses weekdays (JSON array of 0=Sun..6=Sat) + time_of_day; " +
+      "'monthly' uses month_days (JSON array of 1..31) + time_of_day; " +
+      "'yearly' uses year_month_days (JSON array of {month,day}) + time_of_day. " +
+      "If the user didn't state a timezone, use 'UTC'. If they didn't state a time_of_day for daily+, default to '09:00'. " +
+      "Returns the new schedule row.",
+    args: {
+      title: { type: "string", description: "Short title for the schedule (shown in the Scheduled list)", required: true },
+      user_request: { type: "string", description: "Natural-language request Orby will run each time this schedule fires (same as the composer input the user would normally type)", required: true },
+      cadence: { type: "string", description: "'once' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'", required: true },
+      interval_n: { type: "number", description: "Every N (hours/days), default 1", required: false },
+      time_of_day: { type: "string", description: "HH:MM in the schedule's timezone (required for daily/weekly/monthly/yearly)", required: false },
+      timezone: { type: "string", description: "IANA timezone (e.g. 'America/Los_Angeles'). Default 'UTC'", required: false },
+      weekdays: { type: "string", description: "JSON array of 0..6 (0=Sun) — for weekly cadence. 'weekdays' meaning Mon–Fri = [1,2,3,4,5]", required: false },
+      month_days: { type: "string", description: "JSON array of 1..31 — for monthly cadence", required: false },
+      year_month_days: { type: "string", description: "JSON array of {\"month\":1..12,\"day\":1..31} — for yearly cadence", required: false },
+      starts_at: { type: "string", description: "ISO datetime. For 'once' this IS the fire time. For other cadences it's an earliest-start bound", required: false },
+      ends_at: { type: "string", description: "ISO datetime hard-stop (schedule stops firing after this)", required: false },
+      max_runs: { type: "number", description: "Optional cap on total runs before the schedule disables itself", required: false },
+      attached_document_ids: { type: "string", description: "JSON array of document UUIDs to attach to every run", required: false },
+    },
+  },
+  {
+    name: "update_schedule",
+    description:
+      "Update an existing scheduled plan by id. Any subset of the create_schedule fields may be passed — omitted fields are left unchanged. next_run_at is recomputed; if the resulting schedule has no future fire time it is auto-disabled. Set `enabled` to pause/unpause, or use toggle_schedule for a pure enable/disable.",
+    args: {
+      schedule_id: { type: "string", description: "UUID of the schedule to update (from the SCHEDULED PLANS snapshot)", required: true },
+      title: { type: "string", description: "New title", required: false },
+      user_request: { type: "string", description: "New natural-language request", required: false },
+      cadence: { type: "string", description: "'once' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly'", required: false },
+      interval_n: { type: "number", description: "Every N", required: false },
+      time_of_day: { type: "string", description: "HH:MM", required: false },
+      timezone: { type: "string", description: "IANA timezone", required: false },
+      weekdays: { type: "string", description: "JSON array of 0..6", required: false },
+      month_days: { type: "string", description: "JSON array of 1..31", required: false },
+      year_month_days: { type: "string", description: "JSON array of {month,day}", required: false },
+      starts_at: { type: "string", description: "ISO datetime", required: false },
+      ends_at: { type: "string", description: "ISO datetime", required: false },
+      max_runs: { type: "number", description: "Cap on total runs", required: false },
+      attached_document_ids: { type: "string", description: "JSON array of document UUIDs", required: false },
+      enabled: { type: "boolean", description: "Pause (false) or resume (true) the schedule", required: false },
+    },
+  },
+  {
+    name: "delete_schedule",
+    description: "Delete a scheduled plan by id. Irreversible — the schedule row is removed and stops firing.",
+    args: {
+      schedule_id: { type: "string", description: "UUID of the schedule to delete", required: true },
+    },
+  },
+  {
+    name: "toggle_schedule",
+    description: "Pause or resume a scheduled plan. When re-enabling, next_run_at is recomputed from now (no backlog fires).",
+    args: {
+      schedule_id: { type: "string", description: "UUID of the schedule", required: true },
+      enabled: { type: "boolean", description: "true to resume, false to pause", required: true },
+    },
+  },
 ];
 
 /**
@@ -294,6 +374,13 @@ export const TOOL_GROUPS: Record<string, string> = {
   image_to_video: "video_generation",
   video_to_video: "video_generation",
   audio_image_to_video: "video_generation",
+  // scheduling
+  find_schedule_by_title: "scheduling",
+  list_schedules: "scheduling",
+  create_schedule: "scheduling",
+  update_schedule: "scheduling",
+  delete_schedule: "scheduling",
+  toggle_schedule: "scheduling",
 };
 
 export function isToolAllowed(name: string, allowedGroups?: string[] | null): boolean {

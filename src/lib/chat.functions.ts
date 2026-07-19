@@ -16,6 +16,7 @@ const capabilities = z.object({
   image_generation: z.boolean().default(true),
   video_generation: z.boolean().default(true),
   document_editing: z.boolean().default(true),
+  scheduling: z.boolean().default(true),
 });
 
 const schema = z.object({
@@ -29,6 +30,7 @@ const schema = z.object({
     image_generation: true,
     video_generation: true,
     document_editing: true,
+    scheduling: true,
   }),
 });
 

@@ -1234,6 +1234,7 @@ function AppPage() {
           image_generation: true,
           video_generation: true,
           document_editing: true,
+          scheduling: true,
         };
 
         // 1) Fresh thread.

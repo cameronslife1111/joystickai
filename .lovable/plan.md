@@ -1,74 +1,79 @@
-## Voice-to-Chat via long-press on Orby
+## Goal
 
-Replace "long-press opens last chat" with "long-press = hold-to-record voice note that becomes a new chat message in the background." Slot 11 keeps its current behavior.
+Let the Orby planner (inside chat) create and manage the same scheduled plans that live on the AI Plans → Scheduled page (slot 14). If the user says things like "every weekday at 8am, run this…", "pause my morning schedule", "delete the yearly one", or "change my daily to weekly", Orby plans it, shows it in the approval sheet like any other plan, and on confirm actually writes/updates the row in `plan_schedules`.
 
-### Behavior
+## What ships
 
-1. **Long-press start** (~500ms hold): begin recording via mic. Orb's aura swells and turns pure red to signal recording. No dialog opens.
-2. **Long-press release**: stop recording. In the background:
-   - Upload the audio to a server function, transcribe with OpenAI Whisper via Lovable AI Gateway (`openai/gpt-4o-transcribe`).
-   - Create a new `chat_threads` row.
-   - Insert the transcript as the first `chat_messages` user row on that thread.
-   - Run the exact same send pipeline `ChatDialog.handleSend` uses (intent classification via `sendChatMessage`; if `route === "plan"` → insert `plans` row + fire `plan-compose`; if text → insert assistant reply).
-   - Auto-name the thread from the transcript (existing `nameThread` server fn).
-3. **Toaster feedback** (from the app shell, not inside ChatDialog):
-   - While transcribing: subtle spinner toast "Listening…" (id-scoped so it can be replaced).
-   - On plan started: blue toast "🧠 Plan started — open" — clicking opens ChatDialog on that thread.
-   - On text reply ready: blue toast "💬 New message — open" — clicking opens ChatDialog on that thread.
-   - On error: red toast with the reason.
-4. **No UI blocking.** Cameron can swipe, edit, kick off another voice note, etc. Each voice note spawns an independent background job keyed by its own thread id.
-5. **Cancel guardrails**: if recording is under ~400ms of audio, discard silently (accidental tap). If mic permission denied, red toast once.
+### 1. New planner tools (in `supabase/functions/_shared/tools.ts`)
 
-### Recording specifics (matches `ai-speech-to-text` guidance)
+Add these to `TOOL_CATALOG`, all in a new capability group `scheduling`:
 
-- Use the Web Audio API + `ScriptProcessor`/`AudioWorklet` to capture PCM, encode a complete 16 kHz mono WAV `Blob` at stop. Do NOT use `MediaRecorder` timeslice — WAV avoids Safari's fragmented MP4 issue.
-- POST the WAV as `multipart/form-data` to a new server route `src/routes/api/public/transcribe.ts` (authenticated via bearer attach) — actually a `createServerFn` is cleaner here since it's app-internal. Use `createServerFn` with `.middleware([requireSupabaseAuth])`, receive the audio as a base64 string (small clips) or a `File` via FormData.
-- Server function forwards to `https://ai.gateway.lovable.dev/v1/audio/transcriptions` with `LOVABLE_API_KEY`, `model: "openai/gpt-4o-transcribe"`, non-streaming (single buffered transcript is fine for this flow).
+- `find_schedule_by_title` — fuzzy locate one schedule by title (returns id, title, cadence, enabled, next_run_at).
+- `list_schedules` — return every schedule for the user (id, title, cadence, interval_n, time_of_day, weekdays, month_days, year_month_days, timezone, starts_at, ends_at, max_runs, enabled, next_run_at). Planner reads this from the WORKSPACE SNAPSHOT (see §3) whenever possible; the tool is a fallback.
+- `create_schedule` — args mirror `scheduleInputSchema` from `src/lib/plan-schedules.functions.ts`:
+  - `title` (string, required)
+  - `user_request` (string, required — the natural-language request that becomes the plan when it fires)
+  - `attached_document_ids` (string[], JSON array of doc UUIDs, optional)
+  - `cadence` (once|hourly|daily|weekly|monthly|yearly, required)
+  - `interval_n` (number, default 1)
+  - `time_of_day` ("HH:MM", optional)
+  - `timezone` (IANA tz, default = the user's saved timezone from `user_preferences`, fallback UTC)
+  - `weekdays` (0–6, JSON array)
+  - `month_days` (1–31, JSON array)
+  - `year_month_days` (JSON array of `{month, day}`)
+  - `starts_at` / `ends_at` (ISO, optional)
+  - `max_runs` (number, optional)
+- `update_schedule` — `schedule_id` + any subset of the same fields.
+- `delete_schedule` — `schedule_id`.
+- `toggle_schedule` — `schedule_id`, `enabled` (boolean).
 
-### Files touched
+Register all six in `TOOL_GROUPS` as group `scheduling`.
 
-**1. `src/routes/_authenticated/app.tsx`**
-- Remove `onLongPressStart`/`onLongPressEnd` that open the chat (~lines 1192-1199). Replace with a new `startVoiceRecording` / `stopVoiceRecording` pair.
-- Add state: `recording: boolean` (drives red aura) and refs for `AudioContext`, mic stream, PCM buffers.
-- Wire the new handlers into `useOrbGestures` in place of the old ones.
-- Add `.orb-recording` class toggle on the `.orb-stage` when `recording` is true.
-- Add a new async `dispatchVoiceMessage(transcript: string)` helper that reproduces the essential parts of `ChatDialog.handleSend`:
-  - `supabase.from("chat_threads").insert({ user_id, title: "New chat" })`
-  - Insert `chat_messages` (role=user) with the transcript.
-  - Call the existing `sendChatMessage` server fn (imported from `@/lib/chat.functions`) with the single-message history and current `capabilities` (read from localStorage the same way ChatDialog does, or use full defaults).
-  - Branch on `route === "plan"` vs text — same insert logic as ChatDialog.
-  - On success, show blue action toast that calls `setChatOpen(true)` + selects that thread. Persist the target thread id via a new `pendingChatThreadIdRef` or a small state, and pass it to `ChatDialog` as an `initialThreadId` prop.
-- `nameThread` call after first message (mirror ChatDialog lines 573-580).
+### 2. Handlers (in `supabase/functions/plan-step/index.ts`)
 
-**2. `src/components/ChatDialog.tsx`**
-- Accept new optional prop `openOnThreadId?: string | null`. When it changes and dialog is open, call `setActiveThreadId(openOnThreadId)` and clear the parent's state.
+Implement each new tool alongside the existing `TOOL_HANDLERS` using the admin client, scoped by `user_id`. The heavy piece is computing `next_run_at` on `create_schedule` / `update_schedule` / `toggle_schedule(true)`.
 
-**3. `src/lib/whisper.functions.ts`** (new)
-- `transcribeAudio` server function with `.middleware([requireSupabaseAuth])`. Accepts `{ audioBase64: string, mimeType: string }`. Decodes to a Blob, builds FormData with `file` + `model: "openai/gpt-4o-transcribe"`, POSTs to `https://ai.gateway.lovable.dev/v1/audio/transcriptions` with `Authorization: Bearer ${process.env.LOVABLE_API_KEY}`. Returns `{ text: string }`.
+To avoid divergence from the frontend, extract `nextRunAt` / `nextNRuns` / `detectTimezone` / types from `src/lib/recurrence.ts` into a new `supabase/functions/_shared/recurrence.ts` (pure TS, no browser APIs) and re-export from `src/lib/recurrence.ts` so both the TanStack server fns and the Deno edge function share the exact same logic.
 
-**4. `src/styles.css`**
-- Add `.orb-stage.orb-recording .orb-aura { … }` overriding the hue animation with a pure red (`radial-gradient(closest-side, rgba(255,0,0,.9), rgba(255,0,0,.4), transparent)`), boosted opacity to ~0.9, bigger `inset` (`-45%`) and stronger blur so the aura visibly swells. Pause `orb-aura-hue`, keep `orb-aura-pulse` running with a slightly faster/larger scale for a heartbeat feel.
+Handler behavior:
 
-**5. `src/lib/audio-recorder.ts`** (new small util)
-- `startPcmRecorder()` returns `{ stop(): Promise<Blob> }`. Uses `getUserMedia`, `AudioContext`, script processor, downsamples to 16 kHz, encodes WAV on stop, closes tracks and context.
+- `create_schedule` — enforce the same 50-schedule cap; compute `next_run_at`; if none, throw a friendly error ("that schedule has no future fire time"); insert with `enabled: true`, `run_count: 0`; return the row.
+- `update_schedule` — merge patch onto existing row, recompute `next_run_at`; if none, set `enabled=false` and `next_run_at=null`; return the row.
+- `toggle_schedule` — on enable, recompute `next_run_at` from now; on disable, just flip the flag.
+- `delete_schedule` — delete and return `{ ok: true }`.
+- Add the same required-arg checks to `validateExpansionSteps` so `expand_plan` can't emit malformed schedule steps.
 
-### Why Lovable AI Gateway instead of Cameron's OpenAI key
+Also add the same required-arg map for these tools inside `plan-compose`'s validation pass (mirrors what's already there for other mutating tools) so the composer rejects plans missing `schedule_id` on edits.
 
-The gateway already proxies OpenAI Whisper via `openai/gpt-4o-transcribe`, is billed on the workspace's LOVABLE_API_KEY (already provisioned), never exposes a key to the browser, and is the documented path in this stack. Same underlying Whisper model. If Cameron specifically wants to burn his personal OpenAI key instead, say so and I'll swap to `OPENAI_API_KEY` — otherwise this is the cleaner default.
+### 3. Planner context (in `supabase/functions/plan-compose/index.ts`)
 
-### Edge cases
+Extend the WORKSPACE SNAPSHOT builder with a new **SCHEDULED PLANS** section, one line per row: `  <id> — <title> — <cadence every N> — next=<ISO> — <enabled|paused>`. That way the composer can pick an existing `schedule_id` from the snapshot for updates/toggles/deletes without an extra `find_schedule_by_title` call, exactly like it does for documents/media.
 
-- Recording already in flight when a second long-press starts → ignore start (single mic session).
-- Long-press while `editing` is true → do nothing (matches current swipe policy).
-- Long-press with no user session yet → red toast "Sign in first" (shouldn't happen inside `_authenticated`).
-- Very short recording (<400ms of samples) → discard silently, no toast, no thread.
-- Transcription empty string → discard silently, remove listening toast.
-- Server fn 402/429 → surface reason in red toast.
-- If ChatDialog is currently open on another thread, the toast still lets Cameron jump to the new one; existing per-thread `busyThreadIds` isolation already prevents cross-thread bleed.
+Add a short **SCHEDULING RULES** block to the system prompt: prefer using ids from the snapshot; `time_of_day` defaults to a sensible morning slot if the user didn't say; default `timezone` = user's saved tz; when the user says "every weekday", set `cadence=weekly` with `weekdays=[1,2,3,4,5]`; describe the schedule plainly in the plan step's `description` so the approval sheet reads well.
 
-### Non-goals
+### 4. Chat capability toggle (in `src/components/ChatDialog.tsx`)
 
-- No streaming transcription — one buffered result at stop is enough and simpler.
-- No push-to-talk keyboard shortcut.
-- No changes to Slot 11 or any other slot.
-- No change to plan-compose / plan-tick internals.
+Add a new toggle "Scheduling" (key `scheduling`, hint "Create & edit scheduled plans") to `ACTION_TOOL_GROUPS` and the localStorage-backed `caps` map, defaulted **on**. It flows through to `plan-compose` via the existing `allowed_tool_groups` body param — no other wiring needed.
+
+### 5. UI polish
+
+Nothing on the AI Plans page changes. The existing `ScheduledPlansList` (which refetches every 15s and invalidates on save from `ScheduleEditorDialog`) will pick up rows Orby creates on its next refetch. Approval-sheet step descriptions surface the schedule details ("Create schedule 'Morning digest', weekly on Mon–Fri at 08:00") using the composer's `description` field, so users see what they're approving before Orby actually writes it.
+
+## Non-goals
+
+- No changes to how schedules fire (`plan-scheduler-tick.ts` stays as-is).
+- No new page or component; existing Scheduled tab renders the results.
+- No bulk "schedule for every doc" flows — those already work via `expand_plan` on top of the new tools.
+
+## Technical details
+
+- Files touched:
+  - `supabase/functions/_shared/tools.ts` — 6 new entries in `TOOL_CATALOG`, 6 new entries in `TOOL_GROUPS`.
+  - `supabase/functions/_shared/recurrence.ts` — new, extracted from `src/lib/recurrence.ts`.
+  - `src/lib/recurrence.ts` — re-export from `_shared/recurrence.ts` (or keep as-is if TanStack can't import from `supabase/functions/_shared`; in that case keep both files in sync and add a header comment on both saying "keep in sync with the other copy"). Prefer the re-export path.
+  - `supabase/functions/plan-step/index.ts` — 6 new handlers; extend `validateExpansionSteps` REQUIRED map with the new tools.
+  - `supabase/functions/plan-compose/index.ts` — snapshot addition, prompt rules, and mirror the same REQUIRED map in its validator.
+  - `src/components/ChatDialog.tsx` — one new capability toggle row.
+- No DB migration — `plan_schedules` schema is already correct.
+- Auth: handlers run under the plan's admin client, always scoping writes by `.eq("user_id", user_id)` (same pattern as every other mutating tool here).
+- Approval: schedule mutations flow through the normal plan approval sheet — the composer produces the steps, the user taps Approve, then `plan-step` runs them. Matches the "user asks for that and approves that" requirement.

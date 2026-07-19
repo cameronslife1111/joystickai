@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@^2.45.0";
 import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
 import { applyEmojiSynonyms, tokenizeRich } from "../_shared/lookup.ts";
+import { nextRunAt, type Cadence, type ScheduleSpec } from "../_shared/recurrence.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -119,6 +120,10 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     image_to_video: ["source_media_id"],
     video_to_video: ["source_image_id", "reference_video_id"],
     audio_image_to_video: ["source_image_id", "audio_media_id"],
+    create_schedule: ["title", "user_request", "cadence"],
+    update_schedule: ["schedule_id"],
+    delete_schedule: ["schedule_id"],
+    toggle_schedule: ["schedule_id", "enabled"],
   };
   const has = (v: unknown) =>
     v != null && (typeof v === "string" ? v.trim().length > 0 : (Array.isArray(v) ? v.length > 0 : true));
@@ -1067,7 +1072,235 @@ const TOOL_HANDLERS: Record<string, any> = {
     }, { internal, user_id });
     return { __pending_media: row.id };
   },
+
+  // ----- Plan schedules (create/edit/list/delete/toggle scheduled plans) -----
+  async find_schedule_by_title(args, { user_id, admin }) {
+    const query = String(args.query ?? "").trim();
+    const qTokens = tokenize(query);
+    const { data } = await admin
+      .from("plan_schedules")
+      .select("id, title, cadence, enabled, next_run_at")
+      .eq("user_id", user_id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const rows = data ?? [];
+    if (rows.length === 0) return [];
+    const scored = rows
+      .map((r: any) => ({ r, score: scoreCandidate(String(r.title ?? ""), query, qTokens) }))
+      .filter(({ score }) => score > 0);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 5).map(({ r }) => r);
+  },
+  async list_schedules(_args, { user_id, admin }) {
+    const { data, error } = await admin
+      .from("plan_schedules")
+      .select("id, title, cadence, interval_n, time_of_day, timezone, weekdays, month_days, year_month_days, starts_at, ends_at, max_runs, enabled, next_run_at, run_count")
+      .eq("user_id", user_id)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  },
+  async create_schedule(args, { user_id, admin }) {
+    const row = buildScheduleRow(args, {});
+    // Enforce the same 50-schedule cap the UI enforces.
+    const { count } = await admin
+      .from("plan_schedules")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user_id);
+    if ((count ?? 0) >= 50) {
+      throw new Error("You've hit the limit of 50 schedules. Delete one first.");
+    }
+    const spec: ScheduleSpec = { ...row, run_count: 0 } as ScheduleSpec;
+    const next = nextRunAt(spec);
+    if (!next) throw new Error("That schedule has no future fire time — pick a future date or different cadence.");
+    const insert: any = {
+      ...row,
+      user_id,
+      enabled: true,
+      run_count: 0,
+      next_run_at: next.toISOString(),
+    };
+    const { data, error } = await admin
+      .from("plan_schedules")
+      .insert(insert)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async update_schedule(args, { user_id, admin }) {
+    const id = String(args.schedule_id ?? "").trim();
+    if (!id) throw new Error("update_schedule requires schedule_id");
+    const { data: existing, error: getErr } = await admin
+      .from("plan_schedules")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user_id)
+      .single();
+    if (getErr || !existing) throw new Error(getErr?.message || "Schedule not found");
+    const patch = buildScheduleRow(args, existing);
+    if (typeof args.enabled === "boolean") patch.enabled = args.enabled;
+    const merged = { ...existing, ...patch };
+    const next = nextRunAt({ ...merged, run_count: existing.run_count ?? 0 } as ScheduleSpec);
+    const update: any = {
+      ...patch,
+      next_run_at: next ? next.toISOString() : null,
+      enabled: next ? (patch.enabled ?? existing.enabled ?? true) : false,
+    };
+    const { data, error } = await admin
+      .from("plan_schedules")
+      .update(update)
+      .eq("id", id)
+      .eq("user_id", user_id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async delete_schedule(args, { user_id, admin }) {
+    const id = String(args.schedule_id ?? "").trim();
+    if (!id) throw new Error("delete_schedule requires schedule_id");
+    const { error } = await admin
+      .from("plan_schedules")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user_id);
+    if (error) throw new Error(error.message);
+    return { ok: true, deleted_id: id };
+  },
+  async toggle_schedule(args, { user_id, admin }) {
+    const id = String(args.schedule_id ?? "").trim();
+    if (!id) throw new Error("toggle_schedule requires schedule_id");
+    const enabled = args.enabled !== false;
+    const { data: existing } = await admin
+      .from("plan_schedules")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user_id)
+      .single();
+    if (!existing) throw new Error("Schedule not found");
+    const patch: any = { enabled };
+    if (enabled) {
+      const next = nextRunAt({ ...existing, run_count: existing.run_count ?? 0 } as ScheduleSpec);
+      patch.next_run_at = next ? next.toISOString() : null;
+      if (!next) patch.enabled = false;
+    }
+    const { data, error } = await admin
+      .from("plan_schedules")
+      .update(patch)
+      .eq("id", id)
+      .eq("user_id", user_id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
 };
+
+// ---- Schedule arg parsing (accepts JSON strings OR arrays; falls back to defaults) ----
+function parseJsonArray(v: any): any[] | null {
+  if (v == null) return null;
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+const CADENCE_SET = new Set(["once", "hourly", "daily", "weekly", "monthly", "yearly"]);
+
+/** Build the DB-shaped patch/row from AI-supplied args, falling back to existing
+ *  values when a field is omitted. Never returns undefined on required cols. */
+function buildScheduleRow(args: any, existing: any): Record<string, any> {
+  const out: Record<string, any> = {};
+  if (typeof args.title === "string" && args.title.trim()) out.title = args.title.trim().slice(0, 120);
+  else if (existing.title !== undefined && !("title" in out)) { /* keep */ }
+
+  if (typeof args.user_request === "string" && args.user_request.trim()) {
+    out.user_request = args.user_request.slice(0, 50_000);
+  }
+
+  const cadenceRaw = typeof args.cadence === "string" ? args.cadence.toLowerCase() : null;
+  if (cadenceRaw && CADENCE_SET.has(cadenceRaw)) out.cadence = cadenceRaw as Cadence;
+
+  if (args.interval_n != null) {
+    const n = Math.floor(Number(args.interval_n));
+    if (Number.isFinite(n) && n >= 1) out.interval_n = Math.min(n, 365);
+  }
+
+  if (args.time_of_day === null) out.time_of_day = null;
+  else if (typeof args.time_of_day === "string" && /^\d{1,2}:\d{2}$/.test(args.time_of_day.trim())) {
+    out.time_of_day = args.time_of_day.trim();
+  }
+
+  if (typeof args.timezone === "string" && args.timezone.trim()) {
+    out.timezone = args.timezone.trim().slice(0, 64);
+  }
+
+  const wd = parseJsonArray(args.weekdays);
+  if (wd) {
+    out.weekdays = wd
+      .map((n: any) => Math.floor(Number(n)))
+      .filter((n: number) => Number.isFinite(n) && n >= 0 && n <= 6);
+  }
+  const md = parseJsonArray(args.month_days);
+  if (md) {
+    out.month_days = md
+      .map((n: any) => Math.floor(Number(n)))
+      .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 31);
+  }
+  const ymd = parseJsonArray(args.year_month_days);
+  if (ymd) {
+    out.year_month_days = ymd
+      .map((e: any) => ({ month: Math.floor(Number(e?.month)), day: Math.floor(Number(e?.day)) }))
+      .filter((e: any) => e.month >= 1 && e.month <= 12 && e.day >= 1 && e.day <= 31);
+  }
+
+  if (args.starts_at === null) out.starts_at = null;
+  else if (typeof args.starts_at === "string" && args.starts_at.trim()) {
+    const d = new Date(args.starts_at);
+    if (!Number.isNaN(d.getTime())) out.starts_at = d.toISOString();
+  }
+  if (args.ends_at === null) out.ends_at = null;
+  else if (typeof args.ends_at === "string" && args.ends_at.trim()) {
+    const d = new Date(args.ends_at);
+    if (!Number.isNaN(d.getTime())) out.ends_at = d.toISOString();
+  }
+
+  if (args.max_runs === null) out.max_runs = null;
+  else if (args.max_runs != null) {
+    const n = Math.floor(Number(args.max_runs));
+    if (Number.isFinite(n) && n >= 1) out.max_runs = Math.min(n, 10_000);
+  }
+
+  const attached = parseJsonArray(args.attached_document_ids);
+  if (attached) {
+    out.attached_document_ids = attached
+      .filter((x: any) => typeof x === "string" && x.length > 0)
+      .slice(0, 10);
+  }
+
+  // Fill in the fields needed by nextRunAt() from existing when creating.
+  const merged = { ...existing, ...out };
+  if (!merged.cadence) throw new Error("cadence is required (once|hourly|daily|weekly|monthly|yearly)");
+  if (!merged.title) out.title = merged.title ?? "Untitled schedule";
+  if (!merged.user_request) throw new Error("user_request is required (what Orby should run each time)");
+  if (merged.interval_n == null) out.interval_n = 1;
+  if (!merged.timezone) out.timezone = "UTC";
+  if (out.weekdays == null && existing.weekdays == null) out.weekdays = [];
+  if (out.month_days == null && existing.month_days == null) out.month_days = [];
+  if (out.year_month_days == null && existing.year_month_days == null) out.year_month_days = [];
+  if (out.attached_document_ids == null && existing.attached_document_ids == null) out.attached_document_ids = [];
+
+  return out;
+}
 
 function summarizeRun(steps: any[]): string {
   return steps.map((s, i) => `${i + 1}. ${s.description ?? s.tool}`).join("\n");
