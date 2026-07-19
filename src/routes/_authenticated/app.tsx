@@ -10,6 +10,9 @@ import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
+import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { transcribeAudio } from "@/lib/whisper.functions";
+import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
 import { ChatDialog } from "@/components/ChatDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -134,6 +137,10 @@ function AppPage() {
   });
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<PcmRecorder | null>(null);
+  const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
@@ -163,6 +170,9 @@ function AppPage() {
   const editOriginIdxRef = useRef<number>(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
+  const transcribe = useServerFn(transcribeAudio);
+  const sendChat = useServerFn(sendChatMessage);
+  const nameChatThread = useServerFn(generateThreadTitle);
 
   // Call mode removed — Orby's capabilities now live in Chat. Kept as an
   // always-false ref so remaining guards (e.g. speech muting) stay inert.
@@ -1189,14 +1199,192 @@ function AppPage() {
     setEditing(true);
   }, [editing, currentIdx, sentences]);
 
-  // Long press = open Chat (on the most recent thread).
+  // Fire-and-forget: transcribe the clip, spawn a new chat thread, insert the
+  // transcript as the user's first message, and run the same send pipeline
+  // ChatDialog uses. Surfaces progress via toasts so the user is never
+  // trapped on a screen.
+  const dispatchVoiceMessage = useCallback(
+    async (audioBlob: Blob) => {
+      const listeningId = `voice-${Date.now()}`;
+      toast.loading("Transcribing…", { id: listeningId });
+      try {
+        const audioBase64 = await blobToBase64(audioBlob);
+        const { text } = await transcribe({
+          data: { audioBase64, mimeType: "audio/wav" },
+        });
+        const transcript = (text ?? "").trim();
+        if (!transcript) {
+          toast.dismiss(listeningId);
+          return;
+        }
+
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData.user?.id;
+        if (!uid) {
+          toast.error("Sign in first", { id: listeningId });
+          return;
+        }
+
+        toast.loading("Orby is thinking…", { id: listeningId });
+
+        const defaultCaps: ChatCapabilities = {
+          web_search: true,
+          image_analysis: true,
+          planning: true,
+          image_generation: true,
+          video_generation: true,
+          document_editing: true,
+        };
+
+        // 1) Fresh thread.
+        const { data: thread, error: threadErr } = await supabase
+          .from("chat_threads")
+          .insert({
+            user_id: uid,
+            title: "New chat",
+            attached_document_ids: [],
+            capabilities: defaultCaps,
+          })
+          .select("id")
+          .single();
+        if (threadErr || !thread) throw new Error(threadErr?.message ?? "Couldn't create chat");
+        const threadId = thread.id as string;
+
+        // 2) User message with the transcript.
+        const { error: userMsgErr } = await supabase
+          .from("chat_messages")
+          .insert({
+            user_id: uid,
+            thread_id: threadId,
+            role: "user",
+            content: transcript,
+            kind: "text",
+          });
+        if (userMsgErr) throw userMsgErr;
+
+        // 3) Route (plan vs text) — same as ChatDialog.handleSend.
+        const result = await sendChat({
+          data: {
+            messages: [{ role: "user", content: transcript }],
+            contextDocumentIds: [],
+            capabilities: defaultCaps,
+          },
+        });
+
+        let isPlan = false;
+        if (result.route === "plan") {
+          isPlan = true;
+          const allowedGroups = (
+            ["document_editing", "image_generation", "video_generation", "web_search"] as const
+          ).filter((g) => defaultCaps[g]);
+          const { data: planRow, error: planErr } = await supabase
+            .from("plans")
+            .insert({
+              user_id: uid,
+              status: "composing",
+              user_request: transcript,
+              attached_document_ids: [],
+              thread_id: threadId,
+            })
+            .select("id")
+            .single();
+          if (planErr || !planRow) throw new Error(planErr?.message ?? "Couldn't start the plan");
+          void supabase.functions.invoke("plan-compose", {
+            body: { plan_id: planRow.id, allowed_tool_groups: allowedGroups },
+          });
+          const { error: aErr } = await supabase.from("chat_messages").insert({
+            user_id: uid,
+            thread_id: threadId,
+            role: "assistant",
+            content: "On it — planning and running this now.",
+            kind: "plan",
+            plan_id: planRow.id,
+          });
+          if (aErr) throw aErr;
+        } else {
+          const { error: aErr } = await supabase.from("chat_messages").insert({
+            user_id: uid,
+            thread_id: threadId,
+            role: "assistant",
+            content: result.text ?? "",
+            kind: "text",
+          });
+          if (aErr) throw aErr;
+        }
+
+        // Bump thread ordering + auto-name from the transcript.
+        void supabase
+          .from("chat_threads")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", threadId);
+        void (async () => {
+          try {
+            const { title } = await nameChatThread({ data: { message: transcript } });
+            if (title) {
+              await supabase.from("chat_threads").update({ title }).eq("id", threadId);
+              qc.invalidateQueries({ queryKey: ["chat_threads"] });
+            }
+          } catch {
+            /* naming is best-effort */
+          }
+        })();
+
+        // Nudge caches so a subsequent open shows the new thread instantly.
+        qc.invalidateQueries({ queryKey: ["chat_threads"] });
+
+        // Tap-to-open toast.
+        toast.dismiss(listeningId);
+        toast(isPlan ? "🧠 Plan started" : "💬 New message", {
+          description: transcript.length > 80 ? transcript.slice(0, 77) + "…" : transcript,
+          action: {
+            label: "Open",
+            onClick: () => {
+              setPendingChatThreadId(threadId);
+              setChatOpen(true);
+            },
+          },
+          duration: 8000,
+        });
+      } catch (err: any) {
+        toast.error(err?.message ?? "Voice message failed", { id: listeningId });
+      }
+    },
+    [transcribe, sendChat, nameChatThread, qc],
+  );
+
   const onLongPressStart = useCallback(() => {
-    setChatOpen(true);
-  }, []);
+    if (editing) return;
+    if (recorderRef.current) return; // already recording
+    setRecording(true);
+    recordStartMsRef.current = Date.now();
+    void (async () => {
+      try {
+        recorderRef.current = await startPcmRecorder();
+      } catch (err: any) {
+        setRecording(false);
+        recorderRef.current = null;
+        toast.error(
+          err?.name === "NotAllowedError"
+            ? "Microphone access denied"
+            : "Couldn't start microphone",
+        );
+      }
+    })();
+  }, [editing]);
 
   const onLongPressEnd = useCallback(() => {
-    // no-op; the chat takes over from here
-  }, []);
+    const rec = recorderRef.current;
+    const durationMs = Date.now() - recordStartMsRef.current;
+    recorderRef.current = null;
+    setRecording(false);
+    if (!rec) return;
+    void (async () => {
+      const blob = await rec.stop();
+      // Discard accidental taps and clips with no meaningful audio.
+      if (durationMs < 400 || blob.size < 4096) return;
+      void dispatchVoiceMessage(blob);
+    })();
+  }, [dispatchVoiceMessage]);
 
   useOrbGestures(
     orbRef,
@@ -2310,7 +2498,7 @@ function AppPage() {
 
       <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
-          className="orb-stage"
+          className={`orb-stage${recording ? " orb-recording" : ""}`}
           style={{
             width: "min(55vw, 28svh, 220px)",
             height: "min(55vw, 28svh, 220px)",
@@ -3126,9 +3314,13 @@ function AppPage() {
       />
       <ChatDialog
         open={chatOpen}
-        onOpenChange={setChatOpen}
+        onOpenChange={(o) => {
+          setChatOpen(o);
+          if (!o) setPendingChatThreadId(null);
+        }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        openThreadId={pendingChatThreadId}
       />
       {currentSentence && (
         <LinkDocumentDialog

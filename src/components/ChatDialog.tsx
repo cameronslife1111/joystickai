@@ -309,6 +309,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId, threadsFetched, threads, openThreadId]);
 
+  // If a caller flips openThreadId while the dialog is ALREADY open (e.g.
+  // tapping the "Open" action on a voice-note toast), jump to that thread.
+  useEffect(() => {
+    if (!open || !openThreadId) return;
+    if (openThreadId === activeThreadId) return;
+    if (!threads.some((t) => t.id === openThreadId)) return;
+    setActiveThreadId(openThreadId);
+    setDrawerOpen(false);
+  }, [open, openThreadId, threads, activeThreadId]);
+
   // Remember the last chat the user was on so re-opening returns to it.
   useEffect(() => {
     if (activeThreadId && typeof window !== "undefined") {
