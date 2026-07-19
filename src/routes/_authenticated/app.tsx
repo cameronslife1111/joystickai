@@ -815,6 +815,12 @@ function AppPage() {
       return;
     }
 
+    // Record the source-doc root the first time we follow a link off it, so
+    // 📚 Next linked doc can return here and advance through further links.
+    if (!linkRootRef.current && activeDocId) {
+      linkRootRef.current = { docId: activeDocId, fromIndex: currentIdx };
+    }
+
     // Mirror onSwipeRight: resume the target doc at its own saved sentence.
     // Do NOT call setIndex here — it would write to the SOURCE doc's row
     // (activeDoc is still stale until setActiveDocId flushes), wiping the
