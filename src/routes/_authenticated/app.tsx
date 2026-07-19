@@ -859,9 +859,101 @@ function AppPage() {
         .eq("id", targetId);
     }
 
+    linkFollowFlagRef.current = true;
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [currentSentence, docs, claimSpeech, speak, qc]);
+  }, [currentSentence, docs, claimSpeech, speak, qc, activeDocId, currentIdx]);
+
+  // Any activeDocId change that wasn't marked as a link-follow clears the
+  // link-chain root so 📚 always starts fresh from wherever the user is.
+  useEffect(() => {
+    if (linkFollowFlagRef.current) {
+      linkFollowFlagRef.current = false;
+      return;
+    }
+    linkRootRef.current = null;
+  }, [activeDocId]);
+
+  // 📚 Next linked doc: return to the source doc that started this link chain
+  // (or use the current doc if none), find the next sentence after the last
+  // link-out point with a linked_document_id, and open it — same prime + speak
+  // behavior as swipe-right on a link.
+  const openNextLinkedDocument = useCallback(async () => {
+    if (!docs) return;
+    const root = linkRootRef.current ?? (activeDocId ? { docId: activeDocId, fromIndex: currentIdx } : null);
+    if (!root) return;
+    const rootDoc = docs.find((d) => d.id === root.docId);
+    if (!rootDoc) {
+      linkRootRef.current = null;
+      toast.error("Source document is gone");
+      return;
+    }
+
+    // Prefer the cached sentences list; fall back to a fresh fetch.
+    let list = qc.getQueryData<Sentence[]>(["sentences", root.docId]) ?? null;
+    if (!list) {
+      const { data: rows, error } = await supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", root.docId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) {
+        toast.error("Couldn't load source document");
+        return;
+      }
+      list = (rows ?? []) as Sentence[];
+      qc.setQueryData<Sentence[]>(["sentences", root.docId], list);
+    }
+
+    const nextIdx = list.findIndex((s, i) =>
+      i > root.fromIndex && !!s.linked_document_id && docs.some((d) => d.id === s.linked_document_id),
+    );
+    if (nextIdx === -1) {
+      toast(`No more linked documents in "${rootDoc.title}"`);
+      return;
+    }
+
+    const targetId = list[nextIdx].linked_document_id!;
+    linkRootRef.current = { docId: root.docId, fromIndex: nextIdx };
+
+    const token = claimSpeech();
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const targetList = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = targetList.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, targetList.length - 1));
+    const resolved = targetList[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", targetId], targetList);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+
+    linkFollowFlagRef.current = true;
+    setActiveDocId(targetId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [docs, activeDocId, currentIdx, qc, claimSpeech, speak]);
 
   const openPinnedDocument = useCallback(async (targetId?: string) => {
     const docId = targetId ?? pinnedDocId;
