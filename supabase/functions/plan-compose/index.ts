@@ -486,6 +486,49 @@ Deno.serve(async (req) => {
       userContext += `\n\nSTRONGLY-MATCHED MEDIA (assets this request appears to operate on directly — prefer these ids when the request references existing media${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
 
+    // SCHEDULED PLANS catalog — so the planner can update/toggle/delete an
+    // existing schedule by picking its id directly (mirrors DOCUMENT CATALOG).
+    // Scheduling tools only exist if the caller opted into the "scheduling"
+    // capability group, so only list them then.
+    const scheduleGroupAllowed = !allowedGroups || allowedGroups.includes("scheduling");
+    if (scheduleGroupAllowed) {
+      const { data: scheduleRows } = await admin
+        .from("plan_schedules")
+        .select("id, title, cadence, interval_n, time_of_day, weekdays, month_days, year_month_days, timezone, enabled, next_run_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      const rows = scheduleRows ?? [];
+      if (rows.length) {
+        const describe = (s: any): string => {
+          const tod = s.time_of_day ? ` at ${s.time_of_day}` : "";
+          switch (s.cadence) {
+            case "once": return "once";
+            case "hourly": return `every ${s.interval_n ?? 1}h`;
+            case "daily": return `every ${s.interval_n ?? 1}d${tod}`;
+            case "weekly": {
+              const wd = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+              const days = (s.weekdays ?? []).map((d: number) => wd[d]).join(",") || "weekly";
+              return `weekly on ${days}${tod}`;
+            }
+            case "monthly": return `monthly on day ${(s.month_days ?? []).join(",")}${tod}`;
+            case "yearly": return `yearly on ${(s.year_month_days ?? []).map((e: any) => `${e.month}/${e.day}`).join(",")}${tod}`;
+            default: return String(s.cadence ?? "");
+          }
+        };
+        const lines = rows.map((s: any) =>
+          `  ${s.id} — ${JSON.stringify(s.title ?? "")} — ${describe(s)} — tz=${s.timezone ?? "UTC"} — next=${s.next_run_at ?? "—"} — ${s.enabled ? "enabled" : "paused"}`,
+        ).join("\n");
+        userContext += `\n\nSCHEDULED PLANS (id — title — cadence — tz — next_run_at — state) — pick an id from here when the user asks to edit/pause/delete an existing schedule; only create a new one when no match applies:\n${lines}`;
+      }
+      userContext += `\n\nSCHEDULING RULES — when the user asks to schedule a recurring plan:
+- Use create_schedule for new ones, update_schedule / toggle_schedule / delete_schedule for existing rows (resolve schedule_id from the SCHEDULED PLANS list above, or via find_schedule_by_title if not visible).
+- If the user did not name a timezone, use "UTC". If they didn't say a time_of_day for daily/weekly/monthly/yearly, default to "09:00".
+- "every weekday" → cadence="weekly", weekdays=[1,2,3,4,5]. "weekends" → weekdays=[0,6]. Sun=0..Sat=6.
+- Put the natural-language work Orby should do at fire time into user_request (this becomes the composer input for that scheduled run). If the user attached documents to THIS chat that should also apply each run, echo their ids into attached_document_ids.
+- Describe the schedule plainly in the step's description (e.g. "Create schedule 'Morning digest' — weekly Mon–Fri at 08:00 UTC") so the user sees exactly what they're approving.`;
+    }
+
 
     const systemPrompt = buildSystemPrompt(allowedGroups);
     const effectiveSystemPrompt = userContext
