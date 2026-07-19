@@ -137,6 +137,10 @@ function AppPage() {
   });
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<PcmRecorder | null>(null);
+  const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
