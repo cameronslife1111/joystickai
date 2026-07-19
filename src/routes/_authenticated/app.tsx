@@ -99,6 +99,12 @@ function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const orbRef = useRef<HTMLButtonElement>(null);
+  // Tracks the "root" source document in a linked-doc chain, so the Next linked doc
+  // button (📚) can return to it and advance to the next linked sentence.
+  const linkRootRef = useRef<{ docId: string; fromIndex: number } | null>(null);
+  // When true, the next activeDocId change is a link-follow — preserve linkRootRef.
+  // Any other doc navigation clears the root via the effect below.
+  const linkFollowFlagRef = useRef(false);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
