@@ -99,6 +99,12 @@ function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const orbRef = useRef<HTMLButtonElement>(null);
+  // Tracks the "root" source document in a linked-doc chain, so the Next linked doc
+  // button (📚) can return to it and advance to the next linked sentence.
+  const linkRootRef = useRef<{ docId: string; fromIndex: number } | null>(null);
+  // When true, the next activeDocId change is a link-follow — preserve linkRootRef.
+  // Any other doc navigation clears the root via the effect below.
+  const linkFollowFlagRef = useRef(false);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
@@ -809,6 +815,12 @@ function AppPage() {
       return;
     }
 
+    // Record the source-doc root the first time we follow a link off it, so
+    // 📚 Next linked doc can return here and advance through further links.
+    if (!linkRootRef.current && activeDocId) {
+      linkRootRef.current = { docId: activeDocId, fromIndex: currentIdx };
+    }
+
     // Mirror onSwipeRight: resume the target doc at its own saved sentence.
     // Do NOT call setIndex here — it would write to the SOURCE doc's row
     // (activeDoc is still stale until setActiveDocId flushes), wiping the
@@ -847,9 +859,101 @@ function AppPage() {
         .eq("id", targetId);
     }
 
+    linkFollowFlagRef.current = true;
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [currentSentence, docs, claimSpeech, speak, qc]);
+  }, [currentSentence, docs, claimSpeech, speak, qc, activeDocId, currentIdx]);
+
+  // Any activeDocId change that wasn't marked as a link-follow clears the
+  // link-chain root so 📚 always starts fresh from wherever the user is.
+  useEffect(() => {
+    if (linkFollowFlagRef.current) {
+      linkFollowFlagRef.current = false;
+      return;
+    }
+    linkRootRef.current = null;
+  }, [activeDocId]);
+
+  // 📚 Next linked doc: return to the source doc that started this link chain
+  // (or use the current doc if none), find the next sentence after the last
+  // link-out point with a linked_document_id, and open it — same prime + speak
+  // behavior as swipe-right on a link.
+  const openNextLinkedDocument = useCallback(async () => {
+    if (!docs) return;
+    const root = linkRootRef.current ?? (activeDocId ? { docId: activeDocId, fromIndex: currentIdx } : null);
+    if (!root) return;
+    const rootDoc = docs.find((d) => d.id === root.docId);
+    if (!rootDoc) {
+      linkRootRef.current = null;
+      toast.error("Source document is gone");
+      return;
+    }
+
+    // Prefer the cached sentences list; fall back to a fresh fetch.
+    let list = qc.getQueryData<Sentence[]>(["sentences", root.docId]) ?? null;
+    if (!list) {
+      const { data: rows, error } = await supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", root.docId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) {
+        toast.error("Couldn't load source document");
+        return;
+      }
+      list = (rows ?? []) as Sentence[];
+      qc.setQueryData<Sentence[]>(["sentences", root.docId], list);
+    }
+
+    const nextIdx = list.findIndex((s, i) =>
+      i > root.fromIndex && !!s.linked_document_id && docs.some((d) => d.id === s.linked_document_id),
+    );
+    if (nextIdx === -1) {
+      toast(`No more linked documents in "${rootDoc.title}"`);
+      return;
+    }
+
+    const targetId = list[nextIdx].linked_document_id!;
+    linkRootRef.current = { docId: root.docId, fromIndex: nextIdx };
+
+    const token = claimSpeech();
+    const [{ data: freshDoc }, { data: rows }] = await Promise.all([
+      supabase
+        .from("documents")
+        .select("current_sentence_index, title")
+        .eq("id", targetId)
+        .maybeSingle(),
+      supabase
+        .from("sentences")
+        .select("*")
+        .eq("document_id", targetId)
+        .order("order_index", { ascending: true })
+        .order("created_at", { ascending: true }),
+    ]);
+    if (token !== speechTokenRef.current) return;
+
+    const targetList = (rows ?? []) as Sentence[];
+    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const clamped = targetList.length === 0
+      ? 0
+      : Math.max(0, Math.min(savedIdx, targetList.length - 1));
+    const resolved = targetList[clamped];
+
+    qc.setQueryData<Sentence[]>(["sentences", targetId], targetList);
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
+    );
+    if (clamped !== savedIdx) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: clamped })
+        .eq("id", targetId);
+    }
+
+    linkFollowFlagRef.current = true;
+    setActiveDocId(targetId);
+    if (resolved?.content) speak(resolved.content, token);
+  }, [docs, activeDocId, currentIdx, qc, claimSpeech, speak]);
 
   const openPinnedDocument = useCallback(async (targetId?: string) => {
     const docId = targetId ?? pinnedDocId;
@@ -1929,7 +2033,7 @@ function AppPage() {
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc
     filled[5] = grid[10];  // 6  Move sentence (long-press preserved)
-    filled[6] = grid[12];  // 7  Copy sentence
+    filled[6] = grid[23];  // 7  Swap slot (moved from slot 24)
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
@@ -1946,11 +2050,11 @@ function AppPage() {
     filled[20] = grid[24]; // 21 Recent docs
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = grid[23]; // 24 Swap slot
+    filled[23] = { e: "📚", t: "Next linked doc", fn: () => { setMenuOpen(false); void openNextLinkedDocument(); } }; // 24 Next linked doc
 
 
     return filled;
-  }, [grid]);
+  }, [grid, openNewIdea, openNextLinkedDocument]);
 
   return (
     <main
