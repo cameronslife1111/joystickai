@@ -2498,7 +2498,7 @@ function AppPage() {
 
       <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
-          className="orb-stage"
+          className={`orb-stage${recording ? " orb-recording" : ""}`}
           style={{
             width: "min(55vw, 28svh, 220px)",
             height: "min(55vw, 28svh, 220px)",
