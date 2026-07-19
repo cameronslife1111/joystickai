@@ -2054,7 +2054,7 @@ function AppPage() {
 
 
     return filled;
-  }, [grid]);
+  }, [grid, openNewIdea, openNextLinkedDocument]);
 
   return (
     <main
