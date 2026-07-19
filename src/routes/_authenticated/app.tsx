@@ -906,16 +906,31 @@ function AppPage() {
       qc.setQueryData<Sentence[]>(["sentences", root.docId], list);
     }
 
-    const nextIdx = list.findIndex((s, i) =>
+    let nextIdx = list.findIndex((s, i) =>
       i > root.fromIndex && !!s.linked_document_id && docs.some((d) => d.id === s.linked_document_id),
     );
     if (nextIdx === -1) {
-      toast(`No more linked documents in "${rootDoc.title}"`);
+      // Wrap around: search from the top up through the current position.
+      nextIdx = list.findIndex((s, i) =>
+        i <= root.fromIndex && !!s.linked_document_id && docs.some((d) => d.id === s.linked_document_id),
+      );
+    }
+    if (nextIdx === -1) {
+      // No valid linked sentences at all in the source doc.
       return;
     }
 
     const targetId = list[nextIdx].linked_document_id!;
     linkRootRef.current = { docId: root.docId, fromIndex: nextIdx };
+
+    // Persist the source doc's position to the sentence that links out, so
+    // returning to the source resumes on that sentence.
+    qc.setQueryData<Doc[]>(["documents"], (prev) =>
+      prev?.map((d) => d.id === root.docId ? { ...d, current_sentence_index: nextIdx } : d) ?? prev,
+    );
+    void supabase.from("documents")
+      .update({ current_sentence_index: nextIdx })
+      .eq("id", root.docId);
 
     const token = claimSpeech();
     const [{ data: freshDoc }, { data: rows }] = await Promise.all([
