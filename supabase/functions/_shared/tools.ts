@@ -374,6 +374,13 @@ export const TOOL_GROUPS: Record<string, string> = {
   image_to_video: "video_generation",
   video_to_video: "video_generation",
   audio_image_to_video: "video_generation",
+  // scheduling
+  find_schedule_by_title: "scheduling",
+  list_schedules: "scheduling",
+  create_schedule: "scheduling",
+  update_schedule: "scheduling",
+  delete_schedule: "scheduling",
+  toggle_schedule: "scheduling",
 };
 
 export function isToolAllowed(name: string, allowedGroups?: string[] | null): boolean {
