@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@^2.45.0";
 import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
 import { applyEmojiSynonyms, tokenizeRich } from "../_shared/lookup.ts";
+import { nextRunAt, type Cadence, type ScheduleSpec } from "../_shared/recurrence.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
