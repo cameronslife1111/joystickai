@@ -2033,7 +2033,7 @@ function AppPage() {
     filled[3] = grid[1];   // 4  Sound on/off
     filled[4] = grid[7];   // 5  Delete doc
     filled[5] = grid[10];  // 6  Move sentence (long-press preserved)
-    filled[6] = grid[12];  // 7  Copy sentence
+    filled[6] = grid[23];  // 7  Swap slot (moved from slot 24)
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
@@ -2050,7 +2050,7 @@ function AppPage() {
     filled[20] = grid[24]; // 21 Recent docs
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = grid[23]; // 24 Swap slot
+    filled[23] = { e: "📚", t: "Next linked doc", fn: () => { setMenuOpen(false); void openNextLinkedDocument(); } }; // 24 Next linked doc
 
 
     return filled;
