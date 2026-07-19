@@ -924,11 +924,14 @@ function AppPage() {
     linkRootRef.current = { docId: root.docId, fromIndex: nextIdx };
 
     // Persist the source doc's position to the sentence that links out, so
-    // returning to the source resumes on that sentence.
+    // returning to the source resumes on that sentence — behave exactly as
+    // if the user had manually swiped to this sentence. AWAIT the write so
+    // any later navigation reading current_sentence_index from the DB sees
+    // the new value (avoids a stale-read race on return to the source).
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === root.docId ? { ...d, current_sentence_index: nextIdx } : d) ?? prev,
     );
-    void supabase.from("documents")
+    await supabase.from("documents")
       .update({ current_sentence_index: nextIdx })
       .eq("id", root.docId);
 
