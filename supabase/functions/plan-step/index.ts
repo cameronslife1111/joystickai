@@ -120,6 +120,10 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     image_to_video: ["source_media_id"],
     video_to_video: ["source_image_id", "reference_video_id"],
     audio_image_to_video: ["source_image_id", "audio_media_id"],
+    create_schedule: ["title", "user_request", "cadence"],
+    update_schedule: ["schedule_id"],
+    delete_schedule: ["schedule_id"],
+    toggle_schedule: ["schedule_id", "enabled"],
   };
   const has = (v: unknown) =>
     v != null && (typeof v === "string" ? v.trim().length > 0 : (Array.isArray(v) ? v.length > 0 : true));
