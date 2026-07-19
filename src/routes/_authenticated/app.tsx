@@ -3314,9 +3314,13 @@ function AppPage() {
       />
       <ChatDialog
         open={chatOpen}
-        onOpenChange={setChatOpen}
+        onOpenChange={(o) => {
+          setChatOpen(o);
+          if (!o) setPendingChatThreadId(null);
+        }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        openThreadId={pendingChatThreadId}
       />
       {currentSentence && (
         <LinkDocumentDialog
