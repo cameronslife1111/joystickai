@@ -398,6 +398,9 @@ export const TOOL_GROUPS: Record<string, string> = {
   update_schedule: "scheduling",
   delete_schedule: "scheduling",
   toggle_schedule: "scheduling",
+  // chat_reporting — only available when the plan was started from a chat thread
+  send_chat_message: "chat_reporting",
+  ask_user: "chat_reporting",
 };
 
 export function isToolAllowed(name: string, allowedGroups?: string[] | null): boolean {
