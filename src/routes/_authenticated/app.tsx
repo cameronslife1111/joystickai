@@ -621,6 +621,7 @@ function AppPage() {
       id = setTimeout(() => {
         if (
           mutedRef.current ||
+          recordingRef.current ||
           busyRef.current ||
           (typeof document !== "undefined" && document.hidden)
         ) {
