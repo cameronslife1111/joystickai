@@ -2551,6 +2551,14 @@ function AppPage() {
             className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
             aria-label="Repeat sentence"
           />
+          <button
+            type="button"
+            onClick={() => {
+              void openNextLinkedDocument();
+            }}
+            className="absolute bottom-1/2 left-full ml-4 mb-2 h-[33%] w-[22vw] max-w-[120px] opacity-0"
+            aria-label="Next linked doc"
+          />
         </div>
       </section>
 
