@@ -554,6 +554,7 @@ function AppPage() {
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (inCallRef.current) return; // on a call — only the conversation is audible
+    if (recordingRef.current) return; // voice-edit mode — user is speaking, stay silent
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     if (token != null && token !== speechTokenRef.current) return;
