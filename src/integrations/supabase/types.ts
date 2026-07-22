@@ -324,6 +324,8 @@ export type Database = {
           acknowledged: boolean
           approved_at: string | null
           attached_document_ids: string[]
+          awaiting_count: number
+          awaiting_since: string | null
           completed_at: string | null
           consecutive_no_progress: number
           created_at: string
@@ -354,6 +356,8 @@ export type Database = {
           acknowledged?: boolean
           approved_at?: string | null
           attached_document_ids?: string[]
+          awaiting_count?: number
+          awaiting_since?: string | null
           completed_at?: string | null
           consecutive_no_progress?: number
           created_at?: string
@@ -384,6 +388,8 @@ export type Database = {
           acknowledged?: boolean
           approved_at?: string | null
           attached_document_ids?: string[]
+          awaiting_count?: number
+          awaiting_since?: string | null
           completed_at?: string | null
           consecutive_no_progress?: number
           created_at?: string
