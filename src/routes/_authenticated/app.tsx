@@ -2551,17 +2551,6 @@ function AppPage() {
             className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
             aria-label="Repeat sentence"
           />
-          {/* Invisible left-edge shortcut: fires Next Linked Doc (mirrors Slot 24) */}
-          <button
-            type="button"
-            onClick={() => {
-              void openNextLinkedDocument();
-            }}
-            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-            className="fixed left-0 top-1/2 z-40 h-[50px] w-[10px] -translate-y-1/2 opacity-0"
-            aria-label="Next linked doc"
-          />
-
         </div>
       </section>
 
