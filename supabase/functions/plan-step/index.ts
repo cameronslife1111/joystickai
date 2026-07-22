@@ -1220,6 +1220,29 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
+  async send_chat_message(args, { user_id, admin, thread_id, plan_id }) {
+    const text = String(args.text ?? "").trim();
+    if (!text) throw new Error("send_chat_message requires text");
+    if (!thread_id) throw new Error("send_chat_message: plan has no chat thread");
+    const { error } = await admin.from("chat_messages").insert({
+      user_id,
+      thread_id,
+      role: "assistant",
+      content: text,
+      kind: "text",
+      plan_id: plan_id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+    return { posted: true };
+  },
+  async ask_user(args, { thread_id }) {
+    const question = String(args.question ?? "").trim();
+    if (!question) throw new Error("ask_user requires question");
+    if (!thread_id) throw new Error("ask_user: plan has no chat thread");
+    // Sentinel — the main runner handles the pause/insert; we just return it.
+    return { __ask_user: { question, context: String(args.context ?? "").trim() } };
+  },
 };
 
 // ---- Schedule arg parsing (accepts JSON strings OR arrays; falls back to defaults) ----
