@@ -1,22 +1,18 @@
-## Goal
+Add an invisible tap zone on the left edge of the orb area that fires the same "Next linked doc" action as Slot 24.
 
-Make the orb long-press behave as a toggle: first long-press starts recording, second long-press stops it and fires transcription. No holding required.
+Scope
+- File: `src/routes/_authenticated/app.tsx` (orb tap-zone layer where the existing invisible orb-edge zones live, e.g. the left-of-orb delete zone).
+- Add a new absolutely-positioned invisible button:
+  - Width ~10px, height ~50px
+  - Vertically centered on the orb (top: 50%, translateY(-50%))
+  - Positioned just off the left side of the orb, in the center of the screen area
+  - `background: transparent`, no border, `aria-label="Next linked doc"`
+  - `touch-action: manipulation`, `-webkit-tap-highlight-color: transparent`
+  - Only active on the main swipe screen (same visibility conditions the other orb zones use — hidden while editing, in dialogs, etc.)
+- On press/click, calls the exact same handler Slot 24 (📚 Next linked doc) uses — `openNextLinkedDocument()` — no duplication of logic.
+- Works on both mouse (`onClick`) and touch (native click covers both; no need for a separate touch handler).
 
-## Change
-
-In `src/routes/_authenticated/app.tsx`, rework the two long-press handlers around lines 1356–1388:
-
-- `onLongPressStart` becomes the single toggle entry point.
-  - If `recorderRef.current` is already set → treat this long-press as the STOP action: capture the recorder, clear the ref, `setRecording(false)`, `await rec.stop()`, and if the clip passes the existing duration/size floor call `dispatchVoiceMessage(blob)`. (Same logic that currently lives in `onLongPressEnd`.)
-  - Otherwise → start a new recording exactly like today (`setRecording(true)`, `startPcmRecorder()`, error toast on failure).
-- `onLongPressEnd` becomes a no-op (return immediately). We keep passing it so `useOrbGestures` still fires the start callback, but releasing the finger no longer stops the mic.
-- Keep the `editing` guard on start so edit mode still blocks recording.
-- Keep `recordStartMsRef` for the duration floor; it's set at start, read at stop.
-
-Nothing else changes: the red pulsing aura (`recording` state), the fire-and-forget `dispatchVoiceMessage` pipeline (transcribe → new thread → send with scheduling + all other planner capabilities), and the toast flow all stay intact. Scheduling capability in the planner is unaffected because that lives in `plan-compose` / chat capability toggles, not in the recording path.
-
-## Technical details
-
-- File touched: `src/routes/_authenticated/app.tsx` only.
-- No changes to `audio-recorder.ts`, `whisper.functions.ts`, `useOrbGestures`, or the planner.
-- The existing 400ms / 4096-byte guard still protects against accidental double long-presses that stop instantly.
+Guardrails
+- Do not change Slot 24 behavior.
+- Do not affect existing left-of-orb delete zone or other invisible zones; place this new zone at a different vertical position or on a distinct region so they don't overlap. If there's a conflict, I'll shift the new zone slightly (e.g. slightly above or below the delete zone) and note it — but the plan is to keep it centered vertically on the orb; I'll confirm no overlap with the delete zone during implementation and adjust position by a few px if needed.
+- Purely frontend/UI change. No backend, no new state.
