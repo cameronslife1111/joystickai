@@ -227,6 +227,39 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const lastUser = [...data.messages].reverse().find((m) => m.role === "user");
     const latestText = lastUser?.content ?? data.messages[data.messages.length - 1].content;
 
+    // Queen Bee resume path: if this thread has a plan awaiting a user reply,
+    // treat this message as the answer, resume the plan in the background, and
+    // stay silent in the chat (the plan itself will post follow-ups).
+    if (data.threadId) {
+      const { data: pending } = await supabase
+        .from("plans")
+        .select("id, steps, current_step")
+        .eq("thread_id", data.threadId)
+        .eq("status", "awaiting_user")
+        .order("awaiting_since", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (pending?.id) {
+        const steps: any[] = Array.isArray(pending.steps) ? pending.steps : [];
+        const idx: number = pending.current_step ?? 0;
+        const step = steps[idx];
+        if (step && step.status === "awaiting_user") {
+          step.status = "completed";
+          step.result = { ...(step.result ?? {}), answer: latestText };
+          step.error = null;
+          const nextIdx = idx + 1;
+          const updates: any = { steps, current_step: nextIdx, status: "running", step_claim_at: null };
+          if (nextIdx >= steps.length) {
+            updates.status = "completed";
+            updates.completed_at = new Date().toISOString();
+          }
+          await supabase.from("plans").update(updates).eq("id", pending.id);
+          return { route: "resumed" };
+        }
+      }
+    }
+
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
