@@ -1473,6 +1473,14 @@ Deno.serve(async (req) => {
     plan.status = "running";
     // Persisted on first downstream update; no separate write needed.
   }
+  if (plan.status === "awaiting_user") {
+    // Paused waiting for a chat reply. Do nothing; releaseClaim() would bump
+    // tick_count, but plan-tick's status filter also excludes awaiting_user so
+    // this branch is essentially unreachable from cron — it only triggers if
+    // something invokes plan-step directly. Reset the claim and return.
+    await admin.from("plans").update({ step_claim_at: null }).eq("id", plan.id);
+    return json({ status: "awaiting_user" });
+  }
   if (plan.status !== "running" && plan.status !== "awaiting_media") {
     await releaseClaim();
     return json({ status: plan.status });
