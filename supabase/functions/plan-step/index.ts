@@ -1677,6 +1677,9 @@ Deno.serve(async (req) => {
       updates.completed_at = new Date().toISOString();
     }
     await releaseClaim(updates);
+    if (updates.status === "completed") {
+      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+    }
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
     step.status = "failed";
@@ -1689,6 +1692,7 @@ Deno.serve(async (req) => {
       error_lovable_prompt: lovablePrompt,
       completed_at: new Date().toISOString(),
     });
+    await reportTerminal(`⚠️ Step ${idx + 1} failed: ${step.error}`);
     return json({ status: "failed", error: step.error });
   }
 });
