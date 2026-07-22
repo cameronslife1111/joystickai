@@ -2533,30 +2533,25 @@ function AppPage() {
             />
           )}
           {/* Swipe gestures on the orb handle directional navigation. */}
-          {/* Invisible flanking buttons: left = delete, right = repeat */}
-          <button
-            type="button"
-            onClick={() => {
-              void deleteCurrent();
-            }}
+          {/* Invisible flanking buttons: left = delete, right = repeat, top-right = next linked doc.
+              Each guards against swipe-tail clicks: if the pointer moved >10px between down and up,
+              the click is treated as a swipe and ignored. */}
+          <InvisibleTapZone
+            onTap={() => { void deleteCurrent(); }}
             className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
             aria-label="Delete sentence"
           />
-          <button
-            type="button"
-            onClick={() => {
+          <InvisibleTapZone
+            onTap={() => {
               const text = currentSentence?.content;
               if (text) speak(text, claimSpeech());
             }}
             className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
             aria-label="Repeat sentence"
           />
-          <button
-            type="button"
-            onClick={() => {
-              void openNextLinkedDocument();
-            }}
-            className="absolute bottom-1/2 left-full ml-4 mb-2 h-[33%] w-[22vw] max-w-[120px] opacity-0"
+          <InvisibleTapZone
+            onTap={() => { void openNextLinkedDocument(); }}
+            className="absolute bottom-full left-1/2 mb-4 h-[22vw] max-h-[120px] w-[22vw] max-w-[120px] opacity-0"
             aria-label="Next linked doc"
           />
         </div>
