@@ -2141,11 +2141,11 @@ function AppPage() {
     filled[20] = grid[24]; // 21 Recent docs
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = { e: "📚", t: "Next linked doc", fn: () => { setMenuOpen(false); void openNextLinkedDocument(); } }; // 24 Next linked doc
+    // 24 intentionally left empty
 
 
     return filled;
-  }, [grid, openNewIdea, openNextLinkedDocument]);
+  }, [grid, openNewIdea]);
 
   return (
     <main
