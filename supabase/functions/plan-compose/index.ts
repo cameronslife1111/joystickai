@@ -584,6 +584,8 @@ Deno.serve(async (req) => {
       update_schedule: ["schedule_id"],
       delete_schedule: ["schedule_id"],
       toggle_schedule: ["schedule_id", "enabled"],
+      send_chat_message: ["text"],
+      ask_user: ["question"],
     };
 
     // A value "carries the where" if it's a non-blank string/value OR a
