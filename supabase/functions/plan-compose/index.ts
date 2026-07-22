@@ -530,10 +530,24 @@ Deno.serve(async (req) => {
     }
 
 
-    const systemPrompt = buildSystemPrompt(allowedGroups);
+    // When a plan is tied to a chat thread, auto-enable chat_reporting so the
+    // planner can post check-ins (send_chat_message) and pause for approval
+    // (ask_user). This is the "Queen Bee" pattern — long plans can report
+    // progress and ask questions without the user having to babysit them.
+    const effectiveGroups: string[] | null = plan.thread_id
+      ? (allowedGroups ? [...new Set([...allowedGroups, "chat_reporting"])] : null)
+      : allowedGroups;
+    const systemPrompt = buildSystemPrompt(effectiveGroups);
+    const checkInContract = plan.thread_id
+      ? `\n\nCHECK-IN CONTRACT (this plan was started from a chat thread — treat it like an assistant reporting back to their manager):
+- For LONG plans (5+ steps, image/video batches, multi-doc edits): add 1–3 send_chat_message steps at meaningful milestones to keep the user in the loop (e.g. "Reviewed the brain dump — starting on 8 image prompts now.", "6 of 8 images done, moving to the video pass."). Keep each message under 2 sentences.
+- For plans that hinge on a user decision Orby cannot make alone (e.g. "which of these three drafts should I keep", "should I publish this now"), insert an ask_user step. It PAUSES the plan; the user's reply becomes result.answer on that step and later steps can pipe it via {{step_N.result.answer}}. Use ask_user SPARINGLY — only for real approval gates, never for chit-chat.
+- The plan ALWAYS auto-posts a final "✅ All done." (or "⚠️ failed") summary when it finishes — do NOT add a redundant final send_chat_message just to say "done".
+- Aim for meaningful chunks: it's fine to plan 12–20 steps if the work is real; use ask_user to break long plans into approvable phases instead of guessing what the user wants.`
+      : "";
     const effectiveSystemPrompt = userContext
-      ? `${systemPrompt}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
-      : systemPrompt;
+      ? `${systemPrompt}${checkInContract}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
+      : `${systemPrompt}${checkInContract}`;
     const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
     let parsed: any;
     try {
@@ -570,6 +584,8 @@ Deno.serve(async (req) => {
       update_schedule: ["schedule_id"],
       delete_schedule: ["schedule_id"],
       toggle_schedule: ["schedule_id", "enabled"],
+      send_chat_message: ["text"],
+      ask_user: ["question"],
     };
 
     // A value "carries the where" if it's a non-blank string/value OR a

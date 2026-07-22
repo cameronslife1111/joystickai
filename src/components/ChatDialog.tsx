@@ -512,12 +512,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           messages: history,
           contextDocumentIds: contextDocIds,
           imageUrl: caps.image_analysis && pickedImage?.url ? pickedImage.url : undefined,
+          threadId,
           capabilities: caps,
         },
       });
 
-      let insertedAssistant: ChatRow;
-      if (result.route === "plan") {
+      let insertedAssistant: ChatRow | null;
+      if (result.route === "resumed") {
+        // User's message became the answer to a paused plan; the plan itself
+        // will post follow-ups. Don't insert a synthetic assistant bubble.
+        insertedAssistant = null;
+      } else if (result.route === "plan") {
         // Create + auto-run a plan tied to this thread.
         const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => caps[g]);
         const { data: planRow, error: planErr } = await supabase
@@ -567,12 +572,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
       qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) => {
         const base = (cur ?? []).filter((m) => m.id !== optimisticUser.id);
-        return [...base, insertedUser as ChatRow, insertedAssistant];
+        const next = [...base, insertedUser as ChatRow];
+        if (insertedAssistant) next.push(insertedAssistant);
+        return next;
       });
 
       // Auto-read the reply aloud when enabled. Plans get a short cue; the
       // per-step cues are handled inside PlanProgressCard.
-      if (autoSpeak && open && threadId === activeThreadId) {
+      if (autoSpeak && open && threadId === activeThreadId && insertedAssistant) {
         if (insertedAssistant.kind === "plan") {
           speakCue("Planning now.");
         } else if (insertedAssistant.content) {

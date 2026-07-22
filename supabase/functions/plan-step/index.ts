@@ -540,6 +540,31 @@ const TOOL_HANDLERS: Record<string, any> = {
     const steps = validateExpansionSteps(rawSteps);
     return { __expand_steps: steps, generated: steps.length };
   },
+  async send_chat_message(args, { user_id, admin, thread_id, plan_id }: any) {
+    const text = String(args.text ?? "").trim();
+    if (!text) throw new Error("send_chat_message requires text");
+    if (!thread_id) throw new Error("send_chat_message is only available for plans started from a chat thread");
+    const { error } = await admin.from("chat_messages").insert({
+      user_id,
+      thread_id,
+      role: "assistant",
+      content: text,
+      kind: "text",
+      plan_id: plan_id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    // Bump thread ordering so it floats up in the sidebar.
+    await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+    return { posted: true, text };
+  },
+  async ask_user(args, { thread_id }: any) {
+    const question = String(args.question ?? "").trim();
+    if (!question) throw new Error("ask_user requires a question");
+    if (!thread_id) throw new Error("ask_user is only available for plans started from a chat thread");
+    const context = typeof args.context === "string" ? args.context.trim() : "";
+    // Return the sentinel — the runner pauses the plan and posts the message.
+    return { __ask_user: { question, context } };
+  },
   async create_document(args, { user_id, admin }) {
     const { count } = await admin
       .from("documents")
@@ -1195,6 +1220,29 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
+  async send_chat_message(args, { user_id, admin, thread_id, plan_id }) {
+    const text = String(args.text ?? "").trim();
+    if (!text) throw new Error("send_chat_message requires text");
+    if (!thread_id) throw new Error("send_chat_message: plan has no chat thread");
+    const { error } = await admin.from("chat_messages").insert({
+      user_id,
+      thread_id,
+      role: "assistant",
+      content: text,
+      kind: "text",
+      plan_id: plan_id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+    return { posted: true };
+  },
+  async ask_user(args, { thread_id }) {
+    const question = String(args.question ?? "").trim();
+    if (!question) throw new Error("ask_user requires question");
+    if (!thread_id) throw new Error("ask_user: plan has no chat thread");
+    // Sentinel — the main runner handles the pause/insert; we just return it.
+    return { __ask_user: { question, context: String(args.context ?? "").trim() } };
+  },
 };
 
 // ---- Schedule arg parsing (accepts JSON strings OR arrays; falls back to defaults) ----
@@ -1402,6 +1450,20 @@ Deno.serve(async (req) => {
   };
 
   // ---- Guardrails ----
+  const reportTerminal = async (text: string) => {
+    if (!plan.thread_id || !text) return;
+    try {
+      await admin.from("chat_messages").insert({
+        user_id: user.id,
+        thread_id: plan.thread_id,
+        role: "assistant",
+        content: text,
+        kind: "text",
+        plan_id: plan.id,
+      });
+      await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", plan.thread_id);
+    } catch (_e) { /* best-effort */ }
+  };
   const failWithReason = async (reason: string) => {
     await admin
       .from("plans")
@@ -1412,6 +1474,7 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
       })
       .eq("id", plan_id);
+    await reportTerminal(`I hit a problem: ${reason}`);
     return json({ status: "failed", error: reason });
   };
   if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
@@ -1432,6 +1495,14 @@ Deno.serve(async (req) => {
   if (plan.status === "approved") {
     plan.status = "running";
     // Persisted on first downstream update; no separate write needed.
+  }
+  if (plan.status === "awaiting_user") {
+    // Paused waiting for a chat reply. Do nothing; releaseClaim() would bump
+    // tick_count, but plan-tick's status filter also excludes awaiting_user so
+    // this branch is essentially unreachable from cron — it only triggers if
+    // something invokes plan-step directly. Reset the claim and return.
+    await admin.from("plans").update({ step_claim_at: null }).eq("id", plan.id);
+    return json({ status: "awaiting_user" });
   }
   if (plan.status !== "running" && plan.status !== "awaiting_media") {
     await releaseClaim();
@@ -1528,6 +1599,9 @@ Deno.serve(async (req) => {
       updates.completed_at = new Date().toISOString();
     }
     await releaseClaim(updates);
+    if (updates.status === "completed") {
+      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+    }
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
@@ -1546,7 +1620,48 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal, baseIndex: idx + 1 });
+    const result = await handler(resolvedArgs, {
+      user_id: user.id,
+      admin,
+      supabase: userClient,
+      internal: isInternal,
+      baseIndex: idx + 1,
+      plan_id: plan.id,
+      thread_id: plan.thread_id ?? null,
+    });
+
+    // ask_user: pause the plan and record the question. When the user replies
+    // in chat, chat.functions writes result.answer and flips status → running.
+    if (result && typeof result === "object" && "__ask_user" in result) {
+      const askInfo = (result as any).__ask_user ?? {};
+      const question = String(askInfo.question ?? "").trim();
+      const ctxText = String(askInfo.context ?? "").trim();
+      step.status = "awaiting_user";
+      step.result = { question, context: ctxText };
+      step.error = null;
+      // Post the question to the chat thread so the user sees it.
+      if (plan.thread_id) {
+        const bubble = ctxText ? `${question}\n\n${ctxText}` : question;
+        try {
+          await admin.from("chat_messages").insert({
+            user_id: user.id,
+            thread_id: plan.thread_id,
+            role: "assistant",
+            content: bubble,
+            kind: "text",
+            plan_id: plan.id,
+          });
+          await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", plan.thread_id);
+        } catch (_e) { /* best-effort */ }
+      }
+      await releaseClaim({
+        steps,
+        status: "awaiting_user",
+        awaiting_since: new Date().toISOString(),
+        awaiting_count: (plan.awaiting_count ?? 0) + 1,
+      });
+      return json({ status: "awaiting_user" });
+    }
 
     // Runtime expansion: splice the AI-generated sub-steps in right after this
     // step, then continue. current_step advances to the first new step.
@@ -1588,6 +1703,9 @@ Deno.serve(async (req) => {
       updates.completed_at = new Date().toISOString();
     }
     await releaseClaim(updates);
+    if (updates.status === "completed") {
+      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+    }
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
     step.status = "failed";
@@ -1600,6 +1718,7 @@ Deno.serve(async (req) => {
       error_lovable_prompt: lovablePrompt,
       completed_at: new Date().toISOString(),
     });
+    await reportTerminal(`⚠️ Step ${idx + 1} failed: ${step.error}`);
     return json({ status: "failed", error: step.error });
   }
 });
