@@ -98,6 +98,33 @@ function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
   );
 }
 
+/** Invisible tap zone that ignores a click when the pointer moved >10px between
+ *  down and up — so a swipe that ends over the zone doesn't fire its action. */
+function InvisibleTapZone({
+  onTap,
+  className,
+  ...rest
+}: { onTap: () => void; className?: string } & React.HTMLAttributes<HTMLButtonElement>) {
+  const downRef = useRef<{ x: number; y: number } | null>(null);
+  return (
+    <button
+      type="button"
+      className={className}
+      onPointerDown={(e) => { downRef.current = { x: e.clientX, y: e.clientY }; }}
+      onClick={(e) => {
+        const d = downRef.current;
+        downRef.current = null;
+        if (d) {
+          const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y);
+          if (moved > 10) return;
+        }
+        onTap();
+      }}
+      {...rest}
+    />
+  );
+}
+
 function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
