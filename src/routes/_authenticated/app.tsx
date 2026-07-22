@@ -12,6 +12,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { transcribeAudio } from "@/lib/whisper.functions";
+import { voiceEditDocument } from "@/lib/voice-edit.functions";
 import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
 import { ChatDialog } from "@/components/ChatDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
