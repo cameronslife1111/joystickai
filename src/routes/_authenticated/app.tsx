@@ -2556,7 +2556,7 @@ function AppPage() {
             onClick={() => {
               void openNextLinkedDocument();
             }}
-            className="absolute bottom-1/2 left-full ml-4 mb-2 h-[33%] w-[22vw] max-w-[120px] opacity-0"
+            className="absolute top-[5%] left-full ml-4 h-[30%] w-[22vw] max-w-[120px] opacity-0"
             aria-label="Next linked doc"
           />
         </div>
