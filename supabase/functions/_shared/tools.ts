@@ -336,6 +336,23 @@ export const TOOL_CATALOG: ToolDef[] = [
       enabled: { type: "boolean", description: "true to resume, false to pause", required: true },
     },
   },
+  {
+    name: "send_chat_message",
+    description:
+      "Post a short status/check-in message from Orby into the chat thread that started this plan. Use this to keep the user in the loop during long-running plans — announce a milestone, share a finding, or explain what you're about to do next. Purely informational: the plan continues to the next step without waiting. Only available when the plan was started from a chat thread. Keep messages under ~2 sentences.",
+    args: {
+      text: { type: "string", description: "The status message to post in the chat", required: true },
+    },
+  },
+  {
+    name: "ask_user",
+    description:
+      "PAUSE the plan and ask the user a question in the chat thread. Use this ONLY for genuine approval gates or decisions Orby cannot make alone (e.g. 'Which of these three drafts should I keep?', 'Should I publish this now?'). The plan enters awaiting_user status; when the user replies in chat, the reply is stored as this step's result.answer and the plan resumes at the next step. Later steps can pipe the reply via {{step_N.result.answer}}. Only available when the plan was started from a chat thread. Do NOT use for chit-chat — prefer send_chat_message.",
+    args: {
+      question: { type: "string", description: "The question to ask the user. Be specific about what you need them to decide.", required: true },
+      context: { type: "string", description: "Optional short context (what you did so far, options to pick from). Shown alongside the question.", required: false },
+    },
+  },
 ];
 
 /**
