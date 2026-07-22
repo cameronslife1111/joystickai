@@ -161,6 +161,7 @@ function AppPage() {
   const favIdxRef = useRef<number>(-1);
   const speechTokenRef = useRef<number>(0);
   const mutedRef = useRef<boolean>(false);
+  const recordingRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
   const importInputRef = useRef<HTMLInputElement | null>(null);
