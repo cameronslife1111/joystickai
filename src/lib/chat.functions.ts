@@ -141,7 +141,7 @@ function tryParseJson<T = any>(raw: string): T | null {
   }
 }
 
-type ChatRoute = "chat" | "web" | "plan";
+type ChatRoute = "chat" | "web" | "plan" | "resumed";
 
 /**
  * Decide how to handle the latest user message given the thread's enabled
