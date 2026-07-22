@@ -1594,7 +1594,48 @@ Deno.serve(async (req) => {
     const handler = TOOL_HANDLERS[step.tool];
     if (!handler || step.tool.startsWith("_")) throw new Error(`Unknown tool: ${step.tool}`);
     void TOOL_CATALOG;
-    const result = await handler(resolvedArgs, { user_id: user.id, admin, supabase: userClient, internal: isInternal, baseIndex: idx + 1 });
+    const result = await handler(resolvedArgs, {
+      user_id: user.id,
+      admin,
+      supabase: userClient,
+      internal: isInternal,
+      baseIndex: idx + 1,
+      plan_id: plan.id,
+      thread_id: plan.thread_id ?? null,
+    });
+
+    // ask_user: pause the plan and record the question. When the user replies
+    // in chat, chat.functions writes result.answer and flips status → running.
+    if (result && typeof result === "object" && "__ask_user" in result) {
+      const askInfo = (result as any).__ask_user ?? {};
+      const question = String(askInfo.question ?? "").trim();
+      const ctxText = String(askInfo.context ?? "").trim();
+      step.status = "awaiting_user";
+      step.result = { question, context: ctxText };
+      step.error = null;
+      // Post the question to the chat thread so the user sees it.
+      if (plan.thread_id) {
+        const bubble = ctxText ? `${question}\n\n${ctxText}` : question;
+        try {
+          await admin.from("chat_messages").insert({
+            user_id: user.id,
+            thread_id: plan.thread_id,
+            role: "assistant",
+            content: bubble,
+            kind: "text",
+            plan_id: plan.id,
+          });
+          await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", plan.thread_id);
+        } catch (_e) { /* best-effort */ }
+      }
+      await releaseClaim({
+        steps,
+        status: "awaiting_user",
+        awaiting_since: new Date().toISOString(),
+        awaiting_count: (plan.awaiting_count ?? 0) + 1,
+      });
+      return json({ status: "awaiting_user" });
+    }
 
     // Runtime expansion: splice the AI-generated sub-steps in right after this
     // step, then continue. current_step advances to the first new step.
