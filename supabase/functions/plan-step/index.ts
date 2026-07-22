@@ -1576,6 +1576,9 @@ Deno.serve(async (req) => {
       updates.completed_at = new Date().toISOString();
     }
     await releaseClaim(updates);
+    if (updates.status === "completed") {
+      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+    }
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
