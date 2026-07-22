@@ -540,6 +540,31 @@ const TOOL_HANDLERS: Record<string, any> = {
     const steps = validateExpansionSteps(rawSteps);
     return { __expand_steps: steps, generated: steps.length };
   },
+  async send_chat_message(args, { user_id, admin, thread_id, plan_id }: any) {
+    const text = String(args.text ?? "").trim();
+    if (!text) throw new Error("send_chat_message requires text");
+    if (!thread_id) throw new Error("send_chat_message is only available for plans started from a chat thread");
+    const { error } = await admin.from("chat_messages").insert({
+      user_id,
+      thread_id,
+      role: "assistant",
+      content: text,
+      kind: "text",
+      plan_id: plan_id ?? null,
+    });
+    if (error) throw new Error(error.message);
+    // Bump thread ordering so it floats up in the sidebar.
+    await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+    return { posted: true, text };
+  },
+  async ask_user(args, { thread_id }: any) {
+    const question = String(args.question ?? "").trim();
+    if (!question) throw new Error("ask_user requires a question");
+    if (!thread_id) throw new Error("ask_user is only available for plans started from a chat thread");
+    const context = typeof args.context === "string" ? args.context.trim() : "";
+    // Return the sentinel — the runner pauses the plan and posts the message.
+    return { __ask_user: { question, context } };
+  },
   async create_document(args, { user_id, admin }) {
     const { count } = await admin
       .from("documents")
