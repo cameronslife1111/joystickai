@@ -1427,6 +1427,20 @@ Deno.serve(async (req) => {
   };
 
   // ---- Guardrails ----
+  const reportTerminal = async (text: string) => {
+    if (!plan.thread_id || !text) return;
+    try {
+      await admin.from("chat_messages").insert({
+        user_id: user.id,
+        thread_id: plan.thread_id,
+        role: "assistant",
+        content: text,
+        kind: "text",
+        plan_id: plan.id,
+      });
+      await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", plan.thread_id);
+    } catch (_e) { /* best-effort */ }
+  };
   const failWithReason = async (reason: string) => {
     await admin
       .from("plans")
@@ -1437,6 +1451,7 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
       })
       .eq("id", plan_id);
+    await reportTerminal(`I hit a problem: ${reason}`);
     return json({ status: "failed", error: reason });
   };
   if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
