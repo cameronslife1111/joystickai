@@ -1,22 +1,23 @@
 ## Goal
 
-Make the orb long-press behave as a toggle: first long-press starts recording, second long-press stops it and fires transcription. No holding required.
+Add an invisible tap/click zone above the existing right-side "Repeat sentence" button that triggers the same action as Slot 24 (📚 Next linked doc).
 
 ## Change
 
-In `src/routes/_authenticated/app.tsx`, rework the two long-press handlers around lines 1356–1388:
+In `src/routes/_authenticated/app.tsx`, right after the existing right-side invisible Repeat button (around line 2545–2553), add a third invisible `<button>`:
 
-- `onLongPressStart` becomes the single toggle entry point.
-  - If `recorderRef.current` is already set → treat this long-press as the STOP action: capture the recorder, clear the ref, `setRecording(false)`, `await rec.stop()`, and if the clip passes the existing duration/size floor call `dispatchVoiceMessage(blob)`. (Same logic that currently lives in `onLongPressEnd`.)
-  - Otherwise → start a new recording exactly like today (`setRecording(true)`, `startPcmRecorder()`, error toast on failure).
-- `onLongPressEnd` becomes a no-op (return immediately). We keep passing it so `useOrbGestures` still fires the start callback, but releasing the finger no longer stops the mic.
-- Keep the `editing` guard on start so edit mode still blocks recording.
-- Keep `recordStartMsRef` for the duration floor; it's set at start, read at stop.
+- Positioned to the right of the orb, stacked ABOVE the Repeat zone (upper-right flank).
+- `onClick={() => { void openNextLinkedDocument(); }}` — reuses the exact same handler wired to Slot 24, so behavior stays perfectly in sync.
+- `aria-label="Next linked doc"`, `opacity-0`, same width footprint as the Repeat zone so it feels natural on mobile and desktop.
+- Uses a native `<button>` with `onClick`, which fires on both touch tap and mouse click — no extra pointer/touch handlers needed.
 
-Nothing else changes: the red pulsing aura (`recording` state), the fire-and-forget `dispatchVoiceMessage` pipeline (transcribe → new thread → send with scheduling + all other planner capabilities), and the toast flow all stay intact. Scheduling capability in the planner is unaffected because that lives in `plan-compose` / chat capability toggles, not in the recording path.
+Approximate classes (mirrors Repeat, but occupies the top half instead of the vertical middle):
+`absolute bottom-1/2 left-full ml-4 mb-2 h-[33%] w-[22vw] max-w-[120px] opacity-0`
+
+Repeat button stays where it is; we just place the new zone above it so both remain reachable without overlap.
 
 ## Technical details
 
 - File touched: `src/routes/_authenticated/app.tsx` only.
-- No changes to `audio-recorder.ts`, `whisper.functions.ts`, `useOrbGestures`, or the planner.
-- The existing 400ms / 4096-byte guard still protects against accidental double long-presses that stop instantly.
+- No changes to gestures, `useOrbGestures`, or `openNextLinkedDocument` itself.
+- No new state, no new imports.
