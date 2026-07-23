@@ -1401,6 +1401,8 @@ function AppPage() {
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
+    editingRef.current = false;
+    editOriginDocIdRef.current = null;
     setEditText("");
   }, []);
 
