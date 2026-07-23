@@ -164,6 +164,8 @@ function AppPage() {
   const recordingRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
+  const editOriginDocIdRef = useRef<string | null>(null);
+  const editingRef = useRef<boolean>(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
   const transcribe = useServerFn(transcribeAudio);
