@@ -1075,16 +1075,19 @@ function AppPage() {
       window.speechSynthesis.cancel();
     }
     editOriginIdxRef.current = currentIdx;
+    editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
     if (list.length === 0) {
       setEditText("");
       setEditing(true);
+      editingRef.current = true;
       return;
     }
     const full = list.map((s) => s.content).join("\n\n");
     setEditText(full);
     setEditing(true);
-  }, [editing, currentIdx, sentences]);
+    editingRef.current = true;
+  }, [editing, currentIdx, sentences, activeDocId]);
 
   // Voice-driven document editor: transcribe the clip, send it + current-doc
   // context to the AI, apply structured edits directly to this document, then
