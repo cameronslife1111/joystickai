@@ -702,6 +702,7 @@ function AppPage() {
   }, [activeDocId, sentences, currentIdx, qc, speak, claimSpeech]);
 
   const advanceSentence = useCallback(async () => {
+    if (editingRef.current) return; // never navigate while the editor is open
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
     const next = currentIdx + 1;
