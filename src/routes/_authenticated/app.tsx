@@ -967,6 +967,7 @@ function AppPage() {
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     if (!docs || !activeDoc) return;
 
     // If the current sentence links to a document, swipe right opens it.
