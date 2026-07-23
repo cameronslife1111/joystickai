@@ -127,15 +127,26 @@ export const voiceEditDocument = createServerFn({ method: "POST" })
       `User said (raw transcript): "${data.transcript}"\n\nReturn ONLY JSON.`;
 
     let parsed: { ops?: Op[] } | null = null;
+    let rawText = "";
     try {
       const { text } = await generateText({
         model: getModel(),
         system,
         messages: [{ role: "user", content: user }],
+        providerOptions: {
+          openai: { response_format: { type: "json_object" }, reasoning_effort: "none" },
+        } as any,
       });
-      parsed = tryParseJson(text);
-    } catch (e) {
+      rawText = text ?? "";
+      parsed = tryParseJson(rawText);
+    } catch (e: any) {
       console.error("[voiceEditDocument] AI error", e);
+      throw new Error(`Voice edit AI failed: ${e?.message ?? "unknown error"}`);
+    }
+    if (!parsed) {
+      throw new Error(
+        `Voice edit AI returned unparseable output: ${rawText.slice(0, 200) || "(empty)"}`,
+      );
     }
     const ops = (parsed?.ops ?? []).filter((o) => o && typeof (o as any).op === "string");
     if (ops.length === 0) {
