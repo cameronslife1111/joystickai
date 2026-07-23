@@ -1,28 +1,35 @@
+## Problem
 
-## What's actually wrong
+While the edit view is open, it's still possible for the active document to change under the editor. When the user then presses **Done** or **Jump to**, `commitFullEdit` writes the edited text to whatever `activeDocId` is *right now* — not the doc the user opened the editor on. That overwrites the wrong document with the edited text.
 
-The long-press wiring in `src/routes/_authenticated/app.tsx` is already correct — it calls `dispatchVoiceEdit` → `voiceEditDocument`, and nothing on that path creates a chat thread or runs the planner (`rg` confirms no `dispatchVoiceMessage`, `chat_threads`, or `sendChat` calls in the long-press handler).
+The orb's `onSwipe` already early-returns when `editing` is true, but that isn't enough because:
+1. The active doc can also change from non-orb sources (menu, plan advancer opening a doc, realtime doc-open triggered by pin/link updates, etc.).
+2. Even the orb-swipe guard depends on the latest `editing` value reaching the gesture callback; a brief mismatch or any stray navigator call can still switch docs mid-edit.
 
-What's failing is the server function itself, which is silently doing nothing — so the user sees no edits land, and the chat/plan behavior they're describing is the *previous* long-press flow they remember, not new activity. Root causes in `src/lib/voice-edit.functions.ts`:
+## Fix (two layers, minimal surface)
 
-1. It uses `gpt-5.5` — the user explicitly wants `gpt-5.6-sol`.
-2. On any AI/JSON error it returns `{ appliedCount: 0 }` with only a `console.error`, so from the UI it looks like "nothing happened".
-3. No structured-output enforcement, so the model sometimes replies with prose that fails `tryParseJson`, again producing zero ops.
+**1. Lock the active document while editing (source of truth fix).**
+- On entering edit mode (`onDoubleTap`), snapshot the current doc id into a new `editOriginDocIdRef`.
+- In `commitFullEdit`, use `editOriginDocIdRef.current` as the target instead of the live `activeDocId`. This guarantees "Done"/"Jump to" always save back to the doc the user was editing, even if something else navigated in the background.
+- After a successful save, restore focus to that doc (call `setActiveDocId(editOriginDocIdRef.current)` before/after `setIndex`) so the view returns to the doc the edits landed in.
 
-## Fix
+**2. Hard-block all navigation gestures while editing (defense in depth).**
+- Keep the existing `if (editing) return;` in the orb `onSwipe` handler.
+- Also short-circuit the top of `onSwipeRight`, `onSwipeUp`, `advanceSentence` (and the small handful of other navigation callbacks the orb dispatches to) with `if (editing) return;`, so any programmatic caller — not just the orb — is a no-op while the editor is open.
+- Leave `onDoubleTap`, `handleEditDone`, `handleEditJump`, and `cancelEdit` alone (they already check or manage `editing`).
 
-Edit only `src/lib/voice-edit.functions.ts`:
+## Files touched
 
-- Switch model from `gpt-5.5` to `gpt-5.6-sol` (same `createOpenAiProvider(OPENAI_API_KEY)` — no other change to auth).
-- Ask the model for JSON explicitly via `response_format: { type: "json_object" }` on the OpenAI-compatible call (using the provider's `providerOptions`/`response_format` pass-through), and keep the existing `tryParseJson` as a fallback.
-- Tighten the system prompt so it always returns `{"ops":[...]}` even when it only understands part of the request; add a one-line reminder that the target document and current sentence index are already provided and it must not ask questions or defer.
-- Surface real errors to the client: if the AI call throws or returns unparseable JSON, `throw new Error("Voice edit AI failed: …")` instead of swallowing it, so the toast shows a real message instead of "No edits recognized".
-- Keep the executor, Perplexity path, RPC calls, and return shape unchanged.
+- `src/routes/_authenticated/app.tsx`
+  - Add `editOriginDocIdRef` ref alongside `editOriginIdxRef`.
+  - Set it in `onDoubleTap` when entering edit mode.
+  - In `commitFullEdit`: replace the two uses of `activeDocId` (fetch + RPC + invalidate) with `editOriginDocIdRef.current`; also `setActiveDocId(...)` back to that id on success.
+  - Add `if (editing) return;` guards at the top of the navigation callbacks that can change the active doc (swipe-right/up/down handlers and any other doc-navigation entrypoint).
 
-No changes to `app.tsx`, `whisper.functions.ts`, `chat.functions.ts`, `ChatDialog`, or any DB schema. Long-press stays document-scoped exactly as intended; only the model + error surfacing get fixed.
+No changes to styles, RPC, DB, or the gesture hook.
 
 ## Verification
 
-1. Long-press orb on a document, say "change this sentence to hello world", long-press again.
-2. Expect toast: Transcribing… → Editing document… → ✅ Updated 1 sentence, view jumps to that sentence, no new chat thread appears in the chat drawer.
-3. If OpenAI errors, the toast now shows the actual reason instead of silently doing nothing.
+- Enter edit mode, attempt swipes in every direction on the orb → nothing navigates.
+- Enter edit mode, wait for any background trigger (plan advance, notification) → active doc doesn't visibly switch; if it did somehow, pressing Done still writes to the original doc.
+- Confirm the fixed doc gets the edits and other docs are untouched.
