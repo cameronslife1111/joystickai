@@ -723,6 +723,7 @@ function AppPage() {
   }, []);
 
   const onSwipeUp = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     const token = claimSpeech();
     if (currentIdx === 0) {
       if (sentences?.[0]) speak(sentences[0].content, token);
