@@ -1273,9 +1273,13 @@ function AppPage() {
   // Bulk save the editor contents, then jump to `targetIdx` (clamped).
   // Returns true on success, false on failure (editor stays open on failure).
   const commitFullEdit = useCallback(async (rawTargetIdx: number | null): Promise<boolean> => {
-    if (!activeDocId) { setEditing(false); return true; }
+    // Save back to the doc the editor was OPENED on — not the live activeDocId.
+    // If anything switched the active doc mid-edit, we still write to the
+    // original doc so the edited text never clobbers a different document.
+    const targetDocId = editOriginDocIdRef.current ?? activeDocId;
+    if (!targetDocId) { setEditing(false); editingRef.current = false; return true; }
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) { setEditing(false); return true; }
+    if (!u.user) { setEditing(false); editingRef.current = false; return true; }
 
     const parts = parseEditParts(editText);
 
@@ -1283,7 +1287,7 @@ function AppPage() {
     const { data: freshExisting, error: fetchErr } = await supabase
       .from("sentences")
       .select("id, content, order_index")
-      .eq("document_id", activeDocId)
+      .eq("document_id", targetDocId)
       .order("order_index", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -1293,6 +1297,9 @@ function AppPage() {
       return false;
     }
     const existing = freshExisting ?? [];
+
+    // Restore focus to the doc the edits belong to before advancing its index.
+    if (activeDocId !== targetDocId) setActiveDocId(targetDocId);
 
     // Empty doc: delete everything and bail.
     if (parts.length === 0) {
@@ -1306,9 +1313,11 @@ function AppPage() {
           return false;
         }
       }
-      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
       await setIndex(0);
       setEditing(false);
+      editingRef.current = false;
+      editOriginDocIdRef.current = null;
       setEditText("");
       return true;
     }
@@ -1329,6 +1338,8 @@ function AppPage() {
           : Math.max(0, Math.min(rawTargetIdx, parts.length - 1));
         await setIndex(targetIdx);
         setEditing(false);
+        editingRef.current = false;
+        editOriginDocIdRef.current = null;
         setEditText("");
         const token = claimSpeech();
         speak(parts[targetIdx], token);
@@ -1343,7 +1354,7 @@ function AppPage() {
     // The RPC preserves row identity (and therefore linked_document_id) by
     // matching new parts to existing rows on exact content, closest-by-order.
     const { error: rpcErr } = await supabase.rpc("commit_document_edit", {
-      p_document_id: activeDocId,
+      p_document_id: targetDocId,
       p_contents: parts,
     });
     if (rpcErr) {
@@ -1352,7 +1363,7 @@ function AppPage() {
       return false;
     }
 
-    qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
 
 
     // Resolve the post-save index.
@@ -1363,6 +1374,8 @@ function AppPage() {
 
     await setIndex(targetIdx);
     setEditing(false);
+    editingRef.current = false;
+    editOriginDocIdRef.current = null;
     setEditText("");
 
     const token = claimSpeech();
