@@ -927,6 +927,7 @@ function AppPage() {
   // Load an arbitrary document by id at its saved sentence (same prime pattern
   // used by openLinkedDocument). Used to return to the locked list.
   const goToDocument = useCallback(async (targetId: string) => {
+    if (editingRef.current) return; // editor open — block navigation
     const exists = docs?.some((d) => d.id === targetId);
     if (!exists) return;
     const token = claimSpeech();
