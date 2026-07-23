@@ -164,6 +164,8 @@ function AppPage() {
   const recordingRef = useRef<boolean>(false);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editOriginIdxRef = useRef<number>(0);
+  const editOriginDocIdRef = useRef<string | null>(null);
+  const editingRef = useRef<boolean>(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const callAi = useServerFn(aiContinue);
   const transcribe = useServerFn(transcribeAudio);
@@ -700,6 +702,7 @@ function AppPage() {
   }, [activeDocId, sentences, currentIdx, qc, speak, claimSpeech]);
 
   const advanceSentence = useCallback(async () => {
+    if (editingRef.current) return; // never navigate while the editor is open
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
     const next = currentIdx + 1;
@@ -720,6 +723,7 @@ function AppPage() {
   }, []);
 
   const onSwipeUp = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     const token = claimSpeech();
     if (currentIdx === 0) {
       if (sentences?.[0]) speak(sentences[0].content, token);
@@ -815,6 +819,7 @@ function AppPage() {
 
 
   const openLinkedDocument = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     const targetId = currentSentence?.linked_document_id;
     if (!targetId) return;
     const exists = docs?.some((d) => d.id === targetId);
@@ -922,6 +927,7 @@ function AppPage() {
   // Load an arbitrary document by id at its saved sentence (same prime pattern
   // used by openLinkedDocument). Used to return to the locked list.
   const goToDocument = useCallback(async (targetId: string) => {
+    if (editingRef.current) return; // editor open — block navigation
     const exists = docs?.some((d) => d.id === targetId);
     if (!exists) return;
     const token = claimSpeech();
@@ -961,6 +967,7 @@ function AppPage() {
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     if (!docs || !activeDoc) return;
 
     // If the current sentence links to a document, swipe right opens it.
@@ -1073,16 +1080,19 @@ function AppPage() {
       window.speechSynthesis.cancel();
     }
     editOriginIdxRef.current = currentIdx;
+    editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
     if (list.length === 0) {
       setEditText("");
       setEditing(true);
+      editingRef.current = true;
       return;
     }
     const full = list.map((s) => s.content).join("\n\n");
     setEditText(full);
     setEditing(true);
-  }, [editing, currentIdx, sentences]);
+    editingRef.current = true;
+  }, [editing, currentIdx, sentences, activeDocId]);
 
   // Voice-driven document editor: transcribe the clip, send it + current-doc
   // context to the AI, apply structured edits directly to this document, then
@@ -1268,9 +1278,13 @@ function AppPage() {
   // Bulk save the editor contents, then jump to `targetIdx` (clamped).
   // Returns true on success, false on failure (editor stays open on failure).
   const commitFullEdit = useCallback(async (rawTargetIdx: number | null): Promise<boolean> => {
-    if (!activeDocId) { setEditing(false); return true; }
+    // Save back to the doc the editor was OPENED on — not the live activeDocId.
+    // If anything switched the active doc mid-edit, we still write to the
+    // original doc so the edited text never clobbers a different document.
+    const targetDocId = editOriginDocIdRef.current ?? activeDocId;
+    if (!targetDocId) { setEditing(false); editingRef.current = false; return true; }
     const { data: u } = await supabase.auth.getUser();
-    if (!u.user) { setEditing(false); return true; }
+    if (!u.user) { setEditing(false); editingRef.current = false; return true; }
 
     const parts = parseEditParts(editText);
 
@@ -1278,7 +1292,7 @@ function AppPage() {
     const { data: freshExisting, error: fetchErr } = await supabase
       .from("sentences")
       .select("id, content, order_index")
-      .eq("document_id", activeDocId)
+      .eq("document_id", targetDocId)
       .order("order_index", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -1288,6 +1302,9 @@ function AppPage() {
       return false;
     }
     const existing = freshExisting ?? [];
+
+    // Restore focus to the doc the edits belong to before advancing its index.
+    if (activeDocId !== targetDocId) setActiveDocId(targetDocId);
 
     // Empty doc: delete everything and bail.
     if (parts.length === 0) {
@@ -1301,9 +1318,11 @@ function AppPage() {
           return false;
         }
       }
-      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
       await setIndex(0);
       setEditing(false);
+      editingRef.current = false;
+      editOriginDocIdRef.current = null;
       setEditText("");
       return true;
     }
@@ -1324,6 +1343,8 @@ function AppPage() {
           : Math.max(0, Math.min(rawTargetIdx, parts.length - 1));
         await setIndex(targetIdx);
         setEditing(false);
+        editingRef.current = false;
+        editOriginDocIdRef.current = null;
         setEditText("");
         const token = claimSpeech();
         speak(parts[targetIdx], token);
@@ -1338,7 +1359,7 @@ function AppPage() {
     // The RPC preserves row identity (and therefore linked_document_id) by
     // matching new parts to existing rows on exact content, closest-by-order.
     const { error: rpcErr } = await supabase.rpc("commit_document_edit", {
-      p_document_id: activeDocId,
+      p_document_id: targetDocId,
       p_contents: parts,
     });
     if (rpcErr) {
@@ -1347,7 +1368,7 @@ function AppPage() {
       return false;
     }
 
-    qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+    qc.invalidateQueries({ queryKey: ["sentences", targetDocId] });
 
 
     // Resolve the post-save index.
@@ -1358,6 +1379,8 @@ function AppPage() {
 
     await setIndex(targetIdx);
     setEditing(false);
+    editingRef.current = false;
+    editOriginDocIdRef.current = null;
     setEditText("");
 
     const token = claimSpeech();
@@ -1383,6 +1406,8 @@ function AppPage() {
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
+    editingRef.current = false;
+    editOriginDocIdRef.current = null;
     setEditText("");
   }, []);
 
