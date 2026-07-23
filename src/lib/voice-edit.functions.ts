@@ -8,7 +8,7 @@ import { splitIntoSentences } from "./sentences";
 function getModel() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-  return createOpenAiProvider(apiKey)("gpt-5.5");
+  return createOpenAiProvider(apiKey)("gpt-5.6-sol");
 }
 
 function tryParseJson<T = unknown>(raw: string): T | null {
@@ -120,22 +120,33 @@ export const voiceEditDocument = createServerFn({ method: "POST" })
       '  {"op":"delete_sentences","indexes":[<int>,...]}\n' +
       '  {"op":"move_sentence","fromIndex":<int>,"toIndex":<int>}\n' +
       '  {"op":"web_search_and_insert","query":"...","afterIndex":<int>}   // fetches info from the web and inserts after the given index\n' +
-      "Rules: use pre-edit indexes for every op — the runner reconciles order. Split newText or texts into complete sentences ending with punctuation. Speech-to-text may contain small errors; fuzzy-match sentence content. If unsure, return an empty ops array.";
+      "Rules: use pre-edit indexes for every op — the runner reconciles order. Split newText or texts into complete sentences ending with punctuation. Speech-to-text may contain small errors; fuzzy-match sentence content. The document and current sentence index are ALREADY provided above — never ask which document, never defer, never chat. If the user's request is ambiguous, make your best interpretation and emit ops. Only return an empty ops array if the transcript is truly not an edit instruction.";
 
     const user =
       `Document title: "${doc.title}"\n\nDocument sentences (index: content):\n${list || "(empty)"}\n\n` +
       `User said (raw transcript): "${data.transcript}"\n\nReturn ONLY JSON.`;
 
     let parsed: { ops?: Op[] } | null = null;
+    let rawText = "";
     try {
       const { text } = await generateText({
         model: getModel(),
         system,
         messages: [{ role: "user", content: user }],
+        providerOptions: {
+          openai: { response_format: { type: "json_object" }, reasoning_effort: "none" },
+        } as any,
       });
-      parsed = tryParseJson(text);
-    } catch (e) {
+      rawText = text ?? "";
+      parsed = tryParseJson(rawText);
+    } catch (e: any) {
       console.error("[voiceEditDocument] AI error", e);
+      throw new Error(`Voice edit AI failed: ${e?.message ?? "unknown error"}`);
+    }
+    if (!parsed) {
+      throw new Error(
+        `Voice edit AI returned unparseable output: ${rawText.slice(0, 200) || "(empty)"}`,
+      );
     }
     const ops = (parsed?.ops ?? []).filter((o) => o && typeof (o as any).op === "string");
     if (ops.length === 0) {

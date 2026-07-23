@@ -1,52 +1,28 @@
 
-## Goal
+## What's actually wrong
 
-Change Orb long-press so instead of creating a chat/plan, it becomes a **voice document editor** scoped to the current document. Whisper transcribes what you say; an AI interprets it as edit instructions (change/replace/insert/delete sentences, or "web-search X and insert after this sentence"); the edits are applied directly to the doc you're on. When done, view snaps to the affected sentence, speech resumes, and normal swipe/edit still work while recording.
+The long-press wiring in `src/routes/_authenticated/app.tsx` is already correct — it calls `dispatchVoiceEdit` → `voiceEditDocument`, and nothing on that path creates a chat thread or runs the planner (`rg` confirms no `dispatchVoiceMessage`, `chat_threads`, or `sendChat` calls in the long-press handler).
 
-## Behavior
+What's failing is the server function itself, which is silently doing nothing — so the user sees no edits land, and the chat/plan behavior they're describing is the *previous* long-press flow they remember, not new activity. Root causes in `src/lib/voice-edit.functions.ts`:
 
-- **Long-press 1**: start recording (red aura as today). Speech/auto-read pauses. Swipes and single-tap-to-edit still work; sentence auto-reading is muted.
-- **Long-press 2**: stop → transcribe (Whisper) → send transcript + doc context (title, all sentences with indexes, current sentence index) to a new server function that returns a list of structured edit operations → apply → jump to primary edited sentence → resume speech.
-- **Scope**: only the current `activeDocId`. No chat thread, no plan row, no scheduling.
-- Toasts: "Transcribing…" → "Editing document…" → "✅ Updated N sentences" (or error).
+1. It uses `gpt-5.5` — the user explicitly wants `gpt-5.6-sol`.
+2. On any AI/JSON error it returns `{ appliedCount: 0 }` with only a `console.error`, so from the UI it looks like "nothing happened".
+3. No structured-output enforcement, so the model sometimes replies with prose that fails `tryParseJson`, again producing zero ops.
 
-## Supported edit ops (single AI call, structured output)
+## Fix
 
-- `replace_sentence(index, newText)`
-- `edit_sentence(index, newText)` (alias of replace, for word-level rewrites)
-- `insert_sentences(afterIndex | atIndex, texts[])`
-- `delete_sentences(indexes[])`
-- `move_sentence(fromIndex, toIndex)`
-- `web_search_and_insert(query, afterIndex, style?)` — server calls Perplexity (`PERPLEXITY_API_KEY` already set) or falls back to OpenAI, splits result into sentences, inserts.
+Edit only `src/lib/voice-edit.functions.ts`:
 
-All ops reuse existing RPCs (`insert_sentences_at`, `move_sentence`, sentence UPDATE/DELETE) so ordering invariants stay intact.
+- Switch model from `gpt-5.5` to `gpt-5.6-sol` (same `createOpenAiProvider(OPENAI_API_KEY)` — no other change to auth).
+- Ask the model for JSON explicitly via `response_format: { type: "json_object" }` on the OpenAI-compatible call (using the provider's `providerOptions`/`response_format` pass-through), and keep the existing `tryParseJson` as a fallback.
+- Tighten the system prompt so it always returns `{"ops":[...]}` even when it only understands part of the request; add a one-line reminder that the target document and current sentence index are already provided and it must not ask questions or defer.
+- Surface real errors to the client: if the AI call throws or returns unparseable JSON, `throw new Error("Voice edit AI failed: …")` instead of swallowing it, so the toast shows a real message instead of "No edits recognized".
+- Keep the executor, Perplexity path, RPC calls, and return shape unchanged.
 
-## Files
+No changes to `app.tsx`, `whisper.functions.ts`, `chat.functions.ts`, `ChatDialog`, or any DB schema. Long-press stays document-scoped exactly as intended; only the model + error surfacing get fixed.
 
-**New — `src/lib/voice-edit.functions.ts`**
-`voiceEditDocument({ documentId, transcript, currentSentenceIndex })` server fn (auth middleware):
-1. Loads doc + all sentences (ordered).
-2. Calls OpenAI (`gpt-5.5` via existing `createOpenAiProvider`) with strict JSON schema for the ops above; system prompt: "You edit ONE document based on the user's spoken instructions. The user is currently on sentence {i}. Interpret 'this sentence' / 'here' as that index. Return ops only."
-3. For `web_search_and_insert`, call Perplexity `sonar` server-side, then split into sentences via `splitIntoSentences`.
-4. Execute ops in order (delete indexes sorted desc to keep indexes stable; inserts use `insert_sentences_at`).
-5. Return `{ appliedCount, focusIndex }` (focusIndex = first inserted/edited sentence).
+## Verification
 
-**Edit — `src/routes/_authenticated/app.tsx`**
-- Replace `dispatchVoiceMessage` with `dispatchVoiceEdit(blob)`:
-  - transcribe (existing `transcribeAudio`)
-  - call `voiceEditDocument({ documentId: activeDocId, transcript, currentSentenceIndex: currentIdx })`
-  - `qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })`
-  - `jumpTo(focusIndex)` and let speech resume (existing mechanism)
-  - Toast success/error
-- While `recording === true`: gate the existing auto-speak so it stays silent (add a `recording` check where `speak(...)` is called for sentence advance). Swipes/edit remain untouched.
-- Delete `sendChat`/`nameChatThread` usage from the long-press pathway (keep imports if used elsewhere; ChatDialog still uses them).
-
-**No DB migrations. No changes to plan/chat systems.**
-
-## Technical notes
-
-- Perplexity: server-only fetch to `https://api.perplexity.ai/chat/completions` with `sonar`, gated on `PERPLEXITY_API_KEY`; if the key isn't present or errors, fall back to OpenAI text generation so the feature still works.
-- Structured output: use `generateText` + JSON parsing helper (same pattern as `orby-call-docs.functions.ts` `tryParseJson`) — keeps consistency with existing code.
-- Index math for `delete + insert` combos: apply deletes first (desc), then re-fetch count for inserts, or accept that AI returns ops against the pre-edit indexes and we translate — simplest correct approach: **apply ops sequentially, recomputing indexes** after each mutation by re-reading the sentence list once per op batch of the same type.
-- Focus-index: if an insert happened, use its first new index; else the first replaced/moved index; else `currentIdx`.
-- No changes to `useOrbGestures` or the recording UI (red aura already gated by `recording`).
+1. Long-press orb on a document, say "change this sentence to hello world", long-press again.
+2. Expect toast: Transcribing… → Editing document… → ✅ Updated 1 sentence, view jumps to that sentence, no new chat thread appears in the chat drawer.
+3. If OpenAI errors, the toast now shows the actual reason instead of silently doing nothing.
