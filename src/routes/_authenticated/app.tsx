@@ -819,6 +819,7 @@ function AppPage() {
 
 
   const openLinkedDocument = useCallback(async () => {
+    if (editingRef.current) return; // editor open — block navigation
     const targetId = currentSentence?.linked_document_id;
     if (!targetId) return;
     const exists = docs?.some((d) => d.id === targetId);
