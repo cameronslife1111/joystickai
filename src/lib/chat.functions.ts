@@ -23,6 +23,7 @@ const schema = z.object({
   messages: z.array(chatMsg).min(1).max(60),
   contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
   imageUrl: z.string().url().optional(),
+  imageUrls: z.array(z.string().url()).max(6).default([]),
   threadId: z.string().uuid().optional(),
   capabilities: capabilities.default({
     web_search: true,
