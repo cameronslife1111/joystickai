@@ -282,8 +282,11 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       : "";
     const latestWithDocs = `${latestText}${docBlock}`;
 
-    // Vision route — attach the image to the latest user message (gated by capability).
-    if (caps.image_analysis && data.imageUrl) {
+    // Vision route — attach every image to the latest user message (gated by capability).
+    const images = Array.from(
+      new Set([...(data.imageUrls ?? []), ...(data.imageUrl ? [data.imageUrl] : [])]),
+    ).slice(0, 6);
+    if (caps.image_analysis && images.length) {
       const history = data.messages.slice(0, -1).map((m) => ({
         role: m.role,
         content: m.content,
@@ -296,8 +299,13 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           {
             role: "user",
             content: [
-              { type: "text", text: latestWithDocs || "Describe this image." },
-              { type: "image", image: data.imageUrl },
+              {
+                type: "text",
+                text:
+                  latestWithDocs ||
+                  (images.length > 1 ? "Describe these images." : "Describe this image."),
+              },
+              ...images.map((url) => ({ type: "image", image: url })),
             ],
           },
         ] as any,
