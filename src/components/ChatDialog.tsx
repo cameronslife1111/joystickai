@@ -190,7 +190,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       next.delete(id);
       return next;
     });
-  const [pickedImage, setPickedImage] = useState<MediaAsset | null>(null);
+  const [pickedImages, setPickedImages] = useState<MediaAsset[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -476,8 +476,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (!text || !userId || !activeThreadId) return;
     const threadId = activeThreadId;
     if (busyThreadIds.has(threadId)) return;
-    if (caps.image_analysis && pickedImage && !pickedImage.url) {
-      toast.error("That image has no URL yet");
+    if (caps.image_analysis && pickedImages.some((a) => !a.url)) {
+      toast.error("One of those images has no URL yet");
       return;
     }
 
@@ -511,7 +511,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         data: {
           messages: history,
           contextDocumentIds: contextDocIds,
-          imageUrl: caps.image_analysis && pickedImage?.url ? pickedImage.url : undefined,
+          imageUrls: caps.image_analysis
+            ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
+            : [],
           threadId,
           capabilities: caps,
         },
@@ -806,18 +808,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   </span>
                 );
               })}
-              {caps.image_analysis && pickedImage && (
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs">
-                  <ImageIcon className="h-3 w-3" />
-                  <span className="max-w-[120px] truncate">{pickedImage.title || "Image"}</span>
-                  <button
-                    type="button"
-                    onClick={() => setPickedImage(null)}
-                    className="text-muted-foreground hover:text-foreground"
+              {caps.image_analysis &&
+                pickedImages.map((img) => (
+                  <span
+                    key={img.id}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
+                    <ImageIcon className="h-3 w-3" />
+                    <span className="max-w-[120px] truncate">{img.title || "Image"}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPickedImages((prev) => prev.filter((x) => x.id !== img.id))}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              {caps.image_analysis && pickedImages.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setPickedImages([])}
+                  className="shrink-0 rounded-full border border-foreground/15 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear images
+                </button>
               )}
             </div>
 
