@@ -1032,7 +1032,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         initialSelectedIds={pickedImages.map((a) => a.id)}
         onConfirm={(assets) => setPickedImages(assets.slice(0, 6))}
       />
-      />
 
       <InsertIntoDocDialog
         row={insertFor}
