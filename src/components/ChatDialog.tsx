@@ -1027,11 +1027,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         open={imagePickerOpen}
         onOpenChange={setImagePickerOpen}
         kind="image"
-        mode="single"
-        initialSelectedIds={pickedImage ? [pickedImage.id] : []}
-        onConfirm={(assets) => {
-          if (assets[0]) setPickedImage(assets[0]);
-        }}
+        mode="multiple"
+        maxSelected={6}
+        initialSelectedIds={pickedImages.map((a) => a.id)}
+        onConfirm={(assets) => setPickedImages(assets.slice(0, 6))}
+      />
       />
 
       <InsertIntoDocDialog
