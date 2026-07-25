@@ -156,6 +156,7 @@ async function classifyRoute(
   latestText: string,
   recent: string,
   caps: ChatCapabilities,
+  memoryDigest = "",
 ): Promise<ChatRoute> {
   const actionEnabled = ACTION_GROUPS.some((g) => caps[g]);
   // Nothing actionable and no web search → always chat.
