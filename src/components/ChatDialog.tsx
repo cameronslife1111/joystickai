@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -89,6 +90,19 @@ const DEFAULT_CAPS: ChatCapabilities = {
   document_editing: true,
   scheduling: true,
 };
+
+/** Nothing checked → Orby just replies with text. */
+const NO_CAPS: ChatCapabilities = {
+  web_search: false,
+  image_analysis: false,
+  planning: false,
+  image_generation: false,
+  video_generation: false,
+  document_editing: false,
+  scheduling: false,
+};
+
+
 
 const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[] = [
   { key: "planning", label: "Planning / multi-step", hint: "Combine steps to complete bigger tasks" },
@@ -176,6 +190,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  /** One-shot capability checkboxes — reset after every send / thread switch. */
+  const [pendingCaps, setPendingCaps] = useState<ChatCapabilities>(NO_CAPS);
   const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set());
   const markBusy = (id: string) =>
     setBusyThreadIds((cur) => {
@@ -253,7 +269,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     () => threads.find((t) => t.id === activeThreadId) ?? null,
     [threads, activeThreadId],
   );
-  const caps = activeThread?.capabilities ?? DEFAULT_CAPS;
+  const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
@@ -328,6 +344,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       window.localStorage.setItem("orby_last_thread", activeThreadId);
     }
   }, [activeThreadId]);
+
+  // Capability checkboxes never carry across threads or dialog sessions.
+  useEffect(() => {
+    setPendingCaps(NO_CAPS);
+  }, [activeThreadId, open]);
 
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
@@ -413,8 +434,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
 
   const setCap = (key: keyof ChatCapabilities, value: boolean) => {
-    if (!activeThreadId) return;
-    void updateThread(activeThreadId, { capabilities: { ...caps, [key]: value } });
+    setPendingCaps((cur) => ({ ...cur, [key]: value }));
   };
 
   const setContextDocIds = (ids: string[]) => {
@@ -483,6 +503,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     markBusy(threadId);
     setInput("");
+    // Capability checkboxes are one-shot: this send uses `caps` (captured from
+    // this render) and the boxes immediately return to unchecked.
+    setPendingCaps(NO_CAPS);
 
     const optimisticUser: ChatRow = {
       id: `tmp-${Date.now()}`,
@@ -654,17 +677,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72">
                   <div className="flex flex-col gap-3">
-                    <p className="text-xs font-medium text-muted-foreground">Orby capabilities</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">Use for this message</p>
+                        <p className="text-[11px] leading-tight text-muted-foreground">
+                          Nothing checked = plain text reply. Boxes clear after each send.
+                        </p>
+                      </div>
+                      {enabledCapCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingCaps(NO_CAPS)}
+                          className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                     {CAP_LABELS.map(({ key, label, hint }) => (
-                      <div key={key} className="flex items-center justify-between gap-3">
+                      <div key={key} className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
                           <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
                         </div>
-                        <Switch
+                        <Checkbox
                           id={`cap-${key}`}
+                          className="mt-0.5"
                           checked={caps[key]}
-                          onCheckedChange={(v) => setCap(key, v)}
+                          onCheckedChange={(v) => setCap(key, v === true)}
                         />
                       </div>
                     ))}
@@ -679,19 +719,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         onCheckedChange={setAutoSpeakPref}
                       />
                     </div>
-                    {caps.image_analysis && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="justify-start"
-                        onClick={() => {
-                          setSettingsOpen(false);
-                          setImagePickerOpen(true);
-                        }}
-                      >
-                        <ImageIcon className="mr-2 h-4 w-4" /> Attach image
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setImagePickerOpen(true);
+                      }}
+                    >
+                      <ImageIcon className="mr-2 h-4 w-4" /> Attach images
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -808,24 +846,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   </span>
                 );
               })}
-              {caps.image_analysis &&
-                pickedImages.map((img) => (
-                  <span
-                    key={img.id}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+              {pickedImages.map((img) => (
+                <span
+                  key={img.id}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                >
+                  <ImageIcon className="h-3 w-3" />
+                  <span className="max-w-[120px] truncate">{img.title || "Image"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPickedImages((prev) => prev.filter((x) => x.id !== img.id))}
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    <ImageIcon className="h-3 w-3" />
-                    <span className="max-w-[120px] truncate">{img.title || "Image"}</span>
-                    <button
-                      type="button"
-                      onClick={() => setPickedImages((prev) => prev.filter((x) => x.id !== img.id))}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              {caps.image_analysis && pickedImages.length > 1 && (
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {pickedImages.length > 1 && (
                 <button
                   type="button"
                   onClick={() => setPickedImages([])}
@@ -838,7 +875,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
-              {enabledCapCount === 6 ? "All capabilities on" : `${enabledCapCount}/6 capabilities on`}
+              {enabledCapCount === 0
+                ? "Text reply"
+                : CAP_LABELS.filter(({ key }) => caps[key])
+                    .map(({ label }) => label)
+                    .join(" · ")}
             </div>
 
             <div className="flex items-end gap-2">
@@ -1030,7 +1071,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         mode="multiple"
         maxSelected={6}
         initialSelectedIds={pickedImages.map((a) => a.id)}
-        onConfirm={(assets) => setPickedImages(assets.slice(0, 6))}
+        onConfirm={(assets) => {
+          const picked = assets.slice(0, 6);
+          setPickedImages(picked);
+          // Attaching images implies image analysis for the next message.
+          if (picked.length) setCap("image_analysis", true);
+        }}
       />
 
       <InsertIntoDocDialog
