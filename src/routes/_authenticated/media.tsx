@@ -733,8 +733,24 @@ function MediaPage() {
         </div>
       )}
 
+      {/* Folders home */}
+      {inFolderView && (
+        <MediaFoldersView
+          folders={folders}
+          loading={foldersLoading}
+          assets={assets}
+          byFolder={byFolder}
+          byAsset={byAsset}
+          onOpenFolder={openFolder}
+          onCreateFolder={(name) => folderMut.createFolder.mutate({ name })}
+          onRenameFolder={(id, name) => folderMut.renameFolder.mutate({ id, name })}
+          onDeleteFolder={(id) => folderMut.deleteFolder.mutate({ id })}
+        />
+      )}
+
       {/* Grid */}
-      <section className="px-4 pb-8">
+      {!inFolderView && (
+      <section className="mx-auto w-full max-w-3xl px-4 pb-8">
         {isLoading ? (
           <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
             {Array.from({ length: 9 }).map((_, i) => (
