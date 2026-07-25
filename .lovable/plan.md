@@ -1,25 +1,31 @@
 ## Goal
+Add a 🔴 / ⬛️ push-to-dictate button in two places, powered by OpenAI Whisper, appending transcribed text to whatever is already in the text field.
 
-Make the chat list the first thing you see when tapping Chat (slot 11), make that list fill the whole chat panel, and simplify the per-chat icons.
+## What already exists
+- `src/lib/whisper.functions.ts` — server function `transcribeAudio` that posts to OpenAI `/v1/audio/transcriptions` using `OPENAI_API_KEY` (your key, already wired).
+- `src/lib/audio-recorder.ts` — `startPcmRecorder()` + `blobToBase64()` producing a clean 16 kHz mono WAV (iOS-safe).
 
-## Changes
+So this is UI plumbing only; no new backend or key setup.
 
-### 1. Full-size chat list (`src/components/ChatDialog.tsx`)
-The threads drawer is currently a narrow 288px side panel with a dark scrim to its right. Change it to fill the entire chat dialog area (same size as the chat itself), so titles get the full width and more breathing room.
+## 1. Shared dictation hook
+New file `src/lib/use-voice-dictation.ts`:
+- State: `idle | recording | transcribing`.
+- `toggle()` — first press starts the PCM recorder; second press stops, encodes WAV, base64s it, calls `transcribeAudio`, and hands the text back through an `onText(text)` callback.
+- Guards: microphone-permission failure and empty/too-short clips show a toast instead of calling the API; errors surface the message via toast.
+- Appends, never replaces: the caller merges as `existing.trim() ? existing.trimEnd() + " " + text : text`.
 
-- Panel spans the full dialog instead of `w-72 max-w-[80%]`; drop the dimmed side-scrim column.
-- Header keeps "Chats" + "New", and gains a close (X / back) control since there's no longer a scrim to tap for dismissal.
-- Slightly larger row padding and title text now that there's room.
+## 2. Chat (`src/components/ChatDialog.tsx`)
+- In the input row, to the **left** of the `Textarea`, add a circular icon button:
+  - idle → 🔴, recording → ⬛️, transcribing → small spinner (disabled).
+- On transcription, append the text into `input` and refocus the textarea so the user can edit and press Send normally.
+- Sending stays unchanged.
 
-### 2. Remove the eraser icon per row
-Delete the "Clear messages" (eraser) button from each chat row. Keep the pencil (rename) and the trash (delete chat) icons, with a bit more spacing between them. The main trash-can clear-chat button in the chat header stays as-is.
-
-### 3. Slot 11 opens the chat list, not the last chat
-Add a `startInThreadList` prop to `ChatDialog`. When true, the dialog opens with the chat list showing; picking a chat closes the list and drops into that conversation.
-
-In `src/routes/_authenticated/app.tsx`, the slot 11 Chat button sets that flag when opening the dialog. Other entry points that target a specific thread (voice-note toast, `openThreadId`) are unchanged and still go straight into their conversation.
+## 3. New idea composer (`src/routes/_authenticated/app.tsx`)
+- In the compose action row (`Cancel` / `Send to…`), add the same button to the **right** of `Send to…`.
+- Transcribed text appends to the end of `composeText`; pressing 🔴 again records more and appends below/after the current text.
+- The button does not open the destination picker — user still presses `Send to…` when ready.
+- Recording state here is separate from the orb long-press voice editor, and the button stops event propagation so it never triggers orb gestures.
 
 ## Technical notes
-
-- The existing bootstrap effect still resolves an active thread underneath, so the conversation is ready the moment a chat is selected; only the initial `drawerOpen` value changes.
-- `Eraser` import removed from `ChatDialog.tsx` if unused elsewhere in the file.
+- Both buttons reuse one hook, so behavior/styling stay identical.
+- No changes to plan mode, orb long-press dictation, or chat capability checkboxes.
