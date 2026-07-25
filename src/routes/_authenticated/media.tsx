@@ -203,6 +203,12 @@ function MediaPage() {
   const inFolderView = !activeFolderId;
   const isRealFolder = !!activeFolder;
 
+  // Ref so async upload/generation callbacks always see the folder currently open.
+  const activeFolderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeFolderIdRef.current = isRealFolder ? activeFolderId! : null;
+  }, [activeFolderId, isRealFolder]);
+
   const openFolder = useCallback(
     (id: string) => {
       setSelectMode(false);
