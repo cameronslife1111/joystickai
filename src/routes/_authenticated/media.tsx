@@ -856,6 +856,8 @@ function MediaPage() {
           </div>
         )}
       </section>
+      )}
+
 
       {/* Hidden file input */}
       <input
