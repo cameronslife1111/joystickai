@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
-  CheckSquare, CheckCircle2, FileText, ImageIcon,
+  CheckSquare, CheckCircle2, FileText, ImageIcon, FolderInput, CopyPlus, FolderMinus,
 } from "lucide-react";
 import { AssignDocumentIconDialog } from "@/components/AssignDocumentIconDialog";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
