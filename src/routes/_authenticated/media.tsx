@@ -698,7 +698,8 @@ function MediaPage() {
       )}
 
       {/* Filter chips */}
-      <div className="flex gap-2 overflow-x-auto px-4 py-3">
+      {!inFolderView && (
+      <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto px-4 py-3">
         {([
           { id: "all", label: "All" },
           { id: "image", label: "Images" },
