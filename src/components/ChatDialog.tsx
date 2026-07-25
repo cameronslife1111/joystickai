@@ -49,6 +49,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
+import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { DestinationPicker, type DestinationPosition } from "./DestinationPicker";
