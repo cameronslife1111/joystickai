@@ -545,9 +545,90 @@ Deno.serve(async (req) => {
 - The plan ALWAYS auto-posts a final "✅ All done." (or "⚠️ failed") summary when it finishes — do NOT add a redundant final send_chat_message just to say "done".
 - Aim for meaningful chunks: it's fine to plan 12–20 steps if the work is real; use ask_user to break long plans into approvable phases instead of guessing what the user wants.`
       : "";
+
+    // ---- CONVERSATION CONTINUITY -------------------------------------------
+    // When this plan comes from a chat thread, the planner gets a NARROW view
+    // of that thread: the last few chat turns plus the ids/titles/outcomes of
+    // plans that already ran here. This is what lets "now add a section to
+    // that doc" resolve to a real document_id. Fresh-plan isolation still
+    // holds: we pass ids, titles and outcomes only — never another plan's
+    // steps or instructions.
+    let threadContext = "";
+    if (plan.thread_id) {
+      try {
+        const { data: priorPlans } = await admin
+          .from("plans")
+          .select("user_request, status, result_summary, error_message, steps, created_at")
+          .eq("thread_id", plan.thread_id)
+          .eq("user_id", user.id)
+          .in("status", ["completed", "failed", "cancelled"])
+          .order("created_at", { ascending: false })
+          .limit(5);
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const planLines: string[] = [];
+        for (const p of priorPlans ?? []) {
+          const docIds: string[] = [];
+          const mediaIds: string[] = [];
+          const walk = (node: any, tool: string, depth = 0) => {
+            if (!node || depth > 4 || typeof node !== "object") return;
+            if (Array.isArray(node)) { for (const n of node) walk(n, tool, depth + 1); return; }
+            for (const [k, v] of Object.entries(node)) {
+              const key = k.toLowerCase();
+              if (typeof v === "string" && UUID_RE.test(v)) {
+                if (key.includes("document_id") && !docIds.includes(v)) docIds.push(v);
+                else if ((key.includes("media_id") || key.includes("image_id") || key.includes("video_id")) && !mediaIds.includes(v)) mediaIds.push(v);
+                else if (key === "id") {
+                  if ((tool.includes("document") || tool.includes("sentence")) && !docIds.includes(v)) docIds.push(v);
+                  else if ((tool.includes("image") || tool.includes("video") || tool.includes("media")) && !mediaIds.includes(v)) mediaIds.push(v);
+                }
+              } else if (v && typeof v === "object") walk(v, tool, depth + 1);
+            }
+          };
+          for (const s of Array.isArray(p.steps) ? p.steps : []) {
+            const tool = String((s as any)?.tool ?? "").toLowerCase();
+            walk((s as any)?.args, tool);
+            walk((s as any)?.result, tool);
+          }
+          const titles = docIds
+            .slice(0, 10)
+            .map((id) => `${docList.find((d: any) => d.id === id)?.title ?? "Untitled"} (${id})`)
+            .join("; ");
+          planLines.push(
+            [
+              `- Request: ${String(p.user_request ?? "").slice(0, 300)} → ${p.status}`,
+              p.result_summary ? `  Did:\n${String(p.result_summary).slice(0, 500)}` : "",
+              titles ? `  Documents: ${titles}` : "",
+              mediaIds.length ? `  Media ids: ${mediaIds.slice(0, 10).join("; ")}` : "",
+              p.status === "failed" && p.error_message ? `  Failure: ${String(p.error_message).slice(0, 200)}` : "",
+            ].filter(Boolean).join("\n"),
+          );
+        }
+
+        const { data: recentMsgs } = await admin
+          .from("chat_messages")
+          .select("role, content, created_at")
+          .eq("thread_id", plan.thread_id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        const convo = (recentMsgs ?? [])
+          .slice()
+          .reverse()
+          .map((m: any) => `${m.role === "user" ? "User" : "Orby"}: ${String(m.content ?? "").slice(0, 400)}`)
+          .join("\n");
+
+        if (planLines.length || convo) {
+          threadContext =
+            `\n\nCONVERSATION CONTINUITY (this request came from an ongoing chat — the items below ALREADY EXIST):` +
+            (planLines.length ? `\nPlans already completed in this conversation:\n${planLines.join("\n")}` : "") +
+            (convo ? `\n\nRecent chat turns:\n${convo}` : "") +
+            `\n\nHOW TO USE THIS: when the current request refers back to earlier work ("that doc", "the images you made", "keep going", "add a section to it"), resolve it to the concrete ids listed here and put those ids directly in your step args. Do NOT redo work that already completed, and do NOT pull in unrelated earlier goals — only what THIS request asks for.`;
+        }
+      } catch (_e) { /* continuity is best-effort */ }
+    }
+
     const effectiveSystemPrompt = userContext
-      ? `${systemPrompt}${checkInContract}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
-      : `${systemPrompt}${checkInContract}`;
+      ? `${systemPrompt}${checkInContract}${threadContext}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
+      : `${systemPrompt}${checkInContract}${threadContext}`;
     const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
     let parsed: any;
     try {
