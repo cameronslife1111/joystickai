@@ -185,6 +185,8 @@ async function classifyRoute(
     "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n" +
     "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n" +
     "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n" +
+    "4. Follow-ups matter: if a previous plan already ran in this conversation and the user now says something like \"keep going\", \"now add X to it\", \"do the same for the other doc\", that is a NEW \"plan\" (when planning-type capabilities are enabled) — the target is whatever that earlier plan produced. But merely ASKING about what a previous plan did is still \"chat\".\n" +
+    (memoryDigest ? `\nPlan history in this conversation: ${memoryDigest}\n` : "") +
     `Only these capabilities are ENABLED: ${enabled.join("; ") || "none"}. ` +
     "Never choose a route whose capability is disabled — fall back to chat instead.";
 
