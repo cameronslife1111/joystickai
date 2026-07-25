@@ -14,6 +14,12 @@ import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
+import { MediaFoldersView } from "@/components/MediaFoldersView";
+import { FolderPickerSheet } from "@/components/FolderPickerSheet";
+import {
+  ALL_MEDIA, UNSORTED, indexFolderItems, useMediaFolderItems, useMediaFolderMutations,
+  useMediaFolders, fileAssetIntoFolder,
+} from "@/lib/media-folders";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
