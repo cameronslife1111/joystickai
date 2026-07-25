@@ -264,6 +264,17 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       }
     }
 
+    // Plan memory — everything this thread's earlier plans actually produced.
+    // This is what lets the conversation keep going after a plan finishes.
+    let memory = { block: "", digest: "", documentIds: [] as string[] };
+    try {
+      memory = await buildPlanMemory(supabase, data.threadId, {
+        inlineDocs: true,
+        excludeDocIds: data.contextDocumentIds,
+      });
+    } catch (e) {
+      console.warn("[chat planMemory] failed", e);
+    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -274,9 +285,13 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "You are Orby, a warm, helpful chat assistant inside a writing app. " +
       "Have a natural back-and-forth conversation. Be clear and useful. " +
       "You may use light markdown formatting (paragraphs, bold, and short lists when helpful). " +
+      "You work like a capable employee: you can kick off plans that edit documents and generate media, " +
+      "and you always come back to this conversation afterwards. Keep momentum — reference what you already " +
+      "delivered, and offer the natural next step when it's helpful.\n\n" +
       (contextText
         ? "The user has attached one or more documents as reference. Their full content is appended to the end of the user's latest message. Treat the attached documents as authoritative reference, use their complete content, and refer to them by title when helpful.\n\n"
-        : "");
+        : "") +
+      (memory.block ? `${memory.block}\n\n` : "");
 
     // Attach documents LAST — after whatever the user typed. The block is
     // appended to the end of the latest user message so the model reads the
