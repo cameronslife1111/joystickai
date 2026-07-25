@@ -190,10 +190,86 @@ function MediaPage() {
     },
   });
 
-  const filtered = useMemo(
-    () => filter === "all" ? assets : assets.filter((a) => a.kind === filter),
-    [assets, filter],
+  // ---- Folders ----
+  const { data: folders = [], isLoading: foldersLoading } = useMediaFolders();
+  const { data: folderItems = [] } = useMediaFolderItems();
+  const folderMut = useMediaFolderMutations(userId);
+  const { byFolder, byAsset } = useMemo(() => indexFolderItems(folderItems), [folderItems]);
+
+  const activeFolder = useMemo(
+    () => folders.find((f) => f.id === activeFolderId) ?? null,
+    [folders, activeFolderId],
   );
+  const inFolderView = !activeFolderId;
+  const isRealFolder = !!activeFolder;
+
+  const openFolder = useCallback(
+    (id: string) => {
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      setFilter("all");
+      void navigate({ to: "/media", search: { folder: id } });
+    },
+    [navigate],
+  );
+
+  const backToFolders = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    void navigate({ to: "/media", search: {} });
+  }, [navigate]);
+
+  const scoped = useMemo(() => {
+    if (!activeFolderId || activeFolderId === ALL_MEDIA) return assets;
+    if (activeFolderId === UNSORTED) return assets.filter((a) => !byAsset.has(a.id));
+    const ids = byFolder.get(activeFolderId);
+    if (!ids) return [];
+    return assets.filter((a) => ids.has(a.id));
+  }, [assets, activeFolderId, byFolder, byAsset]);
+
+  const filtered = useMemo(
+    () => filter === "all" ? scoped : scoped.filter((a) => a.kind === filter),
+    [scoped, filter],
+  );
+
+  const folderTitle =
+    activeFolder?.name
+    ?? (activeFolderId === UNSORTED ? "Unsorted" : activeFolderId === ALL_MEDIA ? "All Media" : "Media Gallery");
+
+  const createFolderAndReturnId = useCallback(async (name: string): Promise<string | null> => {
+    try {
+      const f = await folderMut.createFolder.mutateAsync(name);
+      return f.id;
+    } catch {
+      return null;
+    }
+  }, [folderMut.createFolder]);
+
+  const applyFolderPick = useCallback(async (targetFolderId: string) => {
+    if (!folderPicker) return;
+    const { mode, assetIds } = folderPicker;
+    setFolderPicker(null);
+    const target = folders.find((f) => f.id === targetFolderId);
+    try {
+      if (mode === "move") {
+        await folderMut.moveToFolder.mutateAsync({
+          fromFolderId: isRealFolder ? activeFolderId! : null,
+          toFolderId: targetFolderId,
+          assetIds,
+        });
+        toast.success(`Moved ${assetIds.length} item${assetIds.length === 1 ? "" : "s"} to ${target?.name ?? "folder"}`);
+      } else {
+        await folderMut.addToFolder.mutateAsync({ folderId: targetFolderId, assetIds });
+        toast.success(`Added to ${target?.name ?? "folder"}`);
+      }
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      setSheetAsset(null);
+    } catch {
+      /* mutation surfaces its own toast */
+    }
+  }, [folderPicker, folders, folderMut, isRealFolder, activeFolderId]);
+
 
   const markSeen = useCallback(async (asset: Asset) => {
     if (asset.seen_at) return;
