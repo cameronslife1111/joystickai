@@ -3,6 +3,7 @@ import { generateText as aiSdkGenerateText } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
+import { buildPlanMemory } from "./plan-memory";
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
