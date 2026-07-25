@@ -542,34 +542,36 @@ function MediaPage() {
       </div>
 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate({ to: "/app" })}
-            aria-label="Back"
+            onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
+            aria-label={inFolderView ? "Back to app" : "Back to folders"}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <button
-            onClick={() => {
-              if (selectMode) exitSelectMode();
-              else setSelectMode(true);
-            }}
-            aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
-            title={selectMode ? "Exit multi-select" : "Select multiple"}
-            className={
-              "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
-              (selectMode
-                ? "border-primary/40 bg-primary/15 text-primary"
-                : "border-foreground/10 hover:bg-foreground/10")
-            }
-          >
-            <CheckSquare className="h-5 w-5" />
-          </button>
+          {!inFolderView && (
+            <button
+              onClick={() => {
+                if (selectMode) exitSelectMode();
+                else setSelectMode(true);
+              }}
+              aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
+              title={selectMode ? "Exit multi-select" : "Select multiple"}
+              className={
+                "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
+                (selectMode
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-foreground/10 hover:bg-foreground/10")
+              }
+            >
+              <CheckSquare className="h-5 w-5" />
+            </button>
+          )}
         </div>
-        <h1 className="font-display text-lg">
-          {selectMode ? `${selectedIds.size} selected` : "Media Gallery"}
+        <h1 className="min-w-0 truncate text-center font-display text-lg">
+          {selectMode ? `${selectedIds.size} selected` : inFolderView ? "Media Gallery" : folderTitle}
         </h1>
         <div className="flex items-center gap-2">
           {selectMode ? (
