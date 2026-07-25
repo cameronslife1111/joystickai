@@ -1354,6 +1354,117 @@ function summarizeRun(steps: any[]): string {
   return steps.map((s, i) => `${i + 1}. ${s.description ?? s.tool}`).join("\n");
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Collect the document / media ids a run touched, from step args + results. */
+function collectArtifacts(steps: any[]): { docIds: string[]; mediaIds: string[] } {
+  const docIds: string[] = [];
+  const mediaIds: string[] = [];
+  const push = (arr: string[], v: string) => { if (!arr.includes(v)) arr.push(v); };
+  const visit = (node: any, tool: string, depth = 0) => {
+    if (!node || depth > 4 || typeof node !== "object") return;
+    if (Array.isArray(node)) { for (const n of node) visit(n, tool, depth + 1); return; }
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === "string" && UUID_RE.test(value)) {
+        const k = key.toLowerCase();
+        if (k.includes("document_id")) push(docIds, value);
+        else if (k.includes("media_id") || k.includes("image_id") || k.includes("video_id")) push(mediaIds, value);
+        else if (k === "id") {
+          if (tool.includes("document") || tool.includes("sentence")) push(docIds, value);
+          else if (tool.includes("image") || tool.includes("video") || tool.includes("media")) push(mediaIds, value);
+        }
+      } else if (value && typeof value === "object") {
+        visit(value, tool, depth + 1);
+      }
+    }
+  };
+  for (const s of steps ?? []) {
+    const tool = String(s?.tool ?? "").toLowerCase();
+    visit(s?.args, tool);
+    visit(s?.result, tool);
+  }
+  return { docIds, mediaIds };
+}
+
+/**
+ * Write the message the plan posts back into the chat when it finishes.
+ * This is what makes a plan feel like an employee reporting back rather than
+ * a job that silently ends — it names what was produced and offers the next
+ * step. Falls back to a plain summary if the model call fails.
+ */
+async function composeWrapUp(
+  admin: any,
+  plan: any,
+  steps: any[],
+  outcome: "completed" | "failed",
+  errorText?: string,
+): Promise<string> {
+  const fallback =
+    outcome === "completed"
+      ? `✅ All done.\n${summarizeRun(steps)}`
+      : `⚠️ I hit a problem: ${errorText ?? "the plan failed"}`;
+
+  const { docIds, mediaIds } = collectArtifacts(steps);
+  let artifactText = "";
+  try {
+    if (docIds.length) {
+      const { data: docs } = await admin.from("documents").select("id, title").in("id", docIds.slice(0, 20));
+      if (docs?.length) {
+        artifactText += `\nDocuments: ${docs.map((d: any) => `${d.title ?? "Untitled"} (${d.id})`).join("; ")}`;
+      }
+    }
+    if (mediaIds.length) {
+      const { data: media } = await admin.from("media_assets").select("id, title, kind, status").in("id", mediaIds.slice(0, 20));
+      if (media?.length) {
+        artifactText += `\nMedia: ${media.map((m: any) => `${m.title ?? "Untitled"} [${m.kind ?? "media"}/${m.status ?? "?"}]`).join("; ")}`;
+      }
+    }
+  } catch (_e) { /* artifacts are best-effort */ }
+
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) return fallback;
+
+  const stepLines = (steps ?? [])
+    .map((s: any, i: number) => {
+      const res = s?.result != null ? JSON.stringify(s.result).slice(0, 300) : "";
+      return `${i + 1}. [${s?.status ?? "pending"}] ${s?.description ?? s?.tool}${res ? ` → ${res}` : ""}`;
+    })
+    .join("\n")
+    .slice(0, 6000);
+
+  const system =
+    "You are Orby, a warm, capable assistant reporting back in a chat after finishing a task for the user. " +
+    "Write a short message (1–3 sentences, plain conversational text, no markdown headers, no numbered step dump) that: " +
+    "says what you actually produced, names the documents or media by title, and — when natural — offers one concrete next step. " +
+    "Never invent results that aren't in the run log. If the run failed, say plainly what went wrong in human terms and suggest how to proceed. " +
+    "Start completed messages with ✅ and failed ones with ⚠️.";
+
+  const userPrompt =
+    `The user asked: ${String(plan?.user_request ?? "").slice(0, 1500)}\n\n` +
+    `Outcome: ${outcome}${errorText ? ` — ${errorText.slice(0, 600)}` : ""}\n\n` +
+    `Run log:\n${stepLines}\n${artifactText}\n\nWrite the chat message.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-sol",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+    if (!res.ok) return fallback;
+    const data = await res.json();
+    const text = String(data?.choices?.[0]?.message?.content ?? "").trim();
+    return text || fallback;
+  } catch (_e) {
+    return fallback;
+  }
+}
+
 function buildLovablePrompt(plan: any, failedStep: any, errorMessage: string): string {
   return [
     "A plan in Orby failed during execution. Please investigate.",
@@ -1474,7 +1585,7 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
       })
       .eq("id", plan_id);
-    await reportTerminal(`I hit a problem: ${reason}`);
+    await reportTerminal(await composeWrapUp(admin, plan, Array.isArray(plan.steps) ? plan.steps : [], "failed", reason));
     return json({ status: "failed", error: reason });
   };
   if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
@@ -1534,6 +1645,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
 
@@ -1568,6 +1680,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
@@ -1584,6 +1697,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
     // completed
@@ -1600,13 +1714,14 @@ Deno.serve(async (req) => {
     }
     await releaseClaim(updates);
     if (updates.status === "completed") {
-      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     }
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
   if (idx >= steps.length) {
     await releaseClaim({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() });
+    await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     return json({ status: "completed" });
   }
 
@@ -1704,7 +1819,7 @@ Deno.serve(async (req) => {
     }
     await releaseClaim(updates);
     if (updates.status === "completed") {
-      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     }
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
@@ -1718,7 +1833,7 @@ Deno.serve(async (req) => {
       error_lovable_prompt: lovablePrompt,
       completed_at: new Date().toISOString(),
     });
-    await reportTerminal(`⚠️ Step ${idx + 1} failed: ${step.error}`);
+    await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", `Step ${idx + 1} (${step.description ?? step.tool}) failed: ${step.error}`));
     return json({ status: "failed", error: step.error });
   }
 });

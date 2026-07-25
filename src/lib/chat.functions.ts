@@ -3,6 +3,7 @@ import { generateText as aiSdkGenerateText } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
+import { buildPlanMemory } from "./plan-memory";
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
@@ -155,6 +156,7 @@ async function classifyRoute(
   latestText: string,
   recent: string,
   caps: ChatCapabilities,
+  memoryDigest = "",
 ): Promise<ChatRoute> {
   const actionEnabled = ACTION_GROUPS.some((g) => caps[g]);
   // Nothing actionable and no web search → always chat.
@@ -183,6 +185,8 @@ async function classifyRoute(
     "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n" +
     "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n" +
     "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n" +
+    "4. Follow-ups matter: if a previous plan already ran in this conversation and the user now says something like \"keep going\", \"now add X to it\", \"do the same for the other doc\", that is a NEW \"plan\" (when planning-type capabilities are enabled) — the target is whatever that earlier plan produced. But merely ASKING about what a previous plan did is still \"chat\".\n" +
+    (memoryDigest ? `\nPlan history in this conversation: ${memoryDigest}\n` : "") +
     `Only these capabilities are ENABLED: ${enabled.join("; ") || "none"}. ` +
     "Never choose a route whose capability is disabled — fall back to chat instead.";
 
@@ -260,6 +264,17 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       }
     }
 
+    // Plan memory — everything this thread's earlier plans actually produced.
+    // This is what lets the conversation keep going after a plan finishes.
+    let memory = { block: "", digest: "", documentIds: [] as string[] };
+    try {
+      memory = await buildPlanMemory(supabase, data.threadId, {
+        inlineDocs: true,
+        excludeDocIds: data.contextDocumentIds,
+      });
+    } catch (e) {
+      console.warn("[chat planMemory] failed", e);
+    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -270,9 +285,13 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "You are Orby, a warm, helpful chat assistant inside a writing app. " +
       "Have a natural back-and-forth conversation. Be clear and useful. " +
       "You may use light markdown formatting (paragraphs, bold, and short lists when helpful). " +
+      "You work like a capable employee: you can kick off plans that edit documents and generate media, " +
+      "and you always come back to this conversation afterwards. Keep momentum — reference what you already " +
+      "delivered, and offer the natural next step when it's helpful.\n\n" +
       (contextText
         ? "The user has attached one or more documents as reference. Their full content is appended to the end of the user's latest message. Treat the attached documents as authoritative reference, use their complete content, and refer to them by title when helpful.\n\n"
-        : "");
+        : "") +
+      (memory.block ? `${memory.block}\n\n` : "");
 
     // Attach documents LAST — after whatever the user typed. The block is
     // appended to the end of the latest user message so the model reads the
@@ -320,7 +339,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .slice(-6)
       .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
       .join("\n");
-    let route = await classifyRoute(model, latestText, recent, caps);
+    let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
 
     // Attached-documents safety net: when the user has documents attached, only
     // let the request become a plan if they clearly asked to CHANGE something.

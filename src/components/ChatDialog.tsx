@@ -449,6 +449,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       toast.error("Failed to clear chat");
       return;
     }
+    // Detach the thread's plans too — a cleared chat starts from a genuinely
+    // blank state, with no leftover plan memory feeding the next reply.
+    await supabase.from("plans").update({ thread_id: null }).eq("thread_id", activeThreadId);
     qc.setQueryData(["chat_messages", activeThreadId], []);
     setClearConfirmOpen(false);
     toast.success("Chat cleared");
@@ -526,9 +529,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         .single();
       if (userErr) throw userErr;
 
+      // Keep plan cards in the history (as a short marker) so the model sees
+      // WHERE in the conversation a plan ran. The concrete details of what the
+      // plan produced come from server-side plan memory.
       const history = [...prior, insertedUser as ChatRow]
-        .filter((m) => m.kind !== "plan")
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) =>
+          m.kind === "plan"
+            ? { role: "assistant" as const, content: "[A plan was kicked off here and ran in the background.]" }
+            : { role: m.role, content: m.content },
+        )
+        .filter((m) => (m.content ?? "").trim().length > 0);
 
       const result = await send({
         data: {
@@ -956,6 +966,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             aria-label="Clear messages"
                             onClick={async () => {
                               await supabase.from("chat_messages").delete().eq("thread_id", t.id);
+                              await supabase.from("plans").update({ thread_id: null }).eq("thread_id", t.id);
                               qc.setQueryData(["chat_messages", t.id], []);
                               toast.success("Chat cleared");
                             }}
