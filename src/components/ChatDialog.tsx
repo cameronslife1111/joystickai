@@ -224,6 +224,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
 
+  // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
+  const dictation = useVoiceDictation(
+    useCallback((text: string) => {
+      setInput((prev) => appendTranscript(prev, text));
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }, []),
+  );
+
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
