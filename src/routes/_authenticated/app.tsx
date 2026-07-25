@@ -133,6 +133,8 @@ function AppPage() {
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
+  /** Slot 11 opens the chat list first instead of the last conversation. */
+  const [chatStartInList, setChatStartInList] = useState(false);
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
@@ -2019,6 +2021,8 @@ function AppPage() {
     }},
     { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
+      setPendingChatThreadId(null);
+      setChatStartInList(true);
       setChatOpen(true);
     }},
     { e: "🤖", t: "AI Plans", fn: () => {
@@ -3141,11 +3145,15 @@ function AppPage() {
         open={chatOpen}
         onOpenChange={(o) => {
           setChatOpen(o);
-          if (!o) setPendingChatThreadId(null);
+          if (!o) {
+            setPendingChatThreadId(null);
+            setChatStartInList(false);
+          }
         }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
+        startInThreadList={chatStartInList}
       />
       {currentSentence && (
         <LinkDocumentDialog
