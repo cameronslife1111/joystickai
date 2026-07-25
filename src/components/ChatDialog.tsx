@@ -677,17 +677,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72">
                   <div className="flex flex-col gap-3">
-                    <p className="text-xs font-medium text-muted-foreground">Orby capabilities</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">Use for this message</p>
+                        <p className="text-[11px] leading-tight text-muted-foreground">
+                          Nothing checked = plain text reply. Boxes clear after each send.
+                        </p>
+                      </div>
+                      {enabledCapCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingCaps(NO_CAPS)}
+                          className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                     {CAP_LABELS.map(({ key, label, hint }) => (
-                      <div key={key} className="flex items-center justify-between gap-3">
+                      <div key={key} className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
                           <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
                         </div>
-                        <Switch
+                        <Checkbox
                           id={`cap-${key}`}
+                          className="mt-0.5"
                           checked={caps[key]}
-                          onCheckedChange={(v) => setCap(key, v)}
+                          onCheckedChange={(v) => setCap(key, v === true)}
                         />
                       </div>
                     ))}
@@ -702,19 +719,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         onCheckedChange={setAutoSpeakPref}
                       />
                     </div>
-                    {caps.image_analysis && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="justify-start"
-                        onClick={() => {
-                          setSettingsOpen(false);
-                          setImagePickerOpen(true);
-                        }}
-                      >
-                        <ImageIcon className="mr-2 h-4 w-4" /> Attach image
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSettingsOpen(false);
+                        setImagePickerOpen(true);
+                      }}
+                    >
+                      <ImageIcon className="mr-2 h-4 w-4" /> Attach images
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
