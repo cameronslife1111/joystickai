@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   Paperclip,
@@ -49,6 +49,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
+import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { DestinationPicker, type DestinationPosition } from "./DestinationPicker";
@@ -223,6 +225,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
+
+  // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
+  const dictation = useVoiceDictation(
+    useCallback((text: string) => {
+      setInput((prev) => appendTranscript(prev, text));
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }, []),
+  );
+
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -896,7 +907,26 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </div>
 
             <div className="flex items-end gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => void dictation.toggle()}
+                disabled={dictation.transcribing}
+                aria-label={dictation.recording ? "Stop recording" : "Start voice input"}
+                title={dictation.recording ? "Stop and transcribe" : "Voice input"}
+                className="shrink-0 text-lg"
+              >
+                {dictation.transcribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : dictation.recording ? (
+                  <span aria-hidden>⬛️</span>
+                ) : (
+                  <span aria-hidden>🔴</span>
+                )}
+              </Button>
               <Textarea
+
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
