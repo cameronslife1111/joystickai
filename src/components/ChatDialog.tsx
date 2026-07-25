@@ -966,6 +966,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             aria-label="Clear messages"
                             onClick={async () => {
                               await supabase.from("chat_messages").delete().eq("thread_id", t.id);
+                              await supabase.from("plans").update({ thread_id: null }).eq("thread_id", t.id);
                               qc.setQueryData(["chat_messages", t.id], []);
                               toast.success("Chat cleared");
                             }}
