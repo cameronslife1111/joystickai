@@ -1069,9 +1069,29 @@ function MediaPage() {
                   }}
                 />
               )}
+              <SheetButton icon={<FolderInput className="h-4 w-4" />} label="Move to folder"
+                onClick={() => setFolderPicker({ mode: "move", assetIds: [sheetAsset.id] })}
+              />
+              <SheetButton icon={<CopyPlus className="h-4 w-4" />} label="Add to another folder"
+                onClick={() => setFolderPicker({ mode: "add", assetIds: [sheetAsset.id] })}
+              />
+              {isRealFolder && (
+                <SheetButton icon={<FolderMinus className="h-4 w-4" />} label="Remove from this folder"
+                  onClick={async () => {
+                    const id = sheetAsset.id;
+                    setSheetAsset(null);
+                    await folderMut.removeFromFolder.mutateAsync({
+                      folderId: activeFolderId!,
+                      assetIds: [id],
+                    });
+                    toast.success("Removed from folder");
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
+
             </div>
           </div>
         </div>
