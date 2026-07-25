@@ -339,7 +339,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       .slice(-6)
       .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
       .join("\n");
-    let route = await classifyRoute(model, latestText, recent, caps);
+    let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
 
     // Attached-documents safety net: when the user has documents attached, only
     // let the request become a plan if they clearly asked to CHANGE something.
