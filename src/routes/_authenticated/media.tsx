@@ -225,6 +225,27 @@ function MediaPage() {
     void navigate({ to: "/media", search: {} });
   }, [navigate]);
 
+  // Anything created while a folder is open (uploads, generations) gets filed there.
+  const mountedAtRef = useRef<string>(new Date().toISOString());
+  const autoFiledRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const folderId = activeFolderIdRef.current;
+    if (!folderId || !userId) return;
+    const fresh = assets.filter(
+      (a) =>
+        a.created_at > mountedAtRef.current
+        && !autoFiledRef.current.has(a.id)
+        && !folderItems.some((it) => it.asset_id === a.id),
+    );
+    if (fresh.length === 0) return;
+    fresh.forEach((a) => autoFiledRef.current.add(a.id));
+    void (async () => {
+      for (const a of fresh) await fileAssetIntoFolder(userId, folderId, a.id);
+      qc.invalidateQueries({ queryKey: ["media_folder_items"] });
+    })();
+  }, [assets, folderItems, userId, qc, activeFolderId]);
+
+
   const scoped = useMemo(() => {
     if (!activeFolderId || activeFolderId === ALL_MEDIA) return assets;
     if (activeFolderId === UNSORTED) return assets.filter((a) => !byAsset.has(a.id));
