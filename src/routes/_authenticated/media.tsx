@@ -334,7 +334,7 @@ function MediaPage() {
           duration = m.duration || null;
         }
 
-        const { error: insErr } = await supabase.from("media_assets").insert({
+        const { data: inserted, error: insErr } = await supabase.from("media_assets").insert({
           user_id: userId,
           title: stripExt(file.name),
           kind,
@@ -345,8 +345,12 @@ function MediaPage() {
           duration_seconds: duration,
           width,
           height,
-        });
+        }).select("id").single();
         if (insErr) { console.error("[media] db insert error", insErr); throw insErr; }
+        // File straight into the folder the user is currently viewing.
+        if (inserted?.id && activeFolderIdRef.current) {
+          await fileAssetIntoFolder(userId, activeFolderIdRef.current, inserted.id);
+        }
         console.log("[media] inserted row for", file.name);
       } catch (e: any) {
         console.error("[media] upload failed", file.name, e);
