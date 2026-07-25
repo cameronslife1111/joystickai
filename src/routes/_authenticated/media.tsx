@@ -29,6 +29,9 @@ import { proxyMediaUrl } from "@/lib/sb-proxy";
 
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
+  validateSearch: (search: Record<string, unknown>): { folder?: string } => ({
+    folder: typeof search.folder === "string" && search.folder ? search.folder : undefined,
+  }),
   component: MediaPage,
 });
 
