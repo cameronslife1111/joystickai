@@ -91,6 +91,19 @@ const DEFAULT_CAPS: ChatCapabilities = {
   scheduling: true,
 };
 
+/** Nothing checked → Orby just replies with text. */
+const NO_CAPS: ChatCapabilities = {
+  web_search: false,
+  image_analysis: false,
+  planning: false,
+  image_generation: false,
+  video_generation: false,
+  document_editing: false,
+  scheduling: false,
+};
+
+
+
 const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[] = [
   { key: "planning", label: "Planning / multi-step", hint: "Combine steps to complete bigger tasks" },
   { key: "document_editing", label: "Document editing", hint: "Create, edit, organize your documents" },
