@@ -1645,6 +1645,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
 
@@ -1679,6 +1680,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
     if (media.status === "generating") {
@@ -1695,6 +1697,7 @@ Deno.serve(async (req) => {
         steps, status: "failed", error_message: step.error,
         error_lovable_prompt: lovablePrompt, completed_at: new Date().toISOString(),
       });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
       return json({ status: "failed", error: step.error });
     }
     // completed
