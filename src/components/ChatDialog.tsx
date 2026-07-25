@@ -1071,7 +1071,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         mode="multiple"
         maxSelected={6}
         initialSelectedIds={pickedImages.map((a) => a.id)}
-        onConfirm={(assets) => setPickedImages(assets.slice(0, 6))}
+        onConfirm={(assets) => {
+          const picked = assets.slice(0, 6);
+          setPickedImages(picked);
+          // Attaching images implies image analysis for the next message.
+          if (picked.length) setCap("image_analysis", true);
+        }}
       />
 
       <InsertIntoDocDialog
