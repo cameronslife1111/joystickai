@@ -578,6 +578,26 @@ function MediaPage() {
             <>
               <button
                 type="button"
+                disabled={selectedIds.size === 0}
+                onClick={() => setFolderPicker({ mode: "move", assetIds: Array.from(selectedIds) })}
+                aria-label="Move selected to folder"
+                title="Move to folder"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              >
+                <FolderInput className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                disabled={selectedIds.size === 0}
+                onClick={() => setFolderPicker({ mode: "add", assetIds: Array.from(selectedIds) })}
+                aria-label="Add selected to another folder"
+                title="Add to another folder"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              >
+                <CopyPlus className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
                 disabled={selectedIds.size === 0 || batchDeleting}
                 onClick={() => setConfirmBatchDelete(true)}
                 aria-label={`Delete ${selectedIds.size} items`}
