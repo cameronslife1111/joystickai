@@ -118,7 +118,11 @@ async function probeAudio(file: File): Promise<{ duration: number }> {
 function MediaPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { folder: activeFolderId } = Route.useSearch();
   const [filter, setFilter] = useState<Filter>("all");
+  const [folderPicker, setFolderPicker] = useState<
+    { mode: "move" | "add"; assetIds: string[] } | null
+  >(null);
   const downloadAll = useDownloadAll();
   const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
