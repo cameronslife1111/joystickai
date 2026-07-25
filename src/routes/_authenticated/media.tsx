@@ -369,6 +369,7 @@ function MediaPage() {
     toast.success("Upload complete");
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+    qc.invalidateQueries({ queryKey: ["media_folder_items"] });
   }, [qc]);
 
   const handleRename = useCallback(async () => {
