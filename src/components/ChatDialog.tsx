@@ -12,7 +12,6 @@ import {
   Image as ImageIcon,
   Plus,
   Pencil,
-  Eraser,
   MessagesSquare,
   Menu,
   CheckCircle2,
@@ -62,6 +61,8 @@ interface Props {
   documents: { id: string; title: string }[];
   /** When provided while opening, select this thread instead of the default. */
   openThreadId?: string | null;
+  /** Open straight to the chat list instead of the last conversation. */
+  startInThreadList?: boolean;
 }
 
 type ChatRow = {
@@ -182,7 +183,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
@@ -303,6 +304,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       bootstrappedRef.current = false;
       return;
     }
+    // Slot 11 opens the chat picker first so the user chooses where to go.
+    if (!bootstrappedRef.current) setDrawerOpen(!!startInThreadList && !openThreadId);
     if (bootstrappedRef.current || !userId) return;
     // Wait until the threads query has actually finished — the default `[]`
     // from useQuery would otherwise trick us into creating a new thread
@@ -918,82 +921,71 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </div>
           </div>
 
-          {/* Threads drawer */}
+          {/* Threads list — fills the whole chat panel */}
           {drawerOpen && (
-            <div className="absolute inset-0 z-20 flex">
-              <div className="flex w-72 max-w-[80%] flex-col border-r border-foreground/10 bg-background shadow-xl">
-                <div className="flex items-center justify-between border-b border-foreground/10 p-3">
-                  <span className="text-sm font-medium">Chats</span>
-                  <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
-                    <Plus className="mr-1 h-3.5 w-3.5" /> New
+            <div className="absolute inset-0 z-20 flex flex-col bg-background">
+              <div className="flex items-center justify-between gap-2 border-b border-foreground/10 p-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Close chats"
+                    onClick={() => setDrawerOpen(false)}
+                  >
+                    <X className="h-5 w-5" />
                   </Button>
+                  <span className="text-base font-medium">Chats</span>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2">
-                  {threads.length === 0 ? (
-                    <p className="p-4 text-center text-xs text-muted-foreground">No chats yet.</p>
-                  ) : (
-                    <ul className="flex flex-col gap-1">
-                      {threads.map((t) => (
-                        <li
-                          key={t.id}
-                          className={`flex items-center gap-1 rounded-lg px-1 ${
-                            t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveThreadId(t.id);
-                              setDrawerOpen(false);
-                            }}
-                            className="min-w-0 flex-1 truncate px-2 py-2 text-left text-sm"
-                          >
-                            {t.title || "Untitled"}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Rename"
-                            onClick={() => {
-                              setRenameThread(t);
-                              setRenameValue(t.title);
-                            }}
-                            className="shrink-0 rounded p-1.5 text-muted-foreground hover:text-foreground"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Clear messages"
-                            onClick={async () => {
-                              await supabase.from("chat_messages").delete().eq("thread_id", t.id);
-                              await supabase.from("plans").update({ thread_id: null }).eq("thread_id", t.id);
-                              qc.setQueryData(["chat_messages", t.id], []);
-                              toast.success("Chat cleared");
-                            }}
-                            className="shrink-0 rounded p-1.5 text-muted-foreground hover:text-foreground"
-                          >
-                            <Eraser className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Delete thread"
-                            onClick={() => setDeleteThreadId(t.id)}
-                            className="shrink-0 rounded p-1.5 text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
+                  <Plus className="mr-1 h-3.5 w-3.5" /> New
+                </Button>
               </div>
-              <button
-                type="button"
-                aria-label="Close threads"
-                className="flex-1 bg-black/30"
-                onClick={() => setDrawerOpen(false)}
-              />
+              <div className="flex-1 overflow-y-auto p-3">
+                {threads.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-muted-foreground">No chats yet.</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {threads.map((t) => (
+                      <li
+                        key={t.id}
+                        className={`flex items-center gap-2 rounded-lg px-2 ${
+                          t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveThreadId(t.id);
+                            setDrawerOpen(false);
+                          }}
+                          className="min-w-0 flex-1 truncate px-1 py-3.5 text-left text-base"
+                        >
+                          {t.title || "Untitled"}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Rename"
+                          onClick={() => {
+                            setRenameThread(t);
+                            setRenameValue(t.title);
+                          }}
+                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete thread"
+                          onClick={() => setDeleteThreadId(t.id)}
+                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

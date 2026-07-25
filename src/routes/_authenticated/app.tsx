@@ -133,6 +133,8 @@ function AppPage() {
   const [composing, setComposing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
+  /** Slot 11 opens the chat list first instead of the last conversation. */
+  const [chatStartInList, setChatStartInList] = useState(false);
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
@@ -1896,6 +1898,8 @@ function AppPage() {
     },
     { e: "💬", t: "Chat", fn: () => {
       setMenuOpen(false);
+      setPendingChatThreadId(null);
+      setChatStartInList(true);
       setChatOpen(true);
     }},
     // Slots 14 & 15 (Analyze img / Web search) folded into Chat — kept inert to preserve grid indices.
@@ -2068,7 +2072,7 @@ function AppPage() {
     filled[7] = grid[13];  // 8  Copy document
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
-    filled[10] = grid[2];  // 11 Chat (most recent thread)
+    filled[10] = grid[2];  // 11 Chat (opens the chat list)
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } }; // 13 New idea
     filled[13] = grid[21];  // 14 AI Plans
@@ -3141,11 +3145,15 @@ function AppPage() {
         open={chatOpen}
         onOpenChange={(o) => {
           setChatOpen(o);
-          if (!o) setPendingChatThreadId(null);
+          if (!o) {
+            setPendingChatThreadId(null);
+            setChatStartInList(false);
+          }
         }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
+        startInThreadList={chatStartInList}
       />
       {currentSentence && (
         <LinkDocumentDialog
