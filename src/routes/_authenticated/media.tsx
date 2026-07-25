@@ -202,12 +202,6 @@ function MediaPage() {
   );
   const inFolderView = !activeFolderId;
   const isRealFolder = !!activeFolder;
-  const folderTitle =
-    activeFolderId === ALL_MEDIA
-      ? "All media"
-      : activeFolderId === UNSORTED
-        ? "Unsorted"
-        : (activeFolder?.name ?? "Folder");
 
   // Ref so async upload/generation callbacks always see the folder currently open.
   const activeFolderIdRef = useRef<string | null>(null);
