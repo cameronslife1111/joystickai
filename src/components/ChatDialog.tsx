@@ -429,8 +429,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
 
   const setCap = (key: keyof ChatCapabilities, value: boolean) => {
-    if (!activeThreadId) return;
-    void updateThread(activeThreadId, { capabilities: { ...caps, [key]: value } });
+    setPendingCaps((cur) => ({ ...cur, [key]: value }));
   };
 
   const setContextDocIds = (ids: string[]) => {
