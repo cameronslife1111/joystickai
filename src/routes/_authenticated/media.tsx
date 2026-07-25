@@ -723,6 +723,8 @@ function MediaPage() {
           );
         })}
       </div>
+      )}
+
 
       {/* Upload progress banner */}
       {uploadProgress && (
