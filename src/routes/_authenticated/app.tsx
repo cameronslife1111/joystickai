@@ -14,6 +14,7 @@ import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/l
 import { transcribeAudio } from "@/lib/whisper.functions";
 import { voiceEditDocument } from "@/lib/voice-edit.functions";
 import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
+import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -169,6 +170,13 @@ function AppPage() {
   const editOriginDocIdRef = useRef<string | null>(null);
   const editingRef = useRef<boolean>(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 🔴 / ⬛️ dictation for the New idea composer — appends to composeText.
+  const composeDictation = useVoiceDictation(
+    useCallback((text: string) => {
+      setComposeText((prev) => appendTranscript(prev, text));
+    }, []),
+  );
   const callAi = useServerFn(aiContinue);
   const transcribe = useServerFn(transcribeAudio);
   const sendChat = useServerFn(sendChatMessage);
