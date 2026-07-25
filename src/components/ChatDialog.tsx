@@ -529,9 +529,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         .single();
       if (userErr) throw userErr;
 
-      const history = [...prior, insertedUser as ChatRow]
-        .filter((m) => m.kind !== "plan")
-        .map((m) => ({ role: m.role, content: m.content }));
+      // Keep plan cards in the history (as a short marker) so the model sees
+      // WHERE in the conversation a plan ran. The concrete details of what the
+      // plan produced come from server-side plan memory.
+      const history = [...prior, insertedUser as ChatRow].map((m) =>
+        m.kind === "plan"
+          ? { role: "assistant" as const, content: `[Ran a plan for: ${m.content}]` }
+          : { role: m.role, content: m.content },
+      );
 
       const result = await send({
         data: {
