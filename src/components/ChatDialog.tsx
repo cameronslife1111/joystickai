@@ -449,6 +449,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       toast.error("Failed to clear chat");
       return;
     }
+    // Detach the thread's plans too — a cleared chat starts from a genuinely
+    // blank state, with no leftover plan memory feeding the next reply.
+    await supabase.from("plans").update({ thread_id: null }).eq("thread_id", activeThreadId);
     qc.setQueryData(["chat_messages", activeThreadId], []);
     setClearConfirmOpen(false);
     toast.success("Chat cleared");
