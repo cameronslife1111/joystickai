@@ -12,7 +12,6 @@ import {
   Image as ImageIcon,
   Plus,
   Pencil,
-  Eraser,
   MessagesSquare,
   Menu,
   CheckCircle2,
@@ -62,6 +61,8 @@ interface Props {
   documents: { id: string; title: string }[];
   /** When provided while opening, select this thread instead of the default. */
   openThreadId?: string | null;
+  /** Open straight to the chat list instead of the last conversation. */
+  startInThreadList?: boolean;
 }
 
 type ChatRow = {
@@ -182,7 +183,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
@@ -303,6 +304,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       bootstrappedRef.current = false;
       return;
     }
+    // Slot 11 opens the chat picker first so the user chooses where to go.
+    if (!bootstrappedRef.current) setDrawerOpen(!!startInThreadList && !openThreadId);
     if (bootstrappedRef.current || !userId) return;
     // Wait until the threads query has actually finished — the default `[]`
     // from useQuery would otherwise trick us into creating a new thread
