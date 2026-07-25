@@ -846,24 +846,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   </span>
                 );
               })}
-              {caps.image_analysis &&
-                pickedImages.map((img) => (
-                  <span
-                    key={img.id}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+              {pickedImages.map((img) => (
+                <span
+                  key={img.id}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                >
+                  <ImageIcon className="h-3 w-3" />
+                  <span className="max-w-[120px] truncate">{img.title || "Image"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPickedImages((prev) => prev.filter((x) => x.id !== img.id))}
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    <ImageIcon className="h-3 w-3" />
-                    <span className="max-w-[120px] truncate">{img.title || "Image"}</span>
-                    <button
-                      type="button"
-                      onClick={() => setPickedImages((prev) => prev.filter((x) => x.id !== img.id))}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              {caps.image_analysis && pickedImages.length > 1 && (
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {pickedImages.length > 1 && (
                 <button
                   type="button"
                   onClick={() => setPickedImages([])}
