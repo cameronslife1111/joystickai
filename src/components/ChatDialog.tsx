@@ -896,7 +896,26 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </div>
 
             <div className="flex items-end gap-2">
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => void dictation.toggle()}
+                disabled={dictation.transcribing}
+                aria-label={dictation.recording ? "Stop recording" : "Start voice input"}
+                title={dictation.recording ? "Stop and transcribe" : "Voice input"}
+                className="shrink-0 text-lg"
+              >
+                {dictation.transcribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : dictation.recording ? (
+                  <span aria-hidden>⬛️</span>
+                ) : (
+                  <span aria-hidden>🔴</span>
+                )}
+              </Button>
               <Textarea
+
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
