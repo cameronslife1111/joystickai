@@ -1392,11 +1392,32 @@ function MediaPage() {
         </div>
       )}
 
+      <FolderPickerSheet
+        open={!!folderPicker}
+        onOpenChange={(o) => { if (!o) setFolderPicker(null); }}
+        title={folderPicker?.mode === "move" ? "Move to folder" : "Add to folder"}
+        description={
+          folderPicker
+            ? `${folderPicker.assetIds.length} item${folderPicker.assetIds.length === 1 ? "" : "s"}`
+            : undefined
+        }
+        folders={folders}
+        markedIds={
+          folderPicker && folderPicker.assetIds.length === 1
+            ? (byAsset.get(folderPicker.assetIds[0]) ?? [])
+            : []
+        }
+        excludeId={folderPicker?.mode === "move" && isRealFolder ? activeFolderId! : null}
+        onPick={(id) => void applyFolderPick(id)}
+        onCreate={createFolderAndReturnId}
+      />
+
       <DownloadAllProgress
         progress={downloadAll.progress}
         onCancel={downloadAll.cancel}
         onDismiss={downloadAll.dismiss}
       />
+
     </main>
   );
 }
