@@ -737,15 +737,19 @@ function MediaPage() {
       {inFolderView && (
         <MediaFoldersView
           folders={folders}
-          loading={foldersLoading}
+          isLoading={foldersLoading}
           assets={assets}
           byFolder={byFolder}
-          byAsset={byAsset}
           onOpenFolder={openFolder}
-          onCreateFolder={(name) => folderMut.createFolder.mutate({ name })}
-          onRenameFolder={(id, name) => folderMut.renameFolder.mutate({ id, name })}
-          onDeleteFolder={(id) => folderMut.deleteFolder.mutate({ id })}
+          onCreate={async (name: string) => {
+            const f = await folderMut.createFolder.mutateAsync(name);
+            return f?.id ?? null;
+          }}
+          onRename={(id: string, name: string) => folderMut.renameFolder.mutate({ id, name })}
+          onDelete={(id: string) => folderMut.deleteFolder.mutate(id)}
+          onReorder={(ordered) => folderMut.reorderFolders.mutate(ordered)}
         />
+
       )}
 
       {/* Grid */}
