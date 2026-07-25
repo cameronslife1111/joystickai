@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
-  CheckSquare, CheckCircle2, FileText, ImageIcon,
+  CheckSquare, CheckCircle2, FileText, ImageIcon, FolderInput, CopyPlus, FolderMinus,
 } from "lucide-react";
 import { AssignDocumentIconDialog } from "@/components/AssignDocumentIconDialog";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
@@ -14,6 +14,12 @@ import { RemixImagesDialog } from "@/components/RemixImagesDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
+import { MediaFoldersView } from "@/components/MediaFoldersView";
+import { FolderPickerSheet } from "@/components/FolderPickerSheet";
+import {
+  ALL_MEDIA, UNSORTED, indexFolderItems, useMediaFolderItems, useMediaFolderMutations,
+  useMediaFolders, fileAssetIntoFolder,
+} from "@/lib/media-folders";
 import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
@@ -29,6 +35,9 @@ import { proxyMediaUrl } from "@/lib/sb-proxy";
 
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
+  validateSearch: (search: Record<string, unknown>): { folder?: string } => ({
+    folder: typeof search.folder === "string" && search.folder ? search.folder : undefined,
+  }),
   component: MediaPage,
 });
 
@@ -109,7 +118,11 @@ async function probeAudio(file: File): Promise<{ duration: number }> {
 function MediaPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { folder: activeFolderId } = Route.useSearch();
   const [filter, setFilter] = useState<Filter>("all");
+  const [folderPicker, setFolderPicker] = useState<
+    { mode: "move" | "add"; assetIds: string[] } | null
+  >(null);
   const downloadAll = useDownloadAll();
   const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -177,10 +190,113 @@ function MediaPage() {
     },
   });
 
-  const filtered = useMemo(
-    () => filter === "all" ? assets : assets.filter((a) => a.kind === filter),
-    [assets, filter],
+  // ---- Folders ----
+  const { data: folders = [], isLoading: foldersLoading } = useMediaFolders();
+  const { data: folderItems = [] } = useMediaFolderItems();
+  const folderMut = useMediaFolderMutations(userId);
+  const { byFolder, byAsset } = useMemo(() => indexFolderItems(folderItems), [folderItems]);
+
+  const activeFolder = useMemo(
+    () => folders.find((f) => f.id === activeFolderId) ?? null,
+    [folders, activeFolderId],
   );
+  const inFolderView = !activeFolderId;
+  const isRealFolder = !!activeFolder;
+
+  // Ref so async upload/generation callbacks always see the folder currently open.
+  const activeFolderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeFolderIdRef.current = isRealFolder ? activeFolderId! : null;
+  }, [activeFolderId, isRealFolder]);
+
+  const openFolder = useCallback(
+    (id: string) => {
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      setFilter("all");
+      void navigate({ to: "/media", search: { folder: id } });
+    },
+    [navigate],
+  );
+
+  const backToFolders = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    void navigate({ to: "/media", search: {} });
+  }, [navigate]);
+
+  // Anything created while a folder is open (uploads, generations) gets filed there.
+  const mountedAtRef = useRef<string>(new Date().toISOString());
+  const autoFiledRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const folderId = activeFolderIdRef.current;
+    if (!folderId || !userId) return;
+    const fresh = assets.filter(
+      (a) =>
+        a.created_at > mountedAtRef.current
+        && !autoFiledRef.current.has(a.id)
+        && !folderItems.some((it) => it.asset_id === a.id),
+    );
+    if (fresh.length === 0) return;
+    fresh.forEach((a) => autoFiledRef.current.add(a.id));
+    void (async () => {
+      for (const a of fresh) await fileAssetIntoFolder(userId, folderId, a.id);
+      qc.invalidateQueries({ queryKey: ["media_folder_items"] });
+    })();
+  }, [assets, folderItems, userId, qc, activeFolderId]);
+
+
+  const scoped = useMemo(() => {
+    if (!activeFolderId || activeFolderId === ALL_MEDIA) return assets;
+    if (activeFolderId === UNSORTED) return assets.filter((a) => !byAsset.has(a.id));
+    const ids = byFolder.get(activeFolderId);
+    if (!ids) return [];
+    return assets.filter((a) => ids.has(a.id));
+  }, [assets, activeFolderId, byFolder, byAsset]);
+
+  const filtered = useMemo(
+    () => filter === "all" ? scoped : scoped.filter((a) => a.kind === filter),
+    [scoped, filter],
+  );
+
+  const folderTitle =
+    activeFolder?.name
+    ?? (activeFolderId === UNSORTED ? "Unsorted" : activeFolderId === ALL_MEDIA ? "All Media" : "Media Gallery");
+
+  const createFolderAndReturnId = useCallback(async (name: string): Promise<string | null> => {
+    try {
+      const f = await folderMut.createFolder.mutateAsync(name);
+      return f.id;
+    } catch {
+      return null;
+    }
+  }, [folderMut.createFolder]);
+
+  const applyFolderPick = useCallback(async (targetFolderId: string) => {
+    if (!folderPicker) return;
+    const { mode, assetIds } = folderPicker;
+    setFolderPicker(null);
+    const target = folders.find((f) => f.id === targetFolderId);
+    try {
+      if (mode === "move") {
+        await folderMut.moveToFolder.mutateAsync({
+          fromFolderId: isRealFolder ? activeFolderId! : null,
+          toFolderId: targetFolderId,
+          assetIds,
+        });
+        toast.success(`Moved ${assetIds.length} item${assetIds.length === 1 ? "" : "s"} to ${target?.name ?? "folder"}`);
+      } else {
+        await folderMut.addToFolder.mutateAsync({ folderId: targetFolderId, assetIds });
+        toast.success(`Added to ${target?.name ?? "folder"}`);
+      }
+      setSelectMode(false);
+      setSelectedIds(new Set());
+      setSheetAsset(null);
+    } catch {
+      /* mutation surfaces its own toast */
+    }
+  }, [folderPicker, folders, folderMut, isRealFolder, activeFolderId]);
+
 
   const markSeen = useCallback(async (asset: Asset) => {
     if (asset.seen_at) return;
@@ -245,7 +361,7 @@ function MediaPage() {
           duration = m.duration || null;
         }
 
-        const { error: insErr } = await supabase.from("media_assets").insert({
+        const { data: inserted, error: insErr } = await supabase.from("media_assets").insert({
           user_id: userId,
           title: stripExt(file.name),
           kind,
@@ -256,8 +372,12 @@ function MediaPage() {
           duration_seconds: duration,
           width,
           height,
-        });
+        }).select("id").single();
         if (insErr) { console.error("[media] db insert error", insErr); throw insErr; }
+        // File straight into the folder the user is currently viewing.
+        if (inserted?.id && activeFolderIdRef.current) {
+          await fileAssetIntoFolder(userId, activeFolderIdRef.current, inserted.id);
+        }
         console.log("[media] inserted row for", file.name);
       } catch (e: any) {
         console.error("[media] upload failed", file.name, e);
@@ -270,6 +390,7 @@ function MediaPage() {
     toast.success("Upload complete");
     qc.invalidateQueries({ queryKey: ["media_assets"] });
     qc.invalidateQueries({ queryKey: ["media_unseen_count"] });
+    qc.invalidateQueries({ queryKey: ["media_folder_items"] });
   }, [qc]);
 
   const handleRename = useCallback(async () => {
@@ -421,38 +542,60 @@ function MediaPage() {
       </div>
 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate({ to: "/app" })}
-            aria-label="Back"
+            onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
+            aria-label={inFolderView ? "Back to app" : "Back to folders"}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <button
-            onClick={() => {
-              if (selectMode) exitSelectMode();
-              else setSelectMode(true);
-            }}
-            aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
-            title={selectMode ? "Exit multi-select" : "Select multiple"}
-            className={
-              "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
-              (selectMode
-                ? "border-primary/40 bg-primary/15 text-primary"
-                : "border-foreground/10 hover:bg-foreground/10")
-            }
-          >
-            <CheckSquare className="h-5 w-5" />
-          </button>
+          {!inFolderView && (
+            <button
+              onClick={() => {
+                if (selectMode) exitSelectMode();
+                else setSelectMode(true);
+              }}
+              aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
+              title={selectMode ? "Exit multi-select" : "Select multiple"}
+              className={
+                "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
+                (selectMode
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-foreground/10 hover:bg-foreground/10")
+              }
+            >
+              <CheckSquare className="h-5 w-5" />
+            </button>
+          )}
         </div>
-        <h1 className="font-display text-lg">
-          {selectMode ? `${selectedIds.size} selected` : "Media Gallery"}
+        <h1 className="min-w-0 truncate text-center font-display text-lg">
+          {selectMode ? `${selectedIds.size} selected` : inFolderView ? "Media Gallery" : folderTitle}
         </h1>
         <div className="flex items-center gap-2">
           {selectMode ? (
             <>
+              <button
+                type="button"
+                disabled={selectedIds.size === 0}
+                onClick={() => setFolderPicker({ mode: "move", assetIds: Array.from(selectedIds) })}
+                aria-label="Move selected to folder"
+                title="Move to folder"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              >
+                <FolderInput className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                disabled={selectedIds.size === 0}
+                onClick={() => setFolderPicker({ mode: "add", assetIds: Array.from(selectedIds) })}
+                aria-label="Add selected to another folder"
+                title="Add to another folder"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              >
+                <CopyPlus className="h-5 w-5" />
+              </button>
               <button
                 type="button"
                 disabled={selectedIds.size === 0 || batchDeleting}
@@ -555,7 +698,8 @@ function MediaPage() {
       )}
 
       {/* Filter chips */}
-      <div className="flex gap-2 overflow-x-auto px-4 py-3">
+      {!inFolderView && (
+      <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto px-4 py-3">
         {([
           { id: "all", label: "All" },
           { id: "image", label: "Images" },
@@ -579,6 +723,8 @@ function MediaPage() {
           );
         })}
       </div>
+      )}
+
 
       {/* Upload progress banner */}
       {uploadProgress && (
@@ -587,8 +733,28 @@ function MediaPage() {
         </div>
       )}
 
+      {/* Folders home */}
+      {inFolderView && (
+        <MediaFoldersView
+          folders={folders}
+          isLoading={foldersLoading}
+          assets={assets}
+          byFolder={byFolder}
+          onOpenFolder={openFolder}
+          onCreate={async (name: string) => {
+            const f = await folderMut.createFolder.mutateAsync(name);
+            return f?.id ?? null;
+          }}
+          onRename={(id: string, name: string) => folderMut.renameFolder.mutate({ id, name })}
+          onDelete={(id: string) => folderMut.deleteFolder.mutate(id)}
+          onReorder={(ordered) => folderMut.reorderFolders.mutate(ordered)}
+        />
+
+      )}
+
       {/* Grid */}
-      <section className="px-4 pb-8">
+      {!inFolderView && (
+      <section className="mx-auto w-full max-w-3xl px-4 pb-8">
         {isLoading ? (
           <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
             {Array.from({ length: 9 }).map((_, i) => (
@@ -710,6 +876,8 @@ function MediaPage() {
           </div>
         )}
       </section>
+      )}
+
 
       {/* Hidden file input */}
       <input
@@ -901,9 +1069,29 @@ function MediaPage() {
                   }}
                 />
               )}
+              <SheetButton icon={<FolderInput className="h-4 w-4" />} label="Move to folder"
+                onClick={() => setFolderPicker({ mode: "move", assetIds: [sheetAsset.id] })}
+              />
+              <SheetButton icon={<CopyPlus className="h-4 w-4" />} label="Add to another folder"
+                onClick={() => setFolderPicker({ mode: "add", assetIds: [sheetAsset.id] })}
+              />
+              {isRealFolder && (
+                <SheetButton icon={<FolderMinus className="h-4 w-4" />} label="Remove from this folder"
+                  onClick={async () => {
+                    const id = sheetAsset.id;
+                    setSheetAsset(null);
+                    await folderMut.removeFromFolder.mutateAsync({
+                      folderId: activeFolderId!,
+                      assetIds: [id],
+                    });
+                    toast.success("Removed from folder");
+                  }}
+                />
+              )}
               <SheetButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger
                 onClick={() => setConfirmDelete(true)}
               />
+
             </div>
           </div>
         </div>
@@ -1204,11 +1392,32 @@ function MediaPage() {
         </div>
       )}
 
+      <FolderPickerSheet
+        open={!!folderPicker}
+        onOpenChange={(o) => { if (!o) setFolderPicker(null); }}
+        title={folderPicker?.mode === "move" ? "Move to folder" : "Add to folder"}
+        description={
+          folderPicker
+            ? `${folderPicker.assetIds.length} item${folderPicker.assetIds.length === 1 ? "" : "s"}`
+            : undefined
+        }
+        folders={folders}
+        markedIds={
+          folderPicker && folderPicker.assetIds.length === 1
+            ? (byAsset.get(folderPicker.assetIds[0]) ?? [])
+            : []
+        }
+        excludeId={folderPicker?.mode === "move" && isRealFolder ? activeFolderId! : null}
+        onPick={(id) => void applyFolderPick(id)}
+        onCreate={createFolderAndReturnId}
+      />
+
       <DownloadAllProgress
         progress={downloadAll.progress}
         onCancel={downloadAll.cancel}
         onDismiss={downloadAll.dismiss}
       />
+
     </main>
   );
 }
