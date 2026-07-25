@@ -267,7 +267,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     () => threads.find((t) => t.id === activeThreadId) ?? null,
     [threads, activeThreadId],
   );
-  const caps = activeThread?.capabilities ?? DEFAULT_CAPS;
+  const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
