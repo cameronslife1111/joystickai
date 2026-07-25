@@ -1585,7 +1585,7 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
       })
       .eq("id", plan_id);
-    await reportTerminal(`I hit a problem: ${reason}`);
+    await reportTerminal(await composeWrapUp(admin, plan, Array.isArray(plan.steps) ? plan.steps : [], "failed", reason));
     return json({ status: "failed", error: reason });
   };
   if (plan.watchdog_at && new Date(plan.watchdog_at).getTime() < Date.now()) {
@@ -1711,13 +1711,14 @@ Deno.serve(async (req) => {
     }
     await releaseClaim(updates);
     if (updates.status === "completed") {
-      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     }
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
   if (idx >= steps.length) {
     await releaseClaim({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() });
+    await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     return json({ status: "completed" });
   }
 
@@ -1815,7 +1816,7 @@ Deno.serve(async (req) => {
     }
     await releaseClaim(updates);
     if (updates.status === "completed") {
-      await reportTerminal(`✅ All done. ${updates.result_summary ?? ""}`.trim());
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
     }
     return json({ status: updates.status ?? "running", advanced_to: nextIdx });
   } catch (err: any) {
@@ -1829,7 +1830,7 @@ Deno.serve(async (req) => {
       error_lovable_prompt: lovablePrompt,
       completed_at: new Date().toISOString(),
     });
-    await reportTerminal(`⚠️ Step ${idx + 1} failed: ${step.error}`);
+    await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", `Step ${idx + 1} (${step.description ?? step.tool}) failed: ${step.error}`));
     return json({ status: "failed", error: step.error });
   }
 });
