@@ -875,7 +875,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
-              {enabledCapCount === 6 ? "All capabilities on" : `${enabledCapCount}/6 capabilities on`}
+              {enabledCapCount === 0
+                ? "Text reply"
+                : CAP_LABELS.filter(({ key }) => caps[key])
+                    .map(({ label }) => label)
+                    .join(" · ")}
             </div>
 
             <div className="flex items-end gap-2">
