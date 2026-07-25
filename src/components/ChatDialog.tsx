@@ -190,6 +190,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  /** One-shot capability checkboxes — reset after every send / thread switch. */
+  const [pendingCaps, setPendingCaps] = useState<ChatCapabilities>(NO_CAPS);
   const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set());
   const markBusy = (id: string) =>
     setBusyThreadIds((cur) => {
