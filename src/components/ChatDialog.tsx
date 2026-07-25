@@ -345,6 +345,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [activeThreadId]);
 
+  // Capability checkboxes never carry across threads or dialog sessions.
+  useEffect(() => {
+    setPendingCaps(NO_CAPS);
+  }, [activeThreadId, open]);
+
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
     enabled: !!activeThreadId && open,
