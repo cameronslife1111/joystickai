@@ -1449,6 +1449,16 @@ function AppPage() {
     setEditText("");
   }, []);
 
+  // Never leave the mic open once the editor closes.
+  useEffect(() => {
+    if (!editing) {
+      editCaretRef.current = null;
+      editDictation.cancel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+
 
   const cancelCompose = useCallback(() => {
     setComposing(false);
