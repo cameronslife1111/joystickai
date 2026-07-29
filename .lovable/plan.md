@@ -1,71 +1,28 @@
 ## Goal
 
-Turn the media gallery into a folder-first experience: opening the gallery shows a vertical list of folders, and media lives inside them. An item can belong to several folders at once (one file, one entry — no storage duplication), and everything that works today keeps working.
+Add a floating 🔴 / ⬛️ voice-dictation button while the full-document editor is open (orb press → text editor). Transcribed text lands exactly where the cursor was when recording started.
 
-## Data model
+## Placement
 
-Two new tables (both user-scoped with RLS + grants):
+A fixed-position button in `src/routes/_authenticated/app.tsx`, rendered only when `editing` is true:
 
-- `media_folders` — `id`, `user_id`, `name`, `sort_index`, `created_at`, `updated_at`
-- `media_folder_items` — `folder_id`, `asset_id`, `added_at`, unique on (folder_id, asset_id), cascade delete
+- `position: fixed`, `right: ~4vw`, `bottom: 60%` of the viewport height (using `svh` so mobile browser chrome doesn't shift it).
+- High `z-index` so it floats above the textarea, and stays visible while the mobile keyboard is open (fixed + `svh` keeps it clear of the keyboard).
+- Same visual treatment as the existing New Idea dictation button: round translucent pill with the aurora glow, showing 🔴 (idle), ⬛️ (recording), … (transcribing).
 
-Nothing changes on `media_assets`, so plans, generation edge functions, the media picker, document icons, and polling all keep working untouched. "Unsorted" is a virtual folder = assets with no rows in `media_folder_items`.
+## Behavior
 
-## Main view (folders)
-
-Opening `/media` now lands on the folders screen:
-
-```text
-┌──────────────────────────────┐
-│ ←   Media Gallery      ＋ ⋮  │
-├──────────────────────────────┤
-│ [ 🗂 All Media        128 ]  │
-│ [ 🗂 Unsorted          14 ]  │
-│ ──────────────────────────── │
-│ [ ▦▦▦  Inspiration     42 ]  │
-│ [ ▦▦▦  Client Work     31 ]  │
-│ [ ▦▦▦  Voice Notes      9 ]  │
-│ ──────────────────────────── │
-│ + New folder                 │
-└──────────────────────────────┘
-```
-
-- Vertically stacked rows, comfortable tap targets, each with a 3-thumbnail preview strip, item count, and a ⋮ menu (Rename, Reorder up/down, Delete folder).
-- Deleting a folder never deletes media — it only unfiles it (confirm dialog states this).
-- Inline rename via a small dialog, same styling as the existing rename sheet.
-- Two pinned rows at top: **All Media** (current behavior, everything) and **Unsorted**.
-- Desktop: the same list, capped to a readable max width and centered; two columns at `lg`.
-
-## Inside a folder
-
-Tapping a folder opens the existing grid UI, unchanged in behavior (viewer, long-press sheet, regenerate/remix/i2v/v2v, download-all, multi-select, filter chips, realtime, stuck-item handling). Additions:
-
-- Header shows the folder name with a back arrow to the folders view.
-- Filter chips (All/Images/Videos/Audio) now scope within the folder.
-- Download-all downloads the folder's contents.
-
-## Moving and duplicating
-
-Multi-select mode gains two actions next to Delete:
-
-- **Move to…** — removes from the current folder, adds to the chosen one.
-- **Add to…** — keeps it here *and* adds it to the chosen folder (this is the "duplicate" you asked for: same item, appears in both).
-
-Both open a folder chooser sheet that also has "＋ New folder" inline. The single-item long-press sheet gets the same two actions plus a small row of chips showing which folders the item currently lives in (tap a chip to unfile).
-
-From **All Media** / **Unsorted**, "Move to…" behaves as "file into".
-
-## Where new media lands
-
-Per your answer: if you're inside a folder when you upload or generate, the new item is filed into that folder automatically; otherwise it goes to Unsorted. Uploads file immediately after insert. For generated media (image/video/audio dialogs), the client files the new asset into the active folder once its row id is known; anything created outside the gallery (plans, Orby) stays Unsorted.
-
-## Look and feel
-
-Keeps the current aurora/dark aesthetic and design tokens — no new color literals. Folder rows use the existing rounded card + border treatment, with a gradient fallback tile when a folder has no visual preview yet. Fully touch-friendly on mobile (44px+ targets, safe-area padding preserved) and comfortable on desktop.
+1. On `pointerdown` the button calls `preventDefault()` so the textarea never blurs and the mobile keyboard stays open.
+2. First tap: capture the current caret position (`selectionStart` / `selectionEnd` of `editTextareaRef`) into a ref, then start recording via the existing `useVoiceDictation` hook (OpenAI Whisper through `transcribeAudio`).
+3. Second tap: stop, transcribe, and splice the returned text into `editText` at the saved caret offset — replacing the selection if there was one, and adding a single space before/after only when needed so words don't run together.
+4. After insertion, restore focus to the textarea and place the caret at the end of the inserted text, so the user can keep typing or record again (a second recording starts from the new caret).
+5. If the caret was never placed (no saved position), fall back to appending at the end of the document text.
 
 ## Technical notes
 
-- New migration for the two tables + GRANTs + RLS policies scoped to `auth.uid()`.
-- `src/routes/_authenticated/media.tsx` is split: a `MediaFoldersView` component, the existing grid extracted to `MediaGridView`, plus a shared `FolderPickerSheet` component. The route holds which view is active (folder id in route search param so back/refresh works).
-- Folder membership fetched as one query keyed `["media_folders"]` / `["media_folder_items"]`, joined client-side against the existing `["media_assets"]` cache — no change to the asset query, so realtime and optimistic updates keep working.
-- `MediaGalleryPicker` (used by chat/plans) gets an optional folder filter row later; it keeps working as-is in this change.
+- Reuses `useVoiceDictation` from `src/lib/use-voice-dictation.ts` — no new server code; `transcribeAudio` in `src/lib/whisper.functions.ts` already handles the Whisper call.
+- The hook's `onText` callback needs live access to the latest `editText`; it will use a functional `setEditText(prev => …)` update to avoid stale state.
+- Existing edit-mode navigation guards (`editingRef`) are untouched — the button is inside the editor UI only and stops event propagation so no orb gestures fire.
+- Recording is cancelled automatically if the editor closes (Done / Jump To / Escape) so the mic is never left open.
+
+Only `src/routes/_authenticated/app.tsx` changes.

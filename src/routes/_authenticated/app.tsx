@@ -177,6 +177,34 @@ function AppPage() {
       setComposeText((prev) => appendTranscript(prev, text));
     }, []),
   );
+
+  // 🔴 / ⬛️ dictation for the full-document editor — inserts the transcript at
+  // the caret position captured when recording started.
+  const editCaretRef = useRef<{ start: number; end: number } | null>(null);
+  const editDictation = useVoiceDictation(
+    useCallback((text: string) => {
+      setEditText((prev) => {
+        const sel = editCaretRef.current;
+        const start = Math.min(sel?.start ?? prev.length, prev.length);
+        const end = Math.min(Math.max(sel?.end ?? start, start), prev.length);
+        const before = prev.slice(0, start);
+        const after = prev.slice(end);
+        const needsLead = before.length > 0 && !/\s$/.test(before);
+        const needsTrail = after.length > 0 && !/^\s/.test(after);
+        const insert = `${needsLead ? " " : ""}${text}${needsTrail ? " " : ""}`;
+        const caret = start + insert.length;
+        editCaretRef.current = { start: caret, end: caret };
+        requestAnimationFrame(() => {
+          const el = editTextareaRef.current;
+          if (!el) return;
+          el.focus();
+          try { el.setSelectionRange(caret, caret); } catch {}
+        });
+        return before + insert + after;
+      });
+    }, []),
+  );
+
   const callAi = useServerFn(aiContinue);
   const transcribe = useServerFn(transcribeAudio);
   const sendChat = useServerFn(sendChatMessage);
@@ -1421,6 +1449,16 @@ function AppPage() {
     setEditText("");
   }, []);
 
+  // Never leave the mic open once the editor closes.
+  useEffect(() => {
+    if (!editing) {
+      editCaretRef.current = null;
+      editDictation.cancel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+
 
   const cancelCompose = useCallback(() => {
     setComposing(false);
@@ -2347,6 +2385,34 @@ function AppPage() {
           </div>
         </div>
       )}
+
+      {/* Floating dictation button while the document editor is open. */}
+      {editing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            // Keep the textarea focused (and the mobile keyboard open).
+            e.preventDefault();
+            e.stopPropagation();
+            const el = editTextareaRef.current;
+            if (el && !editDictation.recording) {
+              editCaretRef.current = {
+                start: el.selectionStart ?? el.value.length,
+                end: el.selectionEnd ?? el.selectionStart ?? el.value.length,
+              };
+            }
+            if (!editDictation.transcribing) void editDictation.toggle();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={editDictation.transcribing}
+          aria-label={editDictation.recording ? "Stop recording" : "Dictate at cursor"}
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
+          style={{ bottom: "60svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          {editDictation.transcribing ? "…" : editDictation.recording ? "⬛️" : "🔴"}
+        </button>
+      )}
+
 
       <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
