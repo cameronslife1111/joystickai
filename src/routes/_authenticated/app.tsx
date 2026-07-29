@@ -2386,6 +2386,34 @@ function AppPage() {
         </div>
       )}
 
+      {/* Floating dictation button while the document editor is open. */}
+      {editing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            // Keep the textarea focused (and the mobile keyboard open).
+            e.preventDefault();
+            e.stopPropagation();
+            const el = editTextareaRef.current;
+            if (el && !editDictation.recording) {
+              editCaretRef.current = {
+                start: el.selectionStart ?? el.value.length,
+                end: el.selectionEnd ?? el.selectionStart ?? el.value.length,
+              };
+            }
+            if (!editDictation.transcribing) void editDictation.toggle();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={editDictation.transcribing}
+          aria-label={editDictation.recording ? "Stop recording" : "Dictate at cursor"}
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
+          style={{ bottom: "60svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          {editDictation.transcribing ? "…" : editDictation.recording ? "⬛️" : "🔴"}
+        </button>
+      )}
+
+
       <section className="relative flex shrink-0 items-center justify-center pb-4">
         <div
           className={`orb-stage${recording ? " orb-recording" : ""}`}
