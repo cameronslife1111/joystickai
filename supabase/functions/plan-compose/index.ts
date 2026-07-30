@@ -223,6 +223,7 @@ Deno.serve(async (req) => {
   if (plan.status !== "composing") return json({ error: `plan is ${plan.status}, not composing` }, 409);
 
 
+  const run = async (): Promise<Response> => {
   try {
     // ---- Build a WORKSPACE SNAPSHOT so the planner can resolve doc/media
     //      references naturally without having to call find_* tools or guess
