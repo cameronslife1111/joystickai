@@ -12,7 +12,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { transcribeAudio } from "@/lib/whisper.functions";
-import { voiceEditDocument } from "@/lib/voice-edit.functions";
+import { editSentence } from "@/lib/orby-call-docs.functions";
 import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
@@ -1132,19 +1132,18 @@ function AppPage() {
     editingRef.current = true;
   }, [editing, currentIdx, sentences, activeDocId]);
 
-  // Voice-driven document editor: transcribe the clip, send it + current-doc
-  // context to the AI, apply structured edits directly to this document, then
-  // jump the view to the affected sentence and resume speech.
-  const voiceEdit = useServerFn(voiceEditDocument);
-  const dispatchVoiceEdit = useCallback(
+  // Voice sentence replace: transcribe the clip and overwrite the ONE sentence
+  // the user was on when they started recording — nothing else.
+  const replaceSentence = useServerFn(editSentence);
+  const voiceTargetRef = useRef<{ docId: string; index: number } | null>(null);
+  const dispatchVoiceReplace = useCallback(
     async (audioBlob: Blob) => {
+      const target = voiceTargetRef.current;
+      voiceTargetRef.current = null;
+      if (!target) return;
       const listeningId = `voice-${Date.now()}`;
       toast.loading("Transcribing…", { id: listeningId });
       try {
-        if (!activeDocId) {
-          toast.error("Open a document first", { id: listeningId });
-          return;
-        }
         const audioBase64 = await blobToBase64(audioBlob);
         const { text } = await transcribe({
           data: { audioBase64, mimeType: "audio/wav" },
@@ -1155,39 +1154,27 @@ function AppPage() {
           return;
         }
 
-        toast.loading("Editing document…", { id: listeningId });
-
-        const result = await voiceEdit({
+        const result = await replaceSentence({
           data: {
-            documentId: activeDocId,
-            transcript,
-            currentSentenceIndex: currentIdx,
+            documentId: target.docId,
+            sentenceIndex: target.index,
+            newText: transcript,
           },
         });
 
-        await qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+        await qc.invalidateQueries({ queryKey: ["sentences", target.docId] });
 
-        if (result.appliedCount > 0) {
-          await jumpTo(result.focusIndex);
-          toast.success(
-            `✅ Updated ${result.appliedCount} sentence${result.appliedCount === 1 ? "" : "s"}`,
-            { id: listeningId, duration: 3000 },
-          );
+        if (result?.updated) {
+          await jumpTo(result.sentenceIndex ?? target.index);
+          toast.success("✅ Sentence replaced", { id: listeningId, duration: 2500 });
         } else {
-          toast(
-            transcript.length > 80 ? transcript.slice(0, 77) + "…" : `"${transcript}"`,
-            {
-              id: listeningId,
-              description: "No edits recognized — try naming a sentence or word.",
-              duration: 4500,
-            },
-          );
+          toast.error("Couldn't find that sentence", { id: listeningId });
         }
       } catch (err: any) {
-        toast.error(err?.message ?? "Voice edit failed", { id: listeningId });
+        toast.error(err?.message ?? "Voice replace failed", { id: listeningId });
       }
     },
-    [activeDocId, currentIdx, transcribe, voiceEdit, qc, jumpTo],
+    [transcribe, replaceSentence, qc, jumpTo],
   );
 
   const onLongPressStart = useCallback(() => {
@@ -1202,12 +1189,18 @@ function AppPage() {
       void (async () => {
         const blob = await rec.stop();
         if (durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceEdit(blob);
+        void dispatchVoiceReplace(blob);
       })();
       return;
     }
-    // Otherwise start a new recording. Cancel any in-flight speech so the mic
-    // doesn't pick up the orb's own voice.
+    // Otherwise start a new recording. Snapshot the doc + sentence NOW so any
+    // navigation while recording can't retarget the replace.
+    if (!activeDocId) {
+      toast.error("Open a document first");
+      return;
+    }
+    voiceTargetRef.current = { docId: activeDocId, index: currentIdx };
+    // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -1221,6 +1214,7 @@ function AppPage() {
         setRecording(false);
         recordingRef.current = false;
         recorderRef.current = null;
+        voiceTargetRef.current = null;
         toast.error(
           err?.name === "NotAllowedError"
             ? "Microphone access denied"
@@ -1228,7 +1222,7 @@ function AppPage() {
         );
       }
     })();
-  }, [editing, dispatchVoiceEdit]);
+  }, [editing, activeDocId, currentIdx, dispatchVoiceReplace]);
 
   // Release no longer stops recording — stop is triggered by a second long-press.
   const onLongPressEnd = useCallback(() => {}, []);
