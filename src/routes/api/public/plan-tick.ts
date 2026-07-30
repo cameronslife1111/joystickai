@@ -148,17 +148,33 @@ export const Route = createFileRoute("/api/public/plan-tick")({
           if (picked.length >= MAX_PLANS_PER_TICK) break;
         }
 
+        // Second pass: plans stuck in "composing" (the composer call died or
+        // never ran). This is what makes scheduled plans complete with the web
+        // app closed.
+        const composeCutoff = new Date(Date.now() - COMPOSE_STALE_MS).toISOString();
+        const { data: stalledComposing } = await supabaseAdmin
+          .from("plans")
+          .select("id, user_id, compose_attempts")
+          .eq("status", "composing")
+          .lt("created_at", composeCutoff)
+          .or(`compose_claim_at.is.null,compose_claim_at.lt.${composeCutoff}`)
+          .order("created_at", { ascending: true })
+          .limit(MAX_COMPOSE_PER_TICK);
+
         // Advance plans in parallel — each call has its own atomic claim guard.
-        const results = await Promise.all(
-          picked.map((p) => advancePlan(p.id, p.user_id)),
-        );
+        const [results, composeResults] = await Promise.all([
+          Promise.all(picked.map((p) => advancePlan(p.id, p.user_id))),
+          Promise.all((stalledComposing ?? []).map((p) => recomposePlan(p as any))),
+        ]);
 
         return Response.json({
           ok: true,
           considered: candidates?.length ?? 0,
           advanced: picked.length,
           results,
+          recomposed: composeResults,
         });
+
       },
       // Allow GET for ad-hoc browser/health checks (returns counts only).
       GET: async () => {
