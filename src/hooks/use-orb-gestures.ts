@@ -133,6 +133,8 @@ export function useOrbGestures(
       if (isLongPressing) {
         cbRef.current.onLongPressEnd?.();
         isLongPressing = false;
+      } else {
+        cbRef.current.onPressAbort?.();
       }
     };
 
