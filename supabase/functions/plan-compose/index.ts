@@ -223,6 +223,7 @@ Deno.serve(async (req) => {
   if (plan.status !== "composing") return json({ error: `plan is ${plan.status}, not composing` }, 409);
 
 
+  const run = async (): Promise<Response> => {
   try {
     // ---- Build a WORKSPACE SNAPSHOT so the planner can resolve doc/media
     //      references naturally without having to call find_* tools or guess
@@ -766,4 +767,21 @@ Deno.serve(async (req) => {
       .neq("status", "cancelled");
     return json({ error: String(err?.message ?? err) }, 500);
   }
+  };
+
+  // Internal callers (the scheduler / plan-tick cron) run in a short-lived
+  // worker request that gets torn down as soon as it returns. Composing takes
+  // tens of seconds, so for those callers we ack immediately and finish the
+  // work in the edge runtime's background task — that's what lets scheduled
+  // plans compose and run with the web app closed.
+  if (isInternal) {
+    // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime.
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(run().catch((err) => console.error("compose background failed", err)));
+      return json({ ok: true, background: true });
+    }
+  }
+
+  return await run();
 });

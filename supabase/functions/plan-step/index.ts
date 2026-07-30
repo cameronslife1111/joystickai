@@ -1223,7 +1223,9 @@ const TOOL_HANDLERS: Record<string, any> = {
   async send_chat_message(args, { user_id, admin, thread_id, plan_id }) {
     const text = String(args.text ?? "").trim();
     if (!text) throw new Error("send_chat_message requires text");
-    if (!thread_id) throw new Error("send_chat_message: plan has no chat thread");
+    // Scheduled plans run with no chat thread (the app may be closed). Posting
+    // a chat update is optional there — skip instead of failing the plan.
+    if (!thread_id) return { posted: false, skipped: "no chat thread" };
     const { error } = await admin.from("chat_messages").insert({
       user_id,
       thread_id,
@@ -1239,7 +1241,9 @@ const TOOL_HANDLERS: Record<string, any> = {
   async ask_user(args, { thread_id }) {
     const question = String(args.question ?? "").trim();
     if (!question) throw new Error("ask_user requires question");
-    if (!thread_id) throw new Error("ask_user: plan has no chat thread");
+    // No chat thread (scheduled run with the app closed) — there is nobody to
+    // ask, so continue rather than stalling the plan forever.
+    if (!thread_id) return { asked: false, skipped: "no chat thread" };
     // Sentinel — the main runner handles the pause/insert; we just return it.
     return { __ask_user: { question, context: String(args.context ?? "").trim() } };
   },

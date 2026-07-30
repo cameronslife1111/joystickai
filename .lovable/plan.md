@@ -1,28 +1,44 @@
-## Goal
+## What's actually happening
 
-Add a floating 🔴 / ⬛️ voice-dictation button while the full-document editor is open (orb press → text editor). Transcribed text lands exactly where the cursor was when recording started.
+I checked the database. The scheduling side is fine:
 
-## Placement
+- Both cron jobs are active: `orby-plan-scheduler-tick` (every minute) and `orby-plan-tick` (every 10s).
+- The schedule fired correctly on 07-27, 07-28 and 07-29 — a plan row was created at exactly 09:00:00 each day, with the app closed.
 
-A fixed-position button in `src/routes/_authenticated/app.tsx`, rendered only when `editing` is true:
+So the trigger works. The break is the next hop: every one of those scheduled plans is still `status = 'composing'`, `total_steps = 0`, no error. The plan was never written by the composer, so the step-runner never had anything to run.
 
-- `position: fixed`, `right: ~4vw`, `bottom: 60%` of the viewport height (using `svh` so mobile browser chrome doesn't shift it).
-- High `z-index` so it floats above the textarea, and stays visible while the mobile keyboard is open (fixed + `svh` keeps it clear of the keyboard).
-- Same visual treatment as the existing New Idea dictation button: round translucent pill with the aurora glow, showing 🔴 (idle), ⬛️ (recording), … (transcribing).
+Cause: the scheduler endpoint kicks off the composer with a fire-and-forget `void fetch(...)` and then immediately returns its HTTP response. In the serverless worker runtime, pending work that isn't awaited is cancelled the moment the response is returned — so the composer call is torn down before the LLM (which takes tens of seconds) finishes. Nothing ever moves the plan out of `composing`, and nothing retries it, so it sits there forever. When the app was open, client-side activity happened to keep things moving; closed, there's no second chance.
 
-## Behavior
+## The fix
 
-1. On `pointerdown` the button calls `preventDefault()` so the textarea never blurs and the mobile keyboard stays open.
-2. First tap: capture the current caret position (`selectionStart` / `selectionEnd` of `editTextareaRef`) into a ref, then start recording via the existing `useVoiceDictation` hook (OpenAI Whisper through `transcribeAudio`).
-3. Second tap: stop, transcribe, and splice the returned text into `editText` at the saved caret offset — replacing the selection if there was one, and adding a single space before/after only when needed so words don't run together.
-4. After insertion, restore focus to the textarea and place the caret at the end of the inserted text, so the user can keep typing or record again (a second recording starts from the new caret).
-5. If the caret was never placed (no saved position), fall back to appending at the end of the document text.
+**1. Don't fire-and-forget the composer**
+
+In `src/routes/api/public/plan-scheduler-tick.ts`, stop using `void fetch`. Await the compose invocation (with a bounded timeout, ~25s) so the request is actually issued and given a real chance to complete. Because the schedule's `next_run_at` is already advanced *before* compose is called, a slow or failed compose can never cause duplicate firing.
+
+**2. Add a composer watchdog to the 10s tick (the real durability fix)**
+
+`src/routes/api/public/plan-tick.ts` currently only picks up plans in `approved` / `running` / `awaiting_media`. Extend it with a second pass:
+
+- Find plans stuck in `composing` for more than ~2 minutes.
+- Re-invoke `plan-compose` for them (same service-role + `internal_secret` call already used for `plan-step`), guarded by a claim timestamp so parallel ticks don't double-compose.
+- After 3 failed attempts (or ~15 minutes stuck), mark the plan `failed` with a clear message like "Planning timed out — tap Fix & Retry" so it surfaces in the AI Plans page instead of hanging on "Composing" forever.
+
+Also make `plan-compose` tolerant of being retried on a plan it already partially handled (it already 409s on non-`composing` status, which is the correct no-op).
+
+**3. Small schema addition**
+
+Migration adding two columns to `plans`:
+- `compose_claim_at timestamptz` — claim guard so only one tick composes a given plan.
+- `compose_attempts int not null default 0` — retry budget.
+
+No new tables, no RLS/grant changes needed.
+
+**4. Clean up the stuck rows**
+
+Reset the two currently-stuck `composing` plans (07-28 and 07-29) so the new watchdog picks them up on the next tick, or mark them failed — I'll reset them so you can see the recovery path actually work.
 
 ## Technical notes
 
-- Reuses `useVoiceDictation` from `src/lib/use-voice-dictation.ts` — no new server code; `transcribeAudio` in `src/lib/whisper.functions.ts` already handles the Whisper call.
-- The hook's `onText` callback needs live access to the latest `editText`; it will use a functional `setEditText(prev => …)` update to avoid stale state.
-- Existing edit-mode navigation guards (`editingRef`) are untouched — the button is inside the editor UI only and stops event propagation so no orb gestures fire.
-- Recording is cancelled automatically if the editor closes (Done / Jump To / Escape) so the mic is never left open.
-
-Only `src/routes/_authenticated/app.tsx` changes.
+- Files touched: `src/routes/api/public/plan-scheduler-tick.ts`, `src/routes/api/public/plan-tick.ts`, plus one migration.
+- The 10s `plan-tick` cron becomes the single source of truth for *both* composing and running plans, so any plan that stalls at any stage self-heals within ~2 minutes with the app closed.
+- Per-tick fairness caps stay as they are; the composing pass gets its own small cap (max 3 recomposes per tick) so one tick stays well inside the request timeout.
