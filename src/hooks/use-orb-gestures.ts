@@ -67,6 +67,7 @@ export function useOrbGestures(
       startY = e.clientY;
       startTime = Date.now();
       isLongPressing = false;
+      cbRef.current.onPressStart?.();
 
       longPressTimer = setTimeout(() => {
         isLongPressing = true;
