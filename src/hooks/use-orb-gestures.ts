@@ -96,6 +96,7 @@ export function useOrbGestures(
         isLongPressing = false;
         return;
       }
+      cbRef.current.onPressAbort?.();
 
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
