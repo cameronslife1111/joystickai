@@ -1241,7 +1241,9 @@ const TOOL_HANDLERS: Record<string, any> = {
   async ask_user(args, { thread_id }) {
     const question = String(args.question ?? "").trim();
     if (!question) throw new Error("ask_user requires question");
-    if (!thread_id) throw new Error("ask_user: plan has no chat thread");
+    // No chat thread (scheduled run with the app closed) — there is nobody to
+    // ask, so continue rather than stalling the plan forever.
+    if (!thread_id) return { asked: false, skipped: "no chat thread" };
     // Sentinel — the main runner handles the pause/insert; we just return it.
     return { __ask_user: { question, context: String(args.context ?? "").trim() } };
   },
