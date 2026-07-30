@@ -393,6 +393,8 @@ export type Database = {
           awaiting_count: number
           awaiting_since: string | null
           completed_at: string | null
+          compose_attempts: number
+          compose_claim_at: string | null
           consecutive_no_progress: number
           created_at: string
           current_step: number
@@ -425,6 +427,8 @@ export type Database = {
           awaiting_count?: number
           awaiting_since?: string | null
           completed_at?: string | null
+          compose_attempts?: number
+          compose_claim_at?: string | null
           consecutive_no_progress?: number
           created_at?: string
           current_step?: number
@@ -457,6 +461,8 @@ export type Database = {
           awaiting_count?: number
           awaiting_since?: string | null
           completed_at?: string | null
+          compose_attempts?: number
+          compose_claim_at?: string | null
           consecutive_no_progress?: number
           created_at?: string
           current_step?: number
