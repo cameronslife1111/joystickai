@@ -1132,11 +1132,11 @@ function AppPage() {
     editingRef.current = true;
   }, [editing, currentIdx, sentences, activeDocId]);
 
-  // Voice sentence replace: transcribe the clip and overwrite the ONE sentence
-  // the user was on when they started recording — nothing else.
-  const replaceSentence = useServerFn(editSentence);
+  // Voice dictation: transcribe the clip and insert it as a NEW sentence right
+  // after the sentence the user was on when they started recording.
+  const insertAfter = useServerFn(insertSentenceAfter);
   const voiceTargetRef = useRef<{ docId: string; index: number } | null>(null);
-  const dispatchVoiceReplace = useCallback(
+  const dispatchVoiceInsert = useCallback(
     async (audioBlob: Blob) => {
       const target = voiceTargetRef.current;
       voiceTargetRef.current = null;
@@ -1154,48 +1154,79 @@ function AppPage() {
           return;
         }
 
-        const result = await replaceSentence({
+        const result = await insertAfter({
           data: {
             documentId: target.docId,
             sentenceIndex: target.index,
-            newText: transcript,
+            text: transcript,
           },
         });
 
         await qc.invalidateQueries({ queryKey: ["sentences", target.docId] });
 
-        if (result?.updated) {
-          await jumpTo(result.sentenceIndex ?? target.index);
-          toast.success("✅ Sentence replaced", { id: listeningId, duration: 2500 });
+        if (result?.inserted) {
+          await jumpTo(result.sentenceIndex ?? target.index + 1);
+          toast.success("✅ Sentence added", { id: listeningId, duration: 2500 });
         } else {
-          toast.error("Couldn't find that sentence", { id: listeningId });
+          toast.error("Couldn't add that sentence", { id: listeningId });
         }
       } catch (err: any) {
-        toast.error(err?.message ?? "Voice replace failed", { id: listeningId });
+        toast.error(err?.message ?? "Voice insert failed", { id: listeningId });
       }
     },
-    [transcribe, replaceSentence, qc, jumpTo],
+    [transcribe, insertAfter, qc, jumpTo],
   );
+
+  // Pre-armed recorder: the mic starts warming up on pointerdown so no speech
+  // is lost while getUserMedia / AudioContext spin up.
+  const armedRef = useRef<Promise<PcmRecorder> | null>(null);
+
+  const armMic = useCallback(() => {
+    if (editing || recordingRef.current || recorderRef.current) return;
+    if (armedRef.current) return;
+    armedRef.current = startPcmRecorder();
+    // Swallow rejection here; the long-press path surfaces the real error.
+    void armedRef.current.catch(() => {});
+  }, [editing]);
+
+  const disarmMic = useCallback(() => {
+    const armed = armedRef.current;
+    if (!armed || recordingRef.current || recorderRef.current) return;
+    armedRef.current = null;
+    void armed.then((r) => r.cancel()).catch(() => {});
+  }, []);
+
+  const stopVoiceAndDispatch = useCallback(() => {
+    const rec = recorderRef.current;
+    if (!rec) return false;
+    recorderRef.current = null;
+    setRecording(false);
+    recordingRef.current = false;
+    void (async () => {
+      const samples = rec.sampleCount();
+      const blob = await rec.stop();
+      // ~0.3s of audio at 16 kHz minimum, measured on captured samples.
+      if (samples < 4000 || blob.size < 4096) {
+        voiceTargetRef.current = null;
+        toast.error("That recording was too short — try again");
+        return;
+      }
+      void dispatchVoiceInsert(blob);
+    })();
+    return true;
+  }, [dispatchVoiceInsert]);
 
   const onLongPressStart = useCallback(() => {
     if (editing) return;
     // Toggle: if already recording, this long-press stops and dispatches.
     if (recorderRef.current) {
-      const rec = recorderRef.current;
-      const durationMs = Date.now() - recordStartMsRef.current;
-      recorderRef.current = null;
-      setRecording(false);
-      recordingRef.current = false;
-      void (async () => {
-        const blob = await rec.stop();
-        if (durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceReplace(blob);
-      })();
+      stopVoiceAndDispatch();
       return;
     }
     // Otherwise start a new recording. Snapshot the doc + sentence NOW so any
-    // navigation while recording can't retarget the replace.
+    // navigation while recording can't retarget the insert.
     if (!activeDocId) {
+      disarmMic();
       toast.error("Open a document first");
       return;
     }
@@ -1207,9 +1238,18 @@ function AppPage() {
     setRecording(true);
     recordingRef.current = true;
     recordStartMsRef.current = Date.now();
+    const pending = armedRef.current ?? startPcmRecorder();
+    armedRef.current = null;
     void (async () => {
       try {
-        recorderRef.current = await startPcmRecorder();
+        const rec = await pending;
+        // Keep the pre-roll captured while the mic was warming up.
+        rec.markStart();
+        if (!recordingRef.current) {
+          rec.cancel();
+          return;
+        }
+        recorderRef.current = rec;
       } catch (err: any) {
         setRecording(false);
         recordingRef.current = false;
@@ -1222,17 +1262,34 @@ function AppPage() {
         );
       }
     })();
-  }, [editing, activeDocId, currentIdx, dispatchVoiceReplace]);
+  }, [editing, activeDocId, currentIdx, stopVoiceAndDispatch, disarmMic]);
 
-  // Release no longer stops recording — stop is triggered by a second long-press.
+  // Release no longer stops recording — stop is triggered by a tap (or a
+  // second long-press).
   const onLongPressEnd = useCallback(() => {}, []);
 
+  // A single tap while listening stops the recording instead of opening the
+  // full-document editor.
+  const onOrbTap = useCallback(() => {
+    if (recordingRef.current || recorderRef.current) {
+      // Recorder may still be warming up — mark that we want to stop.
+      if (!stopVoiceAndDispatch()) {
+        recordingRef.current = false;
+        setRecording(false);
+        voiceTargetRef.current = null;
+      }
+      return;
+    }
+    onDoubleTap();
+  }, [stopVoiceAndDispatch, onDoubleTap]);
 
   useOrbGestures(
     orbRef,
     {
-      onTap: onDoubleTap,
-      onDoubleTap,
+      onTap: onOrbTap,
+      onDoubleTap: onOrbTap,
+      onPressStart: armMic,
+      onPressAbort: disarmMic,
       onLongPressStart,
       onLongPressEnd,
       onSwipe: (dir) => {
@@ -1247,6 +1304,7 @@ function AppPage() {
     },
     { swipeThreshold: 38, moveCancelPx: 16, rebindKey: docIconUrl ?? "orb" },
   );
+
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
   useEffect(() => {
