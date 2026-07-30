@@ -1223,7 +1223,9 @@ const TOOL_HANDLERS: Record<string, any> = {
   async send_chat_message(args, { user_id, admin, thread_id, plan_id }) {
     const text = String(args.text ?? "").trim();
     if (!text) throw new Error("send_chat_message requires text");
-    if (!thread_id) throw new Error("send_chat_message: plan has no chat thread");
+    // Scheduled plans run with no chat thread (the app may be closed). Posting
+    // a chat update is optional there — skip instead of failing the plan.
+    if (!thread_id) return { posted: false, skipped: "no chat thread" };
     const { error } = await admin.from("chat_messages").insert({
       user_id,
       thread_id,
