@@ -6,9 +6,19 @@
 export type PcmRecorder = {
   stop: () => Promise<Blob>;
   cancel: () => void;
+  /**
+   * Mark the "official" start of the clip. Everything captured before this
+   * (up to PRE_ROLL_SECONDS) is kept, so speech that begins while the mic is
+   * still warming up isn't lost.
+   */
+  markStart: () => void;
+  /** Number of PCM samples captured so far (kept portion). */
+  sampleCount: () => number;
 };
 
 const TARGET_RATE = 16000;
+/** Audio retained from before markStart() — covers mic/AudioContext warm-up. */
+const PRE_ROLL_SECONDS = 2;
 
 function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
