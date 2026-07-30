@@ -93,25 +93,34 @@ async function fireSchedule(
     })
     .eq("id", schedule.id);
 
-  // Fire-and-forget the composer. plan-compose auto-approves scheduled plans,
-  // and the plan-tick cron executes the steps once approved. We pass
-  // internal_secret + body.user_id so the function accepts the service-role call.
+  // Invoke the composer. plan-compose auto-approves scheduled plans, and the
+  // plan-tick cron executes the steps once approved. We MUST await this — in
+  // the worker runtime any un-awaited fetch is cancelled the moment we return
+  // a response, which previously left scheduled plans stuck in "composing"
+  // forever whenever the app wasn't open. If it times out, the composing
+  // watchdog in /api/public/plan-tick retries it.
   const SUPABASE_URL = process.env.SUPABASE_URL!;
   const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const PLAN_TICK_SECRET = process.env.PLAN_TICK_SECRET!;
-  void fetch(`${SUPABASE_URL}/functions/v1/plan-compose`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      apikey: SERVICE_ROLE_KEY,
-    },
-    body: JSON.stringify({
-      plan_id: plan.id,
-      user_id: userId,
-      internal_secret: PLAN_TICK_SECRET,
-    }),
-  }).catch((err) => console.error("plan-compose invocation failed", err));
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/plan-compose`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({
+        plan_id: plan.id,
+        user_id: userId,
+        internal_secret: PLAN_TICK_SECRET,
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+  } catch (err) {
+    console.error("plan-compose invocation failed", err);
+  }
+
 
   return { id: schedule.id, outcome: "fired", plan_id: plan.id };
 }
