@@ -1189,12 +1189,18 @@ function AppPage() {
       void (async () => {
         const blob = await rec.stop();
         if (durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceEdit(blob);
+        void dispatchVoiceReplace(blob);
       })();
       return;
     }
-    // Otherwise start a new recording. Cancel any in-flight speech so the mic
-    // doesn't pick up the orb's own voice.
+    // Otherwise start a new recording. Snapshot the doc + sentence NOW so any
+    // navigation while recording can't retarget the replace.
+    if (!activeDocId) {
+      toast.error("Open a document first");
+      return;
+    }
+    voiceTargetRef.current = { docId: activeDocId, index: currentIdx };
+    // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -1208,6 +1214,7 @@ function AppPage() {
         setRecording(false);
         recordingRef.current = false;
         recorderRef.current = null;
+        voiceTargetRef.current = null;
         toast.error(
           err?.name === "NotAllowedError"
             ? "Microphone access denied"
@@ -1215,7 +1222,7 @@ function AppPage() {
         );
       }
     })();
-  }, [editing, dispatchVoiceEdit]);
+  }, [editing, activeDocId, currentIdx, dispatchVoiceReplace]);
 
   // Release no longer stops recording — stop is triggered by a second long-press.
   const onLongPressEnd = useCallback(() => {}, []);
