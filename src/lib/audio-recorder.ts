@@ -76,18 +76,35 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   const AudioCtx =
     (window as any).AudioContext || (window as any).webkitAudioContext;
   const ctx: AudioContext = new AudioCtx();
+  // iOS/Safari hand back a suspended context — no samples arrive until resumed.
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {}
+  }
   const source = ctx.createMediaStreamSource(stream);
   // ScriptProcessorNode is deprecated but universally supported; AudioWorklet
   // adds significant setup we don't need for a short push-to-talk clip.
   const processor = ctx.createScriptProcessor(4096, 1, 1);
-  const chunks: Float32Array[] = [];
+  let chunks: Float32Array[] = [];
   let cancelled = false;
+  let started = false;
+  let kept = 0;
+  const preRollSamples = Math.round(ctx.sampleRate * PRE_ROLL_SECONDS);
 
   processor.onaudioprocess = (e) => {
     if (cancelled) return;
     const ch = e.inputBuffer.getChannelData(0);
     // Copy — the underlying buffer is reused across callbacks.
     chunks.push(new Float32Array(ch));
+    kept += ch.length;
+    // Before markStart(), keep only a rolling pre-roll window.
+    if (!started) {
+      while (chunks.length > 1 && kept - chunks[0].length >= preRollSamples) {
+        kept -= chunks[0].length;
+        chunks.shift();
+      }
+    }
   };
   source.connect(processor);
   processor.connect(ctx.destination);
@@ -104,6 +121,12 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   };
 
   return {
+    markStart() {
+      started = true;
+    },
+    sampleCount() {
+      return kept;
+    },
     async stop() {
       const srcRate = ctx.sampleRate;
       teardown();
@@ -119,6 +142,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     },
     cancel() {
       cancelled = true;
+      chunks = [];
       teardown();
     },
   };
