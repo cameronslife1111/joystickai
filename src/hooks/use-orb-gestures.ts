@@ -6,6 +6,10 @@ interface OrbGestureCallbacks {
   onTap?: () => void;
   onDoubleTap?: () => void;
   onTripleTap?: () => void;
+  /** Fires immediately on pointerdown — use to pre-warm long-press work. */
+  onPressStart?: () => void;
+  /** Fires when the pointer lifts/cancels WITHOUT a long press having fired. */
+  onPressAbort?: () => void;
   onLongPressStart?: () => void;
   onLongPressEnd?: () => void;
   onSwipe?: (direction: SwipeDirection) => void;
