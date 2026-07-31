@@ -105,7 +105,10 @@ async function runWebSearch(query: string): Promise<{ ok: boolean; text: string 
             role: "system",
             content:
               "You are Orby, a helpful assistant. Answer the user's question using up-to-date web information. " +
-              "Write a clear, conversational answer. You may use light markdown (short paragraphs, occasional bold) but no inline citation markers like [1] and do not paste raw reference lists.",
+              "Write a clear, conversational answer in PLAIN TEXT ONLY: never use asterisks, underscores, backticks, '#' headings, or bullet characters. " +
+              "Use numbered lists (1. 2. 3.) only when a list truly helps, separate paragraphs with a blank line, and always use normal punctuation. Emojis are fine. " +
+              "No inline citation markers like [1] and do not paste raw reference lists.",
+
           },
           { role: "user", content: query },
         ],
