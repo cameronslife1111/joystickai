@@ -1138,7 +1138,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument]);
+  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument, openLinkedChat]);
   onSwipeRightRef.current = onSwipeRight;
 
 
