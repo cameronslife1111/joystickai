@@ -54,6 +54,8 @@ import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { toPlainText } from "@/lib/plain-text";
+
 import { StepReasoning } from "./plan/StepReasoning";
 
 interface Props {
