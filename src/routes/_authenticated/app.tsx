@@ -13,7 +13,7 @@ import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { transcribeAudio } from "@/lib/whisper.functions";
 
-import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
+import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -1171,8 +1171,15 @@ function AppPage() {
       setRecording(false);
       recordingRef.current = false;
       void (async () => {
-        const blob = await rec.stop();
-        if (durationMs < 400 || blob.size < 4096) return;
+        let blob: Blob | null = null;
+        try {
+          blob = await rec.stop();
+        } finally {
+          // Fully release the mic so iOS drops the recording indicator the
+          // moment the second long-press stops recording.
+          releaseMic();
+        }
+        if (!blob || durationMs < 400 || blob.size < 4096) return;
         void dispatchVoiceToComposer(blob);
       })();
       return;
