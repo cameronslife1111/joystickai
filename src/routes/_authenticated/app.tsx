@@ -22,7 +22,7 @@ import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Input } from "@/components/ui/input";
-import { Link as LinkIcon } from "lucide-react";
+import { Link as LinkIcon, MessageSquare } from "lucide-react";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 });
 
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
-type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; pending_delete?: boolean };
+type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; linked_thread_id?: string | null; pending_delete?: boolean };
 
 type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
 
@@ -1002,11 +1002,43 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, claimSpeech, speak, qc]);
 
+  /**
+   * Opens the chat thread linked to the current sentence, exactly like
+   * Slot 11 → tap the thread (no thread list, no new thread created).
+   * Returns false when the thread no longer exists so callers can fall
+   * through to normal navigation.
+   */
+  const openLinkedChat = useCallback(async (): Promise<boolean> => {
+    if (editingRef.current) return true; // editor open — block navigation
+    const threadId = currentSentence?.linked_thread_id;
+    if (!threadId) return false;
+    const { data: row } = await supabase
+      .from("chat_threads")
+      .select("id")
+      .eq("id", threadId)
+      .maybeSingle();
+    if (!row) {
+      toast.error("Linked chat not found");
+      return false;
+    }
+    claimSpeech(); // stop sentence TTS so the chat can read its reply
+    setPendingChatThreadId(threadId);
+    setChatStartInList(false);
+    setChatOpen(true);
+    return true;
+  }, [currentSentence?.linked_thread_id, claimSpeech]);
+
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
     if (editingRef.current) return; // editor open — block navigation
     if (!docs || !activeDoc) return;
+
+    // If the current sentence links to a chat thread, swipe right opens it.
+    if (currentSentence?.linked_thread_id) {
+      const handled = await openLinkedChat();
+      if (handled) return;
+    }
 
     // If the current sentence links to a document, swipe right opens it.
     const linkedId = currentSentence?.linked_document_id;
@@ -1014,6 +1046,7 @@ function AppPage() {
       await openLinkedDocument();
       return;
     }
+
 
     if (lockFavorites) {
       // List cycling locked. The only way off the locked list is following a
@@ -1105,7 +1138,7 @@ function AppPage() {
     setActiveDocId(targetId);
 
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument]);
+  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument, openLinkedChat]);
   onSwipeRightRef.current = onSwipeRight;
 
 
@@ -2192,6 +2225,19 @@ function AppPage() {
             </div>
           );
         })()}
+        {!composing && !currentSentence?.linked_document_id && currentSentence?.linked_thread_id && (
+          <div className="mt-2 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void openLinkedChat()}
+              className="flex max-w-[80vw] items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              <MessageSquare className="h-3 w-3 shrink-0" />
+              <span className="truncate">Linked chat</span>
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Sentence */}
@@ -3260,6 +3306,7 @@ function AppPage() {
           onOpenChange={setLinkPickerOpen}
           sentenceId={currentSentence.id}
           currentLinkedDocumentId={currentSentence.linked_document_id}
+          currentLinkedThreadId={currentSentence.linked_thread_id ?? null}
           documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
           excludeDocumentId={activeDocId ?? undefined}
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}

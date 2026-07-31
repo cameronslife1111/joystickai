@@ -1,0 +1,2 @@
+ALTER TABLE public.sentences ADD COLUMN IF NOT EXISTS linked_thread_id uuid REFERENCES public.chat_threads(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS sentences_linked_thread_id_idx ON public.sentences (linked_thread_id);
