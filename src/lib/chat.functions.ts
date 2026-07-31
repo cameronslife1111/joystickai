@@ -371,7 +371,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       const query = latestWithDocs;
       const { ok, text } = await runWebSearch(query);
       if (!ok) throw new Error(text);
-      return { route: "chat", text };
+      return { route: "chat", text: toPlainText(text) };
     }
 
     // Normal chat route — append the documents to the final user message so
