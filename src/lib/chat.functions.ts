@@ -334,9 +334,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           },
         ] as any,
       });
-      const out = (text ?? "").trim();
+      const out = toPlainText(text);
       if (!out) throw new Error("AI returned an empty response");
       return { route: "chat", text: out };
+
     }
 
     // Decide route with the thread's capabilities.
