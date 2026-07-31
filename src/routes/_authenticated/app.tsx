@@ -34,7 +34,7 @@ export const Route = createFileRoute("/_authenticated/app")({
 });
 
 type Doc = { id: string; title: string; position: number; current_sentence_index: number };
-type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; pending_delete?: boolean };
+type Sentence = { id: string; content: string; order_index: number; document_id: string; linked_document_id: string | null; linked_thread_id?: string | null; pending_delete?: boolean };
 
 type MenuSlot = { e: string; t: string; fn: () => void; badge?: number; onLongPress?: () => void } | null;
 
