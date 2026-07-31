@@ -12,7 +12,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { transcribeAudio } from "@/lib/whisper.functions";
-import { insertSentenceAfter } from "@/lib/orby-call-docs.functions";
+
 import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
@@ -1132,15 +1132,10 @@ function AppPage() {
     editingRef.current = true;
   }, [editing, currentIdx, sentences, activeDocId]);
 
-  // Voice sentence insert: transcribe the clip and add it as a NEW sentence
-  // right after the one the user was on when they started recording.
-  const insertAfter = useServerFn(insertSentenceAfter);
-  const voiceTargetRef = useRef<{ docId: string; index: number } | null>(null);
-  const dispatchVoiceInsert = useCallback(
+  // Voice → New idea: transcribe the clip and drop the text into the New idea
+  // composer so the user can edit it and send it wherever they want.
+  const dispatchVoiceToComposer = useCallback(
     async (audioBlob: Blob) => {
-      const target = voiceTargetRef.current;
-      voiceTargetRef.current = null;
-      if (!target) return;
       const listeningId = `voice-${Date.now()}`;
       toast.loading("Transcribing…", { id: listeningId });
       try {
@@ -1153,29 +1148,16 @@ function AppPage() {
           toast.dismiss(listeningId);
           return;
         }
-
-        const result = await insertAfter({
-          data: {
-            documentId: target.docId,
-            sentenceIndex: target.index,
-            text: transcript,
-          },
-        });
-
-        await qc.invalidateQueries({ queryKey: ["sentences", target.docId] });
-
-        if (result?.inserted) {
-          await jumpTo(result.sentenceIndex ?? target.index + 1);
-          toast.success("✅ Sentence added", { id: listeningId, duration: 2500 });
-        } else {
-          toast.error("Couldn't add that sentence", { id: listeningId });
-        }
+        openNewIdea();
+        setComposeText((prev) => appendTranscript(prev, transcript));
+        toast.dismiss(listeningId);
       } catch (err: any) {
-        toast.error(err?.message ?? "Voice insert failed", { id: listeningId });
+        toast.error(err?.message ?? "Transcription failed", { id: listeningId });
       }
     },
-    [transcribe, insertAfter, qc, jumpTo],
+    [transcribe, openNewIdea],
   );
+
 
   const micStartingRef = useRef(false);
 
@@ -1191,18 +1173,11 @@ function AppPage() {
       void (async () => {
         const blob = await rec.stop();
         if (durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceInsert(blob);
+        void dispatchVoiceToComposer(blob);
       })();
       return;
     }
     if (micStartingRef.current) return;
-    // Otherwise start a new recording. Snapshot the doc + sentence NOW so any
-    // navigation while recording can't retarget the insert.
-    if (!activeDocId) {
-      toast.error("Open a document first");
-      return;
-    }
-    voiceTargetRef.current = { docId: activeDocId, index: currentIdx };
     // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -1222,7 +1197,6 @@ function AppPage() {
         setRecording(false);
         recordingRef.current = false;
         recorderRef.current = null;
-        voiceTargetRef.current = null;
         toast.error(
           err?.name === "NotAllowedError"
             ? "Microphone access denied"
@@ -1232,7 +1206,7 @@ function AppPage() {
         micStartingRef.current = false;
       }
     })();
-  }, [editing, activeDocId, currentIdx, dispatchVoiceInsert]);
+  }, [editing, dispatchVoiceToComposer]);
 
   // Release no longer stops recording — stop is triggered by a second long-press.
   const onLongPressEnd = useCallback(() => {}, []);
