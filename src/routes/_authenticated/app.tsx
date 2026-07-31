@@ -1002,11 +1002,43 @@ function AppPage() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, claimSpeech, speak, qc]);
 
+  /**
+   * Opens the chat thread linked to the current sentence, exactly like
+   * Slot 11 → tap the thread (no thread list, no new thread created).
+   * Returns false when the thread no longer exists so callers can fall
+   * through to normal navigation.
+   */
+  const openLinkedChat = useCallback(async (): Promise<boolean> => {
+    if (editingRef.current) return true; // editor open — block navigation
+    const threadId = currentSentence?.linked_thread_id;
+    if (!threadId) return false;
+    const { data: row } = await supabase
+      .from("chat_threads")
+      .select("id")
+      .eq("id", threadId)
+      .maybeSingle();
+    if (!row) {
+      toast.error("Linked chat not found");
+      return false;
+    }
+    claimSpeech(); // stop sentence TTS so the chat can read its reply
+    setPendingChatThreadId(threadId);
+    setChatStartInList(false);
+    setChatOpen(true);
+    return true;
+  }, [currentSentence?.linked_thread_id, claimSpeech]);
+
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
   const onSwipeRight = useCallback(async () => {
     if (editingRef.current) return; // editor open — block navigation
     if (!docs || !activeDoc) return;
+
+    // If the current sentence links to a chat thread, swipe right opens it.
+    if (currentSentence?.linked_thread_id) {
+      const handled = await openLinkedChat();
+      if (handled) return;
+    }
 
     // If the current sentence links to a document, swipe right opens it.
     const linkedId = currentSentence?.linked_document_id;
@@ -1014,6 +1046,7 @@ function AppPage() {
       await openLinkedDocument();
       return;
     }
+
 
     if (lockFavorites) {
       // List cycling locked. The only way off the locked list is following a
