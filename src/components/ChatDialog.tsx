@@ -417,6 +417,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     window.speechSynthesis.speak(u);
   };
 
+  // When a thread is opened (e.g. via a sentence's linked chat) and "Read
+  // replies aloud" is on, read the latest assistant reply once.
+  const autoSpokeThreadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      autoSpokeThreadRef.current = null;
+      return;
+    }
+    if (!autoSpeak || !activeThreadId) return;
+    if (autoSpokeThreadRef.current === activeThreadId) return;
+    if (messages.length === 0) return;
+    autoSpokeThreadRef.current = activeThreadId;
+    const last = [...messages].reverse().find((m) => m.role === "assistant" && m.content?.trim());
+    if (last) speakMessage(last.id, last.content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoSpeak, activeThreadId, messages]);
+
   // Speak a short cue not tied to a specific message bubble.
   const speakCue = (text: string) => {
     setSpeakingId(null);
