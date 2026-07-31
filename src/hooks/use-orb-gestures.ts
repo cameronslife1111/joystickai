@@ -6,10 +6,6 @@ interface OrbGestureCallbacks {
   onTap?: () => void;
   onDoubleTap?: () => void;
   onTripleTap?: () => void;
-  /** Fires immediately on pointerdown — use to pre-warm long-press work. */
-  onPressStart?: () => void;
-  /** Fires when the pointer lifts/cancels WITHOUT a long press having fired. */
-  onPressAbort?: () => void;
   onLongPressStart?: () => void;
   onLongPressEnd?: () => void;
   onSwipe?: (direction: SwipeDirection) => void;
@@ -67,7 +63,6 @@ export function useOrbGestures(
       startY = e.clientY;
       startTime = Date.now();
       isLongPressing = false;
-      cbRef.current.onPressStart?.();
 
       longPressTimer = setTimeout(() => {
         isLongPressing = true;
@@ -96,7 +91,6 @@ export function useOrbGestures(
         isLongPressing = false;
         return;
       }
-      cbRef.current.onPressAbort?.();
 
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
@@ -133,8 +127,6 @@ export function useOrbGestures(
       if (isLongPressing) {
         cbRef.current.onLongPressEnd?.();
         isLongPressing = false;
-      } else {
-        cbRef.current.onPressAbort?.();
       }
     };
 

@@ -248,37 +248,6 @@ export const editSentence = createServerFn({ method: "POST" })
     return { updated: true, sentenceIndex: idx };
   });
 
-// ----- insert a sentence right after a given index -----
-const insertAfterSchema = z.object({
-  documentId: z.string().uuid(),
-  sentenceIndex: z.number().int().min(0),
-  text: z.string().min(1).max(8000),
-});
-
-export const insertSentenceAfter = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => insertAfterSchema.parse(input))
-  .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: sents, error } = await supabase
-      .from("sentences")
-      .select("id, order_index")
-      .eq("document_id", data.documentId)
-      .order("order_index", { ascending: true });
-    if (error) throw new Error(error.message);
-
-    const count = sents?.length ?? 0;
-    const insertAt = Math.min(data.sentenceIndex + 1, count);
-
-    const { error: rpcErr } = await supabase.rpc("insert_sentences_at", {
-      p_document_id: data.documentId,
-      p_contents: [data.text.trim()],
-      p_insert_at: insertAt,
-    });
-    if (rpcErr) throw new Error(rpcErr.message);
-    return { inserted: true, sentenceIndex: insertAt };
-  });
-
 // ----- rename a document title -----
 const renameSchema = z.object({
   documentId: z.string().uuid(),
