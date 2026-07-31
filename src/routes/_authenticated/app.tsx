@@ -1132,15 +1132,10 @@ function AppPage() {
     editingRef.current = true;
   }, [editing, currentIdx, sentences, activeDocId]);
 
-  // Voice sentence insert: transcribe the clip and add it as a NEW sentence
-  // right after the one the user was on when they started recording.
-  const insertAfter = useServerFn(insertSentenceAfter);
-  const voiceTargetRef = useRef<{ docId: string; index: number } | null>(null);
-  const dispatchVoiceInsert = useCallback(
+  // Voice → New idea: transcribe the clip and drop the text into the New idea
+  // composer so the user can edit it and send it wherever they want.
+  const dispatchVoiceToComposer = useCallback(
     async (audioBlob: Blob) => {
-      const target = voiceTargetRef.current;
-      voiceTargetRef.current = null;
-      if (!target) return;
       const listeningId = `voice-${Date.now()}`;
       toast.loading("Transcribing…", { id: listeningId });
       try {
@@ -1153,29 +1148,16 @@ function AppPage() {
           toast.dismiss(listeningId);
           return;
         }
-
-        const result = await insertAfter({
-          data: {
-            documentId: target.docId,
-            sentenceIndex: target.index,
-            text: transcript,
-          },
-        });
-
-        await qc.invalidateQueries({ queryKey: ["sentences", target.docId] });
-
-        if (result?.inserted) {
-          await jumpTo(result.sentenceIndex ?? target.index + 1);
-          toast.success("✅ Sentence added", { id: listeningId, duration: 2500 });
-        } else {
-          toast.error("Couldn't add that sentence", { id: listeningId });
-        }
+        openNewIdea();
+        setComposeText((prev) => appendTranscript(prev, transcript));
+        toast.dismiss(listeningId);
       } catch (err: any) {
-        toast.error(err?.message ?? "Voice insert failed", { id: listeningId });
+        toast.error(err?.message ?? "Transcription failed", { id: listeningId });
       }
     },
-    [transcribe, insertAfter, qc, jumpTo],
+    [transcribe, openNewIdea],
   );
+
 
   const micStartingRef = useRef(false);
 
