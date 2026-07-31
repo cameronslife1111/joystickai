@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
+import { toPlainText } from "./plain-text";
+
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
