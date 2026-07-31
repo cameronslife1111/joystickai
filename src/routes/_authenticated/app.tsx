@@ -1034,12 +1034,6 @@ function AppPage() {
     if (editingRef.current) return; // editor open — block navigation
     if (!docs || !activeDoc) return;
 
-    // If the current sentence links to a chat thread, swipe right opens it.
-    if (currentSentence?.linked_thread_id) {
-      const handled = await openLinkedChat();
-      if (handled) return;
-    }
-
     // If the current sentence links to a document, swipe right opens it.
     const linkedId = currentSentence?.linked_document_id;
     if (linkedId && docs.some((d) => d.id === linkedId)) {
