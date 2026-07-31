@@ -1,26 +1,24 @@
 ## Goal
+Chat replies should be plain text only: no `**bold**`, no `#` headings, no `-`/`*` bullets. Numbered lists, emojis, punctuation, and blank lines between paragraphs stay allowed. This must apply to every chat thread, including replies already saved.
 
-Add a third option to the ↕️ Move sentence popup — **📤 Send to document** — sitting between "🔼 Move up 1" and "🔽 Move down 1". It reuses the existing "Send to which list?" flow (emoji filters, searchable doc list, then top / after current / after a specific sentence) and *moves* the current sentence there: inserted at the chosen spot in the target doc, removed from the current doc, then the site reads the sentence that took its place out loud and normal navigation continues.
+## Approach (two layers)
 
-## Behavior
+**1. Tell the model (prevention)**
+In `src/lib/chat.functions.ts`:
+- Replace the "light markdown formatting" line in the main chat system prompt with an explicit plain-text contract: never use asterisks, underscores, backticks, `#` headings, or bullet characters; use numbered lists (`1.`) when a list helps; separate paragraphs with a blank line; always use normal punctuation; emojis are fine.
+- Apply the same rule to the web-search system prompt sent to Perplexity (it currently says "light markdown … occasional bold").
 
-1. Tap "📤 Send to document" in the Move sheet → the Move sheet closes and the existing Send-to overlay opens in "move" mode, pre-loaded with the current sentence's text.
-2. User picks the target document (same searchable list + emoji filters as New idea).
-3. User picks placement: Top of list / After current sentence / After a specific sentence (existing three-stage flow, unchanged).
-4. On confirm: the sentence text is inserted into the target document at the chosen index, then the original sentence row is deleted from the source document (remaining sentences compact automatically, as with delete).
-5. The reader stays at the same index in the source document, so the sentence that followed the moved one is now current — it is spoken with the normal speak function, in the same user-gesture call so iOS honors it.
-6. A toast confirms `Moved to "<title>"`. Everything else (undo-free, caches, counters) behaves like the existing send/delete paths.
+**2. Strip it anyway (guarantee)**
+New helper `src/lib/plain-text.ts` exporting `toPlainText(text)`:
+- Remove bold/italic markers (`**`, `__`, `*`, `_`) around words while keeping the words.
+- Strip leading `#` heading markers and leading bullet markers (`-`, `*`, `•`, `+`) at line start, keeping the line's text.
+- Strip backticks / code fences.
+- Preserve `1.` numbered list prefixes, emojis, punctuation, and blank lines; collapse 3+ blank lines to one.
 
-## Technical notes
+Apply it in both places so old and new messages are clean:
+- Server: run every returned reply through `toPlainText` in `sendChatMessage` (chat, vision, and web-search paths) so newly saved messages are stored clean.
+- Client: in `src/components/ChatDialog.tsx`, render assistant bubbles as `toPlainText(m.content)` (the message text render around line 817, assistant-only) so already-stored replies with `**` display as plain text too, plus the copy/insert-to-doc and speak paths use the cleaned text.
 
-All changes are in `src/routes/_authenticated/app.tsx`; no schema or server changes.
-
-- New state `moveSendSourceId: string | null` (the sentence row id being relocated). Cleared in `cancelCompose` alongside the other send state.
-- New handler `openSendSentence()`: guards on `currentSentence`, cancels speech, sets `composeText` to the sentence content, sets `moveSendSourceId`, opens `sendOpen` at stage `"doc"`, closes `moveOpen`. It does **not** set `composing`, so only the Send overlay appears (no New-idea textarea).
-- `sendIdea` gets a small branch at the end when `moveSendSourceId` is set:
-  - after the successful `insert_sentences_at` RPC, delete the source row (`sentences.delete().eq('id', moveSendSourceId)`) and invalidate the source doc's `["sentences", activeDocId]` query;
-  - skip the "point target doc at the new sentence" behavior only if the target is the source doc (in that case the move already lands the reader correctly); otherwise keep it as-is;
-  - speak the sentence now occupying `currentIdx` in the source document (clamped to the new last index) instead of the current "spoken" choice, and use the existing toast id with move wording.
-  - Same-document sends are supported: insert first, then delete the original, so the RPC's index math is unaffected.
-- Insert the new button into the Move sheet's option list as a separate element between the "Move up 1" and "Move down 1" entries (the list is a mapped array, so it is split into two maps or the button is rendered via a special entry in the array with an `action` field). Disabled when there is no current sentence.
-- No changes to `insert_sentences_at`, `move_sentence`, or any of the destination-picker UI.
+## Notes
+- User messages are left untouched.
+- No database migration and no changes to plan/step summary cards unless you want those cleaned too — say the word and I'll include them.

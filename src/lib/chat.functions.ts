@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
+import { toPlainText } from "./plain-text";
+
 
 const chatMsg = z.object({
   role: z.enum(["user", "assistant"]),
@@ -105,7 +107,10 @@ async function runWebSearch(query: string): Promise<{ ok: boolean; text: string 
             role: "system",
             content:
               "You are Orby, a helpful assistant. Answer the user's question using up-to-date web information. " +
-              "Write a clear, conversational answer. You may use light markdown (short paragraphs, occasional bold) but no inline citation markers like [1] and do not paste raw reference lists.",
+              "Write a clear, conversational answer in PLAIN TEXT ONLY: never use asterisks, underscores, backticks, '#' headings, or bullet characters. " +
+              "Use numbered lists (1. 2. 3.) only when a list truly helps, separate paragraphs with a blank line, and always use normal punctuation. Emojis are fine. " +
+              "No inline citation markers like [1] and do not paste raw reference lists.",
+
           },
           { role: "user", content: query },
         ],
@@ -284,7 +289,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const system =
       "You are Orby, a warm, helpful chat assistant inside a writing app. " +
       "Have a natural back-and-forth conversation. Be clear and useful. " +
-      "You may use light markdown formatting (paragraphs, bold, and short lists when helpful). " +
+      "Reply in PLAIN TEXT ONLY. Never use markdown: no asterisks, no underscores, no backticks, no '#' headings, no bullet points or dashes as list markers. " +
+      "You may use numbered lists (1. 2. 3.) when a list genuinely helps, separate paragraphs with a blank line, always use normal punctuation, and emojis are welcome. " +
+
       "You work like a capable employee: you can kick off plans that edit documents and generate media, " +
       "and you always come back to this conversation afterwards. Keep momentum — reference what you already " +
       "delivered, and offer the natural next step when it's helpful.\n\n" +
@@ -329,9 +336,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           },
         ] as any,
       });
-      const out = (text ?? "").trim();
+      const out = toPlainText(text);
       if (!out) throw new Error("AI returned an empty response");
       return { route: "chat", text: out };
+
     }
 
     // Decide route with the thread's capabilities.
@@ -363,7 +371,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       const query = latestWithDocs;
       const { ok, text } = await runWebSearch(query);
       if (!ok) throw new Error(text);
-      return { route: "chat", text };
+      return { route: "chat", text: toPlainText(text) };
     }
 
     // Normal chat route — append the documents to the final user message so
@@ -382,9 +390,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       system,
       messages: outgoing,
     });
-    const out = (text ?? "").trim();
+    const out = toPlainText(text);
     if (!out) throw new Error("AI returned an empty response");
     return { route: "chat", text: out };
+
   });
 
 /**
