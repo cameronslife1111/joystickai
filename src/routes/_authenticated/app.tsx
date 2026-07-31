@@ -1204,6 +1204,7 @@ function AppPage() {
         setRecording(false);
         recordingRef.current = false;
         recorderRef.current = null;
+        releaseMic();
         toast.error(
           err?.name === "NotAllowedError"
             ? "Microphone access denied"
