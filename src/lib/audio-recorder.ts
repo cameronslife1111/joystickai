@@ -4,6 +4,8 @@
 // MP4, which the transcription model rejects).
 
 export type PcmRecorder = {
+  /** Resolves once the mic is genuinely delivering audio frames. */
+  ready: Promise<void>;
   stop: () => Promise<Blob>;
   cancel: () => void;
 };
