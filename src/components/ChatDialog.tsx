@@ -53,7 +53,7 @@ import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
-import { DestinationPicker, type DestinationPosition } from "./DestinationPicker";
+import { sortDocsByTitle } from "@/lib/sortDocs";
 import { StepReasoning } from "./plan/StepReasoning";
 
 interface Props {
@@ -1290,6 +1290,10 @@ function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoS
   );
 }
 
+const INSERT_EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
+
+type SendStage = "doc" | "where" | "pickAnchor";
+
 function InsertIntoDocDialog({
   row,
   onClose,
@@ -1302,19 +1306,41 @@ function InsertIntoDocDialog({
   documents: { id: string; title: string }[];
 }) {
   const qc = useQueryClient();
-  const [targetDocumentId, setTargetDocumentId] = useState(currentDocumentId ?? "");
-  const [position, setPosition] = useState<DestinationPosition>("after_current");
+  const [stage, setStage] = useState<SendStage>("doc");
+  const [docId, setDocId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [targetSentences, setTargetSentences] = useState<{ id: string; content: string }[]>([]);
+  const [anchorIdx, setAnchorIdx] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (row) {
-      setTargetDocumentId(currentDocumentId ?? "");
-      setPosition("after_current");
+      setStage("doc");
+      setDocId(null);
+      setSearchQuery("");
+      setTargetSentences([]);
+      setAnchorIdx(0);
     }
-  }, [row, currentDocumentId]);
+  }, [row]);
 
-  const handleInsert = async () => {
-    if (!row || !targetDocumentId) return;
+  const pickDoc = async (id: string) => {
+    setDocId(id);
+    setAnchorIdx(0);
+    const { data } = await supabase
+      .from("sentences")
+      .select("id, content")
+      .eq("document_id", id)
+      .order("order_index", { ascending: true });
+    setTargetSentences(data ?? []);
+    setStage("where");
+  };
+
+  const doInsert = async (
+    targetId: string,
+    where: "top" | "bottom" | "current" | "afterAnchor",
+    idx = 0,
+  ) => {
+    if (!row) return;
     const sentences = splitIntoSentences(row.content);
     if (sentences.length === 0) {
       toast.error("Nothing to insert");
@@ -1323,31 +1349,29 @@ function InsertIntoDocDialog({
     setBusy(true);
     try {
       let insertAt = 0;
-      if (position === "top") {
+      if (where === "top") {
         insertAt = 0;
-      } else if (position === "bottom") {
-        const { count } = await supabase
-          .from("sentences")
-          .select("id", { count: "exact", head: true })
-          .eq("document_id", targetDocumentId);
-        insertAt = count ?? 0;
+      } else if (where === "bottom") {
+        insertAt = targetSentences.length;
+      } else if (where === "afterAnchor") {
+        insertAt = idx + 1;
       } else {
         const { data: doc } = await supabase
           .from("documents")
           .select("current_sentence_index")
-          .eq("id", targetDocumentId)
+          .eq("id", targetId)
           .single();
         const cur = typeof doc?.current_sentence_index === "number" ? doc.current_sentence_index : -1;
         insertAt = cur + 1;
       }
       const { error } = await supabase.rpc("insert_sentences_at", {
-        p_document_id: targetDocumentId,
+        p_document_id: targetId,
         p_contents: sentences,
         p_insert_at: insertAt,
       });
       if (error) throw error;
       toast.success(`Inserted ${sentences.length} sentence${sentences.length === 1 ? "" : "s"}`);
-      qc.invalidateQueries({ queryKey: ["sentences", targetDocumentId] });
+      qc.invalidateQueries({ queryKey: ["sentences", targetId] });
       qc.invalidateQueries({ queryKey: ["documents"] });
       onClose();
     } catch (err) {
@@ -1357,27 +1381,145 @@ function InsertIntoDocDialog({
     }
   };
 
+  const q = searchQuery.trim().toLowerCase();
+  const sorted = sortDocsByTitle(documents ?? []);
+  const filtered = q ? sorted.filter((d) => (d.title || "").toLowerCase().includes(q)) : sorted;
+
   return (
     <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Insert into document</DialogTitle>
+      <DialogContent className="flex max-h-[85vh] w-full max-w-md flex-col gap-0 rounded-3xl border border-foreground/10 bg-card/95 p-4 backdrop-blur">
+        <DialogHeader className="mb-3 flex-row items-center justify-between space-y-0 px-2">
+          <DialogTitle className="font-display text-lg">
+            {stage === "doc" && "Send to which list?"}
+            {stage === "where" && "Where in the list?"}
+            {stage === "pickAnchor" && "After which sentence?"}
+          </DialogTitle>
         </DialogHeader>
-        <DestinationPicker
-          documents={documents}
-          targetDocumentId={targetDocumentId}
-          onTargetDocumentIdChange={setTargetDocumentId}
-          position={position}
-          onPositionChange={setPosition}
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={handleInsert} disabled={busy || !targetDocumentId}>
-            {busy ? "Inserting…" : "Insert"}
-          </Button>
-        </div>
+
+        {stage === "doc" && (
+          <div className="flex min-h-0 flex-col gap-2">
+            <div className="flex shrink-0 flex-wrap gap-1.5">
+              {INSERT_EMOJI_FILTERS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => setSearchQuery(emoji)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-foreground/10 bg-foreground/5 text-lg transition hover:bg-foreground/10 active:scale-[0.95]"
+                  aria-label={`Filter by ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            <Input
+              placeholder="Search lists…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="shrink-0"
+            />
+            <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+              {filtered.length > 0 ? (
+                filtered.map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => void pickDoc(d.id)}
+                    className={
+                      "w-full shrink-0 rounded-xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98] " +
+                      (d.id === currentDocumentId
+                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                        : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10")
+                    }
+                  >
+                    {d.title || "Untitled"}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {q ? "No matching lists." : "No documents yet."}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {stage === "where" && docId && (
+          <div className="flex flex-col gap-2 p-1">
+            <button
+              disabled={busy}
+              onClick={() => void doInsert(docId, "top")}
+              className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+            >
+              ⤒  Top of list
+            </button>
+            <button
+              disabled={busy || targetSentences.length === 0}
+              onClick={() => void doInsert(docId, "current")}
+              className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+            >
+              ●  After current sentence
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => {
+                if (targetSentences.length === 0) void doInsert(docId, "top");
+                else setStage("pickAnchor");
+              }}
+              className="w-full rounded-xl border border-primary/30 bg-primary/10 px-3 py-3 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20 disabled:opacity-40"
+            >
+              ⋯  After a specific sentence…
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => void doInsert(docId, "bottom")}
+              className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-3 text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+            >
+              ⤓  Bottom of list
+            </button>
+            <button
+              onClick={() => { setDocId(null); setStage("doc"); setTargetSentences([]); }}
+              className="mt-1 w-full rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              ← Pick a different list
+            </button>
+          </div>
+        )}
+
+        {stage === "pickAnchor" && docId && (
+          <div className="flex min-h-0 flex-col gap-2 p-1">
+            <div className="flex max-h-[55vh] flex-col gap-1 overflow-y-auto rounded-xl border border-foreground/10 bg-foreground/5 p-1">
+              {targetSentences.map((s, i) => (
+                <button
+                  key={s.id}
+                  onClick={() => setAnchorIdx(i)}
+                  className={
+                    "w-full rounded-lg px-3 py-2 text-left text-sm transition " +
+                    (i === anchorIdx
+                      ? "bg-primary/20 text-primary ring-1 ring-primary/40"
+                      : "hover:bg-foreground/10")
+                  }
+                >
+                  <span className="mr-2 text-xs opacity-60">{i + 1}.</span>
+                  {s.content}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStage("where")}
+                className="flex-1 rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                ← Back
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => void doInsert(docId, "afterAnchor", anchorIdx)}
+                className="flex-[2] rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20 disabled:opacity-40"
+              >
+                {busy ? "Inserting…" : `Insert after sentence ${anchorIdx + 1}`}
+              </button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
