@@ -374,8 +374,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         .eq("thread_id", activeThreadId as string)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as ChatRow[];
+      // Assistant replies are shown as plain text — strip any markdown
+      // decoration (**bold**, # headings, - bullets) that older or new
+      // replies may contain, so every thread reads the same way.
+      return ((data ?? []) as ChatRow[]).map((m) =>
+        m.role === "assistant" ? { ...m, content: toPlainText(m.content) } : m,
+      );
     },
+
   });
 
   // Focus textarea on open + thread switch.
