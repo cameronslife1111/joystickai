@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 
 import { transcribeAudio } from "@/lib/whisper.functions";
-import { startPcmRecorder, blobToBase64, type PcmRecorder } from "@/lib/audio-recorder";
+import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
 
 export type DictationState = "idle" | "recording" | "transcribing";
 
@@ -30,10 +30,13 @@ export function useVoiceDictation(onText: (text: string) => void) {
         try {
           blob = await rec.stop();
         } catch {
+          releaseMic();
           setState("idle");
           toast.error("Recording failed");
           return;
         }
+        // Fully release the mic so iOS drops the recording indicator.
+        releaseMic();
         // Header-only WAV = silent mic / instant stop.
         if (blob.size < 4096) {
           setState("idle");
@@ -58,6 +61,7 @@ export function useVoiceDictation(onText: (text: string) => void) {
         recorderRef.current = await startPcmRecorder();
         setState("recording");
       } catch {
+        releaseMic();
         setState("idle");
         toast.error("Microphone access is needed to record");
       }
@@ -69,6 +73,7 @@ export function useVoiceDictation(onText: (text: string) => void) {
   const cancel = useCallback(() => {
     recorderRef.current?.cancel();
     recorderRef.current = null;
+    releaseMic();
     setState("idle");
   }, []);
 
