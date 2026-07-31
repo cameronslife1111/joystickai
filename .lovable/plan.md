@@ -1,30 +1,26 @@
 ## Goal
 
-Replace the chat's "Insert into document" dialog (dropdown + radio buttons) with the same staged, tappable flow used by the New Idea "Send to…" overlay: pick a list (with emoji filters + search), then pick where in the list, including "After a specific sentence…".
+Add a third option to the ↕️ Move sentence popup — **📤 Send to document** — sitting between "🔼 Move up 1" and "🔽 Move down 1". It reuses the existing "Send to which list?" flow (emoji filters, searchable doc list, then top / after current / after a specific sentence) and *moves* the current sentence there: inserted at the chosen spot in the target doc, removed from the current doc, then the site reads the sentence that took its place out loud and normal navigation continues.
 
-## What exists today
+## Behavior
 
-- `src/components/ChatDialog.tsx` → `InsertIntoDocDialog` uses a shadcn `Dialog` with `DestinationPicker` (a `Select` for the doc + `RadioGroup` for top/bottom/after current) and an Insert button.
-- `src/routes/_authenticated/app.tsx` has the target UX: a staged overlay with `sendStage` = `"doc" | "where" | "pickAnchor"`, emoji filter chips, a search input, sorted doc list buttons, then large tap targets (Top / After current / After a specific sentence… / Bottom), and a sentence-anchor list.
+1. Tap "📤 Send to document" in the Move sheet → the Move sheet closes and the existing Send-to overlay opens in "move" mode, pre-loaded with the current sentence's text.
+2. User picks the target document (same searchable list + emoji filters as New idea).
+3. User picks placement: Top of list / After current sentence / After a specific sentence (existing three-stage flow, unchanged).
+4. On confirm: the sentence text is inserted into the target document at the chosen index, then the original sentence row is deleted from the source document (remaining sentences compact automatically, as with delete).
+5. The reader stays at the same index in the source document, so the sentence that followed the moved one is now current — it is spoken with the normal speak function, in the same user-gesture call so iOS honors it.
+6. A toast confirms `Moved to "<title>"`. Everything else (undo-free, caches, counters) behaves like the existing send/delete paths.
 
-## Plan
+## Technical notes
 
-1. **Rewrite `InsertIntoDocDialog` in `src/components/ChatDialog.tsx`**
-   - Keep it inside a `Dialog` (so it stays in the chat surface), but style the content to match the New Idea overlay: rounded card, staged header title — "Send to which list?" / "Where in the list?" / "After which sentence?" — and a Cancel action.
-   - Add local state: `stage`, `searchQuery`, `anchorIdx`, `targetSentences`; reset all when the dialog opens.
-   - Stage `doc`: emoji filter chips (same 9 emoji set as elsewhere in the app), a "Search lists…" input, then the doc list sorted with `sortDocsByTitle` and filtered by the query, rendered as full-width tappable rows. Empty-state text matches the New Idea copy.
-   - On picking a doc: load that doc's sentences (id, content, ordered by `order_index`) into `targetSentences` and advance to stage `where`.
-   - Stage `where`: four buttons — ⤒ Top of list, ● After current sentence (disabled when the doc has no sentences), ⋯ After a specific sentence… (primary style; falls back to Top when empty), ⤓ Bottom of list — plus a "← Pick a different list" link back to stage `doc`.
-   - Stage `pickAnchor`: scrollable numbered sentence list with selection highlight, a "← Back" button, and "Insert after sentence N".
+All changes are in `src/routes/_authenticated/app.tsx`; no schema or server changes.
 
-2. **Insert logic (same behavior, extended)**
-   - Keep `splitIntoSentences(row.content)` + `supabase.rpc("insert_sentences_at", …)`.
-   - Compute `insertAt` per choice: top → 0; bottom → sentence count; after current → `current_sentence_index + 1`; after anchor → `anchorIdx + 1` (using the already-loaded sentence list).
-   - Keep the existing success toast, `["sentences", docId]` / `["documents"]` invalidation, and `onClose()`.
-
-3. **Cleanup**
-   - Remove the now-unused `DestinationPicker` import from `ChatDialog.tsx`. Leave `src/components/DestinationPicker.tsx` in place (still used elsewhere).
-
-## Result
-
-Sending a chat reply to a document feels identical to the New Idea "Send to…" flow: emoji filters, searchable list, then big tap targets for placement, with the extra option to insert after a specific sentence.
+- New state `moveSendSourceId: string | null` (the sentence row id being relocated). Cleared in `cancelCompose` alongside the other send state.
+- New handler `openSendSentence()`: guards on `currentSentence`, cancels speech, sets `composeText` to the sentence content, sets `moveSendSourceId`, opens `sendOpen` at stage `"doc"`, closes `moveOpen`. It does **not** set `composing`, so only the Send overlay appears (no New-idea textarea).
+- `sendIdea` gets a small branch at the end when `moveSendSourceId` is set:
+  - after the successful `insert_sentences_at` RPC, delete the source row (`sentences.delete().eq('id', moveSendSourceId)`) and invalidate the source doc's `["sentences", activeDocId]` query;
+  - skip the "point target doc at the new sentence" behavior only if the target is the source doc (in that case the move already lands the reader correctly); otherwise keep it as-is;
+  - speak the sentence now occupying `currentIdx` in the source document (clamped to the new last index) instead of the current "spoken" choice, and use the existing toast id with move wording.
+  - Same-document sends are supported: insert first, then delete the original, so the RPC's index math is unaffected.
+- Insert the new button into the Move sheet's option list as a separate element between the "Move up 1" and "Move down 1" entries (the list is a mapped array, so it is split into two maps or the button is rendered via a special entry in the array with an `action` field). Disabled when there is no current sentence.
+- No changes to `insert_sentences_at`, `move_sentence`, or any of the destination-picker UI.
