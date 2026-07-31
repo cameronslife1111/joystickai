@@ -1559,15 +1559,30 @@ function AppPage() {
       return;
     }
 
+    // Move mode: the sentence was copied into the target, now remove the
+    // original from the source document so this reads as a real move.
+    const movingId = moveSendSourceId;
+    if (movingId) {
+      qc.setQueryData<Sentence[]>(["sentences", activeDocId], (prev) =>
+        prev?.filter((s) => s.id !== movingId).map((s, i) => ({ ...s, order_index: i })) ?? prev,
+      );
+      const { error: delErr } = await supabase.from("sentences").delete().eq("id", movingId);
+      if (delErr) toast.error(delErr.message || "Moved, but failed to remove the original");
+    }
+
     // Point the target document's reading position at the first newly
     // inserted sentence so the idea is immediately reachable — and so it
     // isn't buried off-screen in this one-sentence-at-a-time reader.
-    void supabase.from("documents")
-      .update({ current_sentence_index: insertAt })
-      .eq("id", targetDocId);
-    qc.setQueryData<Doc[]>(["documents"], (prev) =>
-      prev?.map((d) => d.id === targetDocId ? { ...d, current_sentence_index: insertAt } : d) ?? prev,
-    );
+    // In move mode we never move the *source* reader, so skip this when the
+    // target is the document we're currently reading.
+    if (!(movingId && targetDocId === activeDocId)) {
+      void supabase.from("documents")
+        .update({ current_sentence_index: insertAt })
+        .eq("id", targetDocId);
+      qc.setQueryData<Doc[]>(["documents"], (prev) =>
+        prev?.map((d) => d.id === targetDocId ? { ...d, current_sentence_index: insertAt } : d) ?? prev,
+      );
+    }
 
     // Read back the true count so the user gets confirmation it landed.
     const { count } = await supabase
@@ -1580,22 +1595,42 @@ function AppPage() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["sentences", targetDocId] }),
       qc.invalidateQueries({ queryKey: ["documents"] }),
+      movingId && targetDocId !== activeDocId
+        ? qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })
+        : Promise.resolve(),
     ]);
 
     const title = targetDoc?.title ?? "document";
     const added = parts.length;
-    toast(
-      typeof count === "number"
-        ? `Added ${added} to "${title}" — ${count} total`
-        : `Added ${added} to "${title}"`,
-      { id: "idea-sent" },
-    );
+    if (movingId) {
+      toast(`Moved to "${title}"`, { id: "idea-sent" });
+    } else {
+      toast(
+        typeof count === "number"
+          ? `Added ${added} to "${title}" — ${count} total`
+          : `Added ${added} to "${title}"`,
+        { id: "idea-sent" },
+      );
+    }
     cancelCompose();
 
     // If we sent into the document we're currently viewing, jump to and speak
     // the new idea. Otherwise resume the active doc's current sentence.
+    // In move mode: stay put in the source document and read whatever sentence
+    // now sits in the moved sentence's slot (the one that followed it).
     // Called synchronously within the user-gesture handler so iOS Safari
     // honors the utterance.
+    if (movingId) {
+      const remaining = (sentences ?? []).filter((s) => s.id !== movingId);
+      if (remaining.length > 0) {
+        const nextIdx = Math.max(0, Math.min(currentIdx, remaining.length - 1));
+        if (nextIdx !== currentIdx) await setIndex(nextIdx);
+        const token = claimSpeech();
+        speak(remaining[nextIdx].content, token);
+      }
+      return;
+    }
+
     const spoken = targetDocId === activeDocId
       ? parts[0]
       : sentences?.[currentIdx]?.content;
@@ -1603,7 +1638,26 @@ function AppPage() {
       const token = claimSpeech();
       speak(spoken, token);
     }
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak, moveSendSourceId, setIndex]);
+
+  // "Send to document" from the Move sentence sheet: relocate the current
+  // sentence using the same "Send to which list?" flow as New idea.
+  const openSendSentence = useCallback(() => {
+    if (!currentSentence) return;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setMoveOpen(false);
+    setComposing(false);
+    setComposeText(currentSentence.content);
+    setMoveSendSourceId(currentSentence.id);
+    setSendDocId(null);
+    setSendTargetSentences([]);
+    setSendAnchorIdx(0);
+    setSendSearchQuery("");
+    setSendStage("doc");
+    setSendOpen(true);
+  }, [currentSentence]);
 
   // Swap the user's most-recent favorite slot to point at the currently-viewed
   // document. Useful when navigating into a linked doc that isn't favorited.
