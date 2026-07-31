@@ -390,9 +390,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       system,
       messages: outgoing,
     });
-    const out = (text ?? "").trim();
+    const out = toPlainText(text);
     if (!out) throw new Error("AI returned an empty response");
     return { route: "chat", text: out };
+
   });
 
 /**
