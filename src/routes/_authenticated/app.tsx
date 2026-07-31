@@ -1132,11 +1132,11 @@ function AppPage() {
     editingRef.current = true;
   }, [editing, currentIdx, sentences, activeDocId]);
 
-  // Voice sentence replace: transcribe the clip and overwrite the ONE sentence
-  // the user was on when they started recording — nothing else.
-  const replaceSentence = useServerFn(editSentence);
+  // Voice sentence insert: transcribe the clip and add it as a NEW sentence
+  // right after the one the user was on when they started recording.
+  const insertAfter = useServerFn(insertSentenceAfter);
   const voiceTargetRef = useRef<{ docId: string; index: number } | null>(null);
-  const dispatchVoiceReplace = useCallback(
+  const dispatchVoiceInsert = useCallback(
     async (audioBlob: Blob) => {
       const target = voiceTargetRef.current;
       voiceTargetRef.current = null;
@@ -1154,28 +1154,30 @@ function AppPage() {
           return;
         }
 
-        const result = await replaceSentence({
+        const result = await insertAfter({
           data: {
             documentId: target.docId,
             sentenceIndex: target.index,
-            newText: transcript,
+            text: transcript,
           },
         });
 
         await qc.invalidateQueries({ queryKey: ["sentences", target.docId] });
 
-        if (result?.updated) {
-          await jumpTo(result.sentenceIndex ?? target.index);
-          toast.success("✅ Sentence replaced", { id: listeningId, duration: 2500 });
+        if (result?.inserted) {
+          await jumpTo(result.sentenceIndex ?? target.index + 1);
+          toast.success("✅ Sentence added", { id: listeningId, duration: 2500 });
         } else {
-          toast.error("Couldn't find that sentence", { id: listeningId });
+          toast.error("Couldn't add that sentence", { id: listeningId });
         }
       } catch (err: any) {
-        toast.error(err?.message ?? "Voice replace failed", { id: listeningId });
+        toast.error(err?.message ?? "Voice insert failed", { id: listeningId });
       }
     },
-    [transcribe, replaceSentence, qc, jumpTo],
+    [transcribe, insertAfter, qc, jumpTo],
   );
+
+  const micStartingRef = useRef(false);
 
   const onLongPressStart = useCallback(() => {
     if (editing) return;
@@ -1189,12 +1191,13 @@ function AppPage() {
       void (async () => {
         const blob = await rec.stop();
         if (durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceReplace(blob);
+        void dispatchVoiceInsert(blob);
       })();
       return;
     }
+    if (micStartingRef.current) return;
     // Otherwise start a new recording. Snapshot the doc + sentence NOW so any
-    // navigation while recording can't retarget the replace.
+    // navigation while recording can't retarget the insert.
     if (!activeDocId) {
       toast.error("Open a document first");
       return;
@@ -1204,12 +1207,17 @@ function AppPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    setRecording(true);
-    recordingRef.current = true;
-    recordStartMsRef.current = Date.now();
+    micStartingRef.current = true;
     void (async () => {
       try {
-        recorderRef.current = await startPcmRecorder();
+        const rec = await startPcmRecorder();
+        // Only glow red once the mic is actually delivering audio — otherwise
+        // the first second or two of speech is spoken into a dead mic.
+        await rec.ready;
+        recorderRef.current = rec;
+        recordStartMsRef.current = Date.now();
+        setRecording(true);
+        recordingRef.current = true;
       } catch (err: any) {
         setRecording(false);
         recordingRef.current = false;
@@ -1220,9 +1228,11 @@ function AppPage() {
             ? "Microphone access denied"
             : "Couldn't start microphone",
         );
+      } finally {
+        micStartingRef.current = false;
       }
     })();
-  }, [editing, activeDocId, currentIdx, dispatchVoiceReplace]);
+  }, [editing, activeDocId, currentIdx, dispatchVoiceInsert]);
 
   // Release no longer stops recording — stop is triggered by a second long-press.
   const onLongPressEnd = useCallback(() => {}, []);
