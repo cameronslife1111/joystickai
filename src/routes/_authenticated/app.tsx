@@ -3306,6 +3306,7 @@ function AppPage() {
           onOpenChange={setLinkPickerOpen}
           sentenceId={currentSentence.id}
           currentLinkedDocumentId={currentSentence.linked_document_id}
+          currentLinkedThreadId={currentSentence.linked_thread_id ?? null}
           documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
           excludeDocumentId={activeDocId ?? undefined}
           onSaved={() => qc.invalidateQueries({ queryKey: ["sentences", activeDocId] })}
