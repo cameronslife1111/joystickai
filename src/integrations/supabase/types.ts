@@ -512,6 +512,7 @@ export type Database = {
           document_id: string
           id: string
           linked_document_id: string | null
+          linked_thread_id: string | null
           order_index: number
           pending_delete: boolean
           user_id: string
@@ -522,6 +523,7 @@ export type Database = {
           document_id: string
           id?: string
           linked_document_id?: string | null
+          linked_thread_id?: string | null
           order_index?: number
           pending_delete?: boolean
           user_id: string
@@ -532,6 +534,7 @@ export type Database = {
           document_id?: string
           id?: string
           linked_document_id?: string | null
+          linked_thread_id?: string | null
           order_index?: number
           pending_delete?: boolean
           user_id?: string
@@ -549,6 +552,13 @@ export type Database = {
             columns: ["linked_document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sentences_linked_thread_id_fkey"
+            columns: ["linked_thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
             referencedColumns: ["id"]
           },
         ]
