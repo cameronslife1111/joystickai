@@ -147,6 +147,9 @@ function AppPage() {
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
+  // When set, the Send-to overlay is relocating an existing sentence (row id)
+  // out of the current document instead of pasting a brand-new idea.
+  const [moveSendSourceId, setMoveSendSourceId] = useState<string | null>(null);
   
   const [planApprovalOpen, setPlanApprovalOpen] = useState(false);
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
