@@ -4,6 +4,8 @@
 // MP4, which the transcription model rejects).
 
 export type PcmRecorder = {
+  /** Resolves once the mic is genuinely delivering audio frames. */
+  ready: Promise<void>;
   stop: () => Promise<Blob>;
   cancel: () => void;
 };
@@ -61,20 +63,68 @@ function downsampleTo16k(input: Float32Array, srcRate: number): Float32Array {
   return out;
 }
 
+// Keep the mic stream + AudioContext warm between recordings. Cold-starting
+// getUserMedia can take a second, which is exactly the window where the user
+// has already seen the red glow and started talking.
+let warm: { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSourceNode } | null =
+  null;
+
+function warmIsLive() {
+  if (!warm) return false;
+  const tracks = warm.stream.getAudioTracks();
+  return (
+    tracks.length > 0 &&
+    tracks.every((t) => t.readyState === "live") &&
+    warm.ctx.state !== "closed"
+  );
+}
+
+/** Fully release the microphone (call when leaving the screen). */
+export function releaseMic() {
+  if (!warm) return;
+  try {
+    warm.source.disconnect();
+  } catch {}
+  warm.stream.getTracks().forEach((t) => t.stop());
+  void warm.ctx.close().catch(() => {});
+  warm = null;
+}
+
 export async function startPcmRecorder(): Promise<PcmRecorder> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const AudioCtx =
-    (window as any).AudioContext || (window as any).webkitAudioContext;
-  const ctx: AudioContext = new AudioCtx();
-  const source = ctx.createMediaStreamSource(stream);
+  if (!warmIsLive()) {
+    releaseMic();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const AudioCtx =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    const ctx: AudioContext = new AudioCtx();
+    const source = ctx.createMediaStreamSource(stream);
+    warm = { stream, ctx, source };
+  }
+  const { ctx, source } = warm!;
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {}
+  }
+
   // ScriptProcessorNode is deprecated but universally supported; AudioWorklet
   // adds significant setup we don't need for a short push-to-talk clip.
   const processor = ctx.createScriptProcessor(4096, 1, 1);
   const chunks: Float32Array[] = [];
   let cancelled = false;
+  let stopped = false;
+
+  let markReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+  // Safety net: never leave the caller waiting on a mic that stays silent.
+  const readyTimer = setTimeout(() => markReady(), 1500);
 
   processor.onaudioprocess = (e) => {
-    if (cancelled) return;
+    if (cancelled || stopped) return;
+    clearTimeout(readyTimer);
+    markReady();
     const ch = e.inputBuffer.getChannelData(0);
     // Copy — the underlying buffer is reused across callbacks.
     chunks.push(new Float32Array(ch));
@@ -82,21 +132,24 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   source.connect(processor);
   processor.connect(ctx.destination);
 
-  const teardown = () => {
+  // Detach only this recording's processor; the stream + context stay warm.
+  const detach = () => {
+    clearTimeout(readyTimer);
     try {
       processor.disconnect();
     } catch {}
     try {
-      source.disconnect();
+      source.disconnect(processor);
     } catch {}
-    stream.getTracks().forEach((t) => t.stop());
-    void ctx.close().catch(() => {});
+    processor.onaudioprocess = null;
   };
 
   return {
+    ready,
     async stop() {
+      stopped = true;
       const srcRate = ctx.sampleRate;
-      teardown();
+      detach();
       const total = chunks.reduce((n, c) => n + c.length, 0);
       const merged = new Float32Array(total);
       let o = 0;
@@ -109,7 +162,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     },
     cancel() {
       cancelled = true;
-      teardown();
+      detach();
     },
   };
 }
