@@ -2317,6 +2317,20 @@ function AppPage() {
             </button>
             <button
               onClick={() => {
+                if (typeof document !== "undefined") {
+                  (document.activeElement as HTMLElement | null)?.blur?.();
+                }
+                if (!activeDocId) return;
+                void sendIdea(activeDocId, "current");
+              }}
+              disabled={!composeText.trim() || !activeDocId}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Add to current
+            </button>
+            <button
+              onClick={() => {
                 // Blur the compose textarea so iOS dismisses the keyboard
                 // before the destination picker (button-only UI) opens.
                 if (typeof document !== "undefined") {
@@ -2330,23 +2344,29 @@ function AppPage() {
             >
               Send to…
             </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void composeDictation.toggle();
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              disabled={composeDictation.transcribing}
-              aria-label={composeDictation.recording ? "Stop recording" : "Start voice input"}
-              className="rounded-full border border-foreground/15 bg-card/70 px-4 py-2 text-base backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              {composeDictation.transcribing ? "…" : composeDictation.recording ? "⬛️" : "🔴"}
-            </button>
-
           </div>
         </div>
+      )}
+
+      {/* Floating dictation button while the New idea composer is open, so the
+          mobile keyboard can't cover it. */}
+      {composing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            // Keep the textarea focused (and the mobile keyboard open).
+            e.preventDefault();
+            e.stopPropagation();
+            if (!composeDictation.transcribing) void composeDictation.toggle();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={composeDictation.transcribing}
+          aria-label={composeDictation.recording ? "Stop recording" : "Start voice input"}
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
+          style={{ bottom: "60svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          {composeDictation.transcribing ? "…" : composeDictation.recording ? "⬛️" : "🔴"}
+        </button>
       )}
 
       {/* Edit action buttons (above orb) */}
