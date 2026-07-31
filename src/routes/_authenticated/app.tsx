@@ -3138,6 +3138,26 @@ function AppPage() {
                 { label: "⤒  Move to top", target: 0, disabled: currentIdx === 0 },
                 { label: "⏫  Move up 2", target: currentIdx - 2, disabled: currentIdx < 1 },
                 { label: "🔼  Move up 1", target: currentIdx - 1, disabled: currentIdx === 0 },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => moveSentence(opt.target)}
+                  disabled={opt.disabled || !sentences || sentences.length === 0}
+                  className="w-full rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-3 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                >
+                  {opt.label}
+                </button>
+              ))}
+
+              <button
+                onClick={openSendSentence}
+                disabled={!currentSentence}
+                className="w-full rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20 disabled:opacity-40"
+              >
+                📤  Send to document
+              </button>
+
+              {[
                 { label: "🔽  Move down 1", target: currentIdx + 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
                 { label: "⏬  Move down 2", target: currentIdx + 2, disabled: !sentences || currentIdx >= sentences.length - 1 },
                 { label: "⤓  Move to bottom", target: (sentences?.length ?? 1) - 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
