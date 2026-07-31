@@ -1496,7 +1496,11 @@ function AppPage() {
     // Resolve insertion index. For "current", use the live current sentence
     // index of the target doc (which equals currentIdx when sending to the
     // active doc). For "afterAnchor", use the explicit picker selection.
-    const targetLen = sendTargetSentences.length;
+    // When sending into the doc we're viewing, prefer the live sentence list —
+    // sendTargetSentences is only populated by the destination picker.
+    const targetLen = targetDocId === activeDocId
+      ? (sentences?.length ?? sendTargetSentences.length)
+      : sendTargetSentences.length;
     const targetCurrentIdx = targetDocId === activeDocId
       ? currentIdx
       : (targetDoc?.current_sentence_index ?? 0);
