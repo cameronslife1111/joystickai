@@ -1485,6 +1485,7 @@ function AppPage() {
     setSendTargetSentences([]);
     setSendAnchorIdx(0);
     setSendSearchQuery("");
+    setMoveSendSourceId(null);
   }, []);
 
   // User picked a target document; load its sentences so they can either jump
