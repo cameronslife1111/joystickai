@@ -886,10 +886,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     key={id}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
                   >
-                    <span className="max-w-[140px] truncate">{d?.title ?? "Document"}</span>
                     <button
                       type="button"
-                      onClick={() => setContextDocIds(contextDocIds.filter((x) => x !== id))}
+                      aria-label={`Open "${d?.title ?? "Document"}"`}
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenDocument?.(id);
+                      }}
+                      className="max-w-[140px] truncate hover:underline"
+                    >
+                      {d?.title ?? "Document"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContextDocIds(contextDocIds.filter((x) => x !== id));
+                      }}
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-3 w-3" />
