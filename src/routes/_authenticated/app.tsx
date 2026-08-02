@@ -708,6 +708,7 @@ function AppPage() {
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
     const clamped = Math.max(0, newIdx);
+    localIdxRef.current[activeDoc.id] = { index: clamped, writtenAt: Date.now() };
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === activeDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
@@ -715,6 +716,7 @@ function AppPage() {
       .update({ current_sentence_index: clamped })
       .eq("id", activeDoc.id);
   }, [activeDoc, qc]);
+
 
   const jumpTo = useCallback(async (target: number) => {
     if (!sentences || sentences.length === 0) return;
