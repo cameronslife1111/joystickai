@@ -67,6 +67,8 @@ interface Props {
   openThreadId?: string | null;
   /** Open straight to the chat list instead of the last conversation. */
   startInThreadList?: boolean;
+  /** Open an attached document in the reader (chat closes first). */
+  onOpenDocument?: (documentId: string) => void;
 }
 
 type ChatRow = {
@@ -187,7 +189,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
@@ -884,10 +886,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     key={id}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
                   >
-                    <span className="max-w-[140px] truncate">{d?.title ?? "Document"}</span>
                     <button
                       type="button"
-                      onClick={() => setContextDocIds(contextDocIds.filter((x) => x !== id))}
+                      aria-label={`Open "${d?.title ?? "Document"}"`}
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenDocument?.(id);
+                      }}
+                      className="max-w-[140px] truncate hover:underline"
+                    >
+                      {d?.title ?? "Document"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContextDocIds(contextDocIds.filter((x) => x !== id));
+                      }}
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-3 w-3" />

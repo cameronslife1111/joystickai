@@ -3372,6 +3372,7 @@ function AppPage() {
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
         startInThreadList={chatStartInList}
+        onOpenDocument={(id) => void goToDocument(id)}
       />
       {currentSentence && (
         <LinkDocumentDialog
