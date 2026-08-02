@@ -1,21 +1,28 @@
-## What's happening
+## Goal
+Update the chat message bubbles so they are smaller, user messages are blue, and assistant messages get a gray bubble — working in both light and dark modes.
 
-Your position in a list (`current_sentence_index`) lives in the `documents` row, and the app reads it from the cached `documents` query. Two things can refetch that list right when you come back to the app:
+## Current state
+- User messages: `bg-primary` (purple in dark mode), `text-[25px]`
+- Assistant messages: no bubble, `text-[25px]`
 
-- The shared query config in `src/router.tsx` has `refetchOnReconnect: true` (added for the 5G work), and iOS fires a reconnect/online event when the app is foregrounded.
-- The running-plans watcher (`src/hooks/use-running-plans-advancer.ts:55`) invalidates `["documents"]` on its poll.
+## Changes
 
-If one of those fetches is already in flight when you swipe, its response lands *after* your swipe's optimistic update and overwrites it with the older index — so the app snaps back one sentence. Because it depends on timing, it only happens sometimes, which matches what you're seeing.
+### 1. Add semantic chat bubble tokens to `src/styles.css`
+Register new tokens under `@theme inline` and define values in `:root` and `.light`:
+- `--chat-user`: a medium-light blue
+- `--chat-user-foreground`: high-contrast text
+- `--chat-assistant`: a neutral gray
+- `--chat-assistant-foreground`: high-contrast text
 
-## The fix (small and contained)
+### 2. Update message rendering in `src/components/ChatDialog.tsx`
+Around lines 816–828, change:
+- Text size from `text-[25px]` to `text-base` (16px)
+- User bubble class to `bg-chat-user text-chat-user-foreground`
+- Assistant bubble to a rounded gray bubble using `bg-chat-assistant text-chat-assistant-foreground`
+- Keep max-widths, padding, and rounded corners consistent
 
-1. In `src/routes/_authenticated/app.tsx`, keep a small in-memory record of the last index this device wrote per document (id → { index, writtenAt }), updated inside `setIndex` right where the optimistic cache write already happens.
-2. In the `documents` query function, after the rows come back, re-apply any local index that was written after that fetch started. So a stale server response can no longer move you backwards, while genuinely new server data (new docs, titles, positions, plan edits) still comes through untouched.
-3. Add `refetchOnReconnect: false` to the `documents` query only (it already has `refetchOnWindowFocus: false`), so foregrounding the app doesn't kick off the competing fetch in the first place. Media/gallery queries keep their reconnect behavior, so the 5G loading fixes stay intact.
+### 3. Verify contrast
+Ensure the chosen blue and gray values are readable against both dark and light backgrounds.
 
-Nothing about swipes, speech, saving, or the sentences query changes — writes still persist to the backend exactly as they do today, so switching devices still restores your saved position.
-
-## Technical notes
-
-- Local override entries are cleared once the server value matches, so they can't linger and mask real changes.
-- No schema change, no new dependency, no new effect or event listener.
+## Out of scope
+No changes to chat functionality, thread logic, attachments, or the composer — only bubble appearance.

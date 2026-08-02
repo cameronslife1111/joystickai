@@ -820,8 +820,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       <div
                         className={
                           m.role === "user"
-                            ? "max-w-[85%] rounded-2xl bg-primary px-3.5 py-2 text-[25px] text-primary-foreground"
-                            : "max-w-[90%] text-[25px]"
+                            ? "max-w-[85%] rounded-2xl bg-chat-user px-3.5 py-2 text-base text-chat-user-foreground"
+                            : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
                         }
                       >
                         <span className="whitespace-pre-wrap">{m.content}</span>

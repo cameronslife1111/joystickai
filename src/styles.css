@@ -33,6 +33,10 @@
   --color-aurora-2: var(--aurora-2);
   --color-aurora-3: var(--aurora-3);
   --color-aurora-4: var(--aurora-4);
+  --color-chat-user: var(--chat-user);
+  --color-chat-user-foreground: var(--chat-user-foreground);
+  --color-chat-assistant: var(--chat-assistant);
+  --color-chat-assistant-foreground: var(--chat-assistant-foreground);
   --font-display: "Poppins", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -62,6 +66,10 @@
   --aurora-2: oklch(0.7 0.24 290); /* violet */
   --aurora-3: oklch(0.7 0.26 340); /* magenta */
   --aurora-4: oklch(0.78 0.18 200); /* cyan */
+  --chat-user: oklch(0.62 0.17 250);
+  --chat-user-foreground: oklch(0.98 0.005 280);
+  --chat-assistant: oklch(0.22 0.03 280);
+  --chat-assistant-foreground: oklch(0.98 0.005 280);
 }
 
 .light {
@@ -84,6 +92,10 @@
   --border: oklch(0.18 0.03 280 / 10%);
   --input: oklch(0.18 0.03 280 / 14%);
   --ring: oklch(0.55 0.22 290);
+  --chat-user: oklch(0.7 0.16 250);
+  --chat-user-foreground: oklch(0.99 0 0);
+  --chat-assistant: oklch(0.93 0.01 280);
+  --chat-assistant-foreground: oklch(0.2 0.03 280);
 }
 
 @layer base {
