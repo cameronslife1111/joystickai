@@ -66,6 +66,10 @@
   --aurora-2: oklch(0.7 0.24 290); /* violet */
   --aurora-3: oklch(0.7 0.26 340); /* magenta */
   --aurora-4: oklch(0.78 0.18 200); /* cyan */
+  --chat-user: oklch(0.62 0.17 250);
+  --chat-user-foreground: oklch(0.98 0.005 280);
+  --chat-assistant: oklch(0.22 0.03 280);
+  --chat-assistant-foreground: oklch(0.98 0.005 280);
 }
 
 .light {
