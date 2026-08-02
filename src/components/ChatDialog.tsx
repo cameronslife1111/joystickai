@@ -67,6 +67,8 @@ interface Props {
   openThreadId?: string | null;
   /** Open straight to the chat list instead of the last conversation. */
   startInThreadList?: boolean;
+  /** Open an attached document in the reader (chat closes first). */
+  onOpenDocument?: (documentId: string) => void;
 }
 
 type ChatRow = {
@@ -187,7 +189,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
