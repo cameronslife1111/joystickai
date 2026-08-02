@@ -92,6 +92,10 @@
   --border: oklch(0.18 0.03 280 / 10%);
   --input: oklch(0.18 0.03 280 / 14%);
   --ring: oklch(0.55 0.22 290);
+  --chat-user: oklch(0.7 0.16 250);
+  --chat-user-foreground: oklch(0.99 0 0);
+  --chat-assistant: oklch(0.93 0.01 280);
+  --chat-assistant-foreground: oklch(0.2 0.03 280);
 }
 
 @layer base {
