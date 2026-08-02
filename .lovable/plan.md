@@ -1,24 +1,28 @@
 ## Goal
-Move the "Linked chat" pill/button out of the top header and place it just above the Orby circle. Keep the "Linked document" pill at the top unchanged.
+Add the same wide ← back button used at the bottom of the grid menu to the bottom of the chat popup. Clicking it closes the chat. Make the chat popup slightly shorter so the button fits without crowding.
 
 ## Current state
-- In `src/routes/_authenticated/app.tsx`, both the linked-document pill and the linked-chat pill are rendered inside the top `<header>` block (around lines 2264–2292).
-- They are mutually exclusive: the chat pill only appears when the current sentence has a `linked_thread_id` but no `linked_document_id`.
-- The Orby circle lives in the lower `<section className="relative flex shrink-0 items-center justify-center pb-4">` (around line 2525).
+- `src/components/ChatDialog.tsx` renders a full-screen-ish dialog at `h-[92vh] max-h-[92vh]` with header, messages, and composer, but no bottom dismiss button.
+- `src/routes/_authenticated/app.tsx` already has the target UI pattern: a full-width rounded-2xl button with a left arrow at the bottom of the grid menu overlay (lines 2604–2610).
 
 ## Changes
-1. **Remove the linked-chat pill from the header**
-   - Delete the conditional `Linked chat` button block from the top header.
-   - Leave the linked-document pill exactly where it is.
+1. **Shrink the chat dialog**  
+   Change `DialogContent` height from `h-[92vh] max-h-[92vh]` to `h-[88vh] max-h-[88vh]` (or equivalent) to leave room for the bottom button.
 
-2. **Add the linked-chat pill above the orb**
-   - Insert the same styled `Linked chat` button just above the orb-stage `<section>`.
-   - Keep the existing behavior: clicking it calls `openLinkedChat()`.
-   - Maintain the same visual style (rounded pill, primary border/background, icon + text).
+2. **Add the back button**  
+   Insert a full-width button just above the composer (or as the last element inside `DialogContent`) with:
+   - label `←`
+   - same rounded-2xl, border, and muted background styling as the menu back button
+   - `onClick={() => onOpenChange(false)}` so it always closes the current chat
+   - appropriate `aria-label`
+
+3. **Preserve existing behavior**  
+   - The button closes the dialog regardless of which thread is open or how the chat was opened (Slot 11 or linked chat pill).
+   - No changes to thread state, navigation, or data flow.
 
 ## Files
-- `src/routes/_authenticated/app.tsx`
+- `src/components/ChatDialog.tsx`
 
 ## Notes
-- No data model or route changes.
-- The mutual exclusivity between linked document and linked chat stays the same.
+- This is a presentation-only change; no backend, route, or gesture changes.
+- The button should match the menu back button visually and functionally (close only, no navigation side effects).
