@@ -693,7 +693,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex h-[88vh] max-h-[88vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="flex flex-row items-center justify-between border-b border-foreground/10 p-3">
             <div className="flex min-w-0 items-center gap-2">
               <Button
@@ -974,6 +974,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+          </div>
+
+          {/* Back button — matches the grid menu's bottom back button */}
+          <div className="border-t border-foreground/10 p-3">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label="Close chat"
+              className="flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 transition hover:bg-card hover:text-foreground"
+            >
+              <span className="text-lg">←</span>
+            </button>
           </div>
 
           {/* Threads list — fills the whole chat panel */}
