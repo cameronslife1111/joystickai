@@ -288,17 +288,42 @@ function AppPage() {
     if (typeof window !== "undefined") window.localStorage.setItem("orby_theme", theme);
   }, [theme]);
 
+  // Last sentence index this device wrote per document. A background refetch
+  // (reconnect after the app is foregrounded, plan watcher invalidation) can
+  // return a row that was read BEFORE our write landed; without this guard its
+  // response overwrites the fresh index and the reader snaps back a sentence.
+  const localIdxRef = useRef<Record<string, { index: number; writtenAt: number }>>({});
+
   // Load docs
   const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
     queryKey: ["documents"],
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: async (): Promise<Doc[]> => {
+      const startedAt = Date.now();
       const { data, error } = await supabase
         .from("documents").select("*").order("position", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      const rows = (data ?? []) as Doc[];
+      const local = localIdxRef.current;
+      return rows.map((d) => {
+        const pending = local[d.id];
+        if (!pending) return d;
+        // Server already reflects our write — drop the override.
+        if (d.current_sentence_index === pending.index) {
+          delete local[d.id];
+          return d;
+        }
+        // Our write happened after this fetch started: the row is stale.
+        if (pending.writtenAt >= startedAt) {
+          return { ...d, current_sentence_index: pending.index };
+        }
+        delete local[d.id];
+        return d;
+      });
     },
   });
+
 
   // Bootstrap: create first doc if none
   useEffect(() => {
