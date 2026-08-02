@@ -33,6 +33,10 @@
   --color-aurora-2: var(--aurora-2);
   --color-aurora-3: var(--aurora-3);
   --color-aurora-4: var(--aurora-4);
+  --color-chat-user: var(--chat-user);
+  --color-chat-user-foreground: var(--chat-user-foreground);
+  --color-chat-assistant: var(--chat-assistant);
+  --color-chat-assistant-foreground: var(--chat-assistant-foreground);
   --font-display: "Poppins", ui-sans-serif, system-ui, sans-serif;
 }
 
