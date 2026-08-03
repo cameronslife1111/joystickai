@@ -388,6 +388,7 @@ export const TOOL_GROUPS: Record<string, string> = {
   update_sentence_content: "document_editing",
   move_sentence: "document_editing",
   link_sentence_to_document: "document_editing",
+  delete_sentence: "document_editing",
   mark_sentence_for_deletion: "document_editing",
   mark_document_for_deletion: "document_editing",
   mark_media_for_deletion: "document_editing",
