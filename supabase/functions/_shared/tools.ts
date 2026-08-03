@@ -126,8 +126,19 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "delete_sentence",
+    description:
+      "PERMANENTLY delete one sentence from a document. Use this when the user explicitly asked to delete / remove / erase / get rid of / take out content. " +
+      "The sentence_id is REQUIRED and must be a concrete sentence id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template (e.g. from find_sentence_by_content) — never guess. " +
+      "One sentence per step: emit one delete_sentence step per sentence to remove. Never use this to clear a whole document, and never use it as part of a 'replace' — for replacements use update_sentence_content on the located sentence instead. " +
+      "If the user did NOT use a deletion word, use mark_sentence_for_deletion instead; delete_sentence is rejected in that case.",
+    args: {
+      sentence_id: { type: "string", description: "UUID of the sentence to delete", required: true },
+    },
+  },
+  {
     name: "mark_sentence_for_deletion",
-    description: "Prepend the wastebasket emoji to a sentence's content (if not already present) so the user can find and remove it manually. This does NOT delete the sentence.",
+    description: "Prepend the wastebasket emoji to a sentence's content (if not already present) so the user can find and remove it manually. This does NOT delete the sentence. Use this only when the user did NOT explicitly say delete/remove — otherwise use delete_sentence.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence", required: true },
     },
