@@ -266,7 +266,20 @@ function resolvePath(obj: any, path: string, stepIdx?: number, toolName?: string
 }
 
 
-type ToolCtx = { user_id: string; admin: any; supabase: any };
+type ToolCtx = { user_id: string; admin: any; supabase: any; user_request?: string };
+
+// DELETION CONSENT GATE — real row deletion only runs when the user's own
+// words asked for it. Marking (trash emoji) stays available without consent.
+const DELETION_WORDS = [
+  "delete", "deleting", "deleted", "remove", "removing", "removed", "removal",
+  "erase", "erasing", "erased", "get rid of", "getting rid of", "take out",
+  "taking out", "took out", "wipe", "clear out", "purge", "scrap", "trash",
+];
+function hasDeletionConsent(userRequest?: string | null): boolean {
+  const text = String(userRequest ?? "").toLowerCase();
+  if (!text.trim()) return false;
+  return DELETION_WORDS.some((w) => text.includes(w));
+}
 
 // Stopwords shared across fuzzy search handlers. Intentionally small — just the
 // connective tissue the user adds around a real reference ("the doc about X",
