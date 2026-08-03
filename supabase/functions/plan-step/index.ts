@@ -109,6 +109,7 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     update_sentence_content: ["sentence_id", "new_content"],
     move_sentence: ["sentence_id", "target_document_id"],
     link_sentence_to_document: ["sentence_id"],
+    delete_sentence: ["sentence_id"],
     mark_sentence_for_deletion: ["sentence_id"],
     mark_document_for_deletion: ["document_id"],
     mark_media_for_deletion: ["media_id"],
