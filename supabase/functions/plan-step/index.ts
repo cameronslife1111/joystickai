@@ -696,6 +696,48 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     return data;
   },
+  async delete_sentence(args, { user_id, admin, user_request }) {
+    if (!hasDeletionConsent(user_request)) {
+      throw new Error(
+        "Deletion blocked: the request never explicitly asked to delete or remove anything. " +
+          "Ask the user to say \"delete\" or \"remove\" (or use mark_sentence_for_deletion instead).",
+      );
+    }
+    const { data: cur } = await admin
+      .from("sentences")
+      .select("id, content, order_index, document_id")
+      .eq("id", args.sentence_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!cur) throw new Error("Sentence not found");
+
+    const { data: doc } = await admin
+      .from("documents")
+      .select("id, title")
+      .eq("id", cur.document_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    const { error } = await admin
+      .from("sentences")
+      .delete()
+      .eq("id", args.sentence_id)
+      .eq("user_id", user_id);
+    if (error) throw new Error(error.message);
+
+    // Keep order_index dense so the reader doesn't skip positions.
+    try {
+      await admin.rpc("compact_sentence_indexes", { p_document_id: cur.document_id });
+    } catch (_e) { /* trigger also compacts; best-effort */ }
+
+    return {
+      deleted: true,
+      id: cur.id,
+      document_id: cur.document_id,
+      document_title: doc?.title ?? null,
+      deleted_content: String(cur.content ?? "").slice(0, 400),
+    };
+  },
   async mark_sentence_for_deletion(args, { user_id, admin }) {
     const { data: cur } = await admin
       .from("sentences")
