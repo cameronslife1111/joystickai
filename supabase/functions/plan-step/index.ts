@@ -109,6 +109,7 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     update_sentence_content: ["sentence_id", "new_content"],
     move_sentence: ["sentence_id", "target_document_id"],
     link_sentence_to_document: ["sentence_id"],
+    delete_sentence: ["sentence_id"],
     mark_sentence_for_deletion: ["sentence_id"],
     mark_document_for_deletion: ["document_id"],
     mark_media_for_deletion: ["media_id"],
@@ -266,7 +267,20 @@ function resolvePath(obj: any, path: string, stepIdx?: number, toolName?: string
 }
 
 
-type ToolCtx = { user_id: string; admin: any; supabase: any };
+type ToolCtx = { user_id: string; admin: any; supabase: any; user_request?: string };
+
+// DELETION CONSENT GATE — real row deletion only runs when the user's own
+// words asked for it. Marking (trash emoji) stays available without consent.
+const DELETION_WORDS = [
+  "delete", "deleting", "deleted", "remove", "removing", "removed", "removal",
+  "erase", "erasing", "erased", "get rid of", "getting rid of", "take out",
+  "taking out", "took out", "wipe", "clear out", "purge", "scrap", "trash",
+];
+function hasDeletionConsent(userRequest?: string | null): boolean {
+  const text = String(userRequest ?? "").toLowerCase();
+  if (!text.trim()) return false;
+  return DELETION_WORDS.some((w) => text.includes(w));
+}
 
 // Stopwords shared across fuzzy search handlers. Intentionally small — just the
 // connective tissue the user adds around a real reference ("the doc about X",
@@ -695,6 +709,48 @@ const TOOL_HANDLERS: Record<string, any> = {
       .single();
     if (error) throw new Error(error.message);
     return data;
+  },
+  async delete_sentence(args, { user_id, admin, user_request }) {
+    if (!hasDeletionConsent(user_request)) {
+      throw new Error(
+        "Deletion blocked: the request never explicitly asked to delete or remove anything. " +
+          "Ask the user to say \"delete\" or \"remove\" (or use mark_sentence_for_deletion instead).",
+      );
+    }
+    const { data: cur } = await admin
+      .from("sentences")
+      .select("id, content, order_index, document_id")
+      .eq("id", args.sentence_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!cur) throw new Error("Sentence not found");
+
+    const { data: doc } = await admin
+      .from("documents")
+      .select("id, title")
+      .eq("id", cur.document_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    const { error } = await admin
+      .from("sentences")
+      .delete()
+      .eq("id", args.sentence_id)
+      .eq("user_id", user_id);
+    if (error) throw new Error(error.message);
+
+    // Keep order_index dense so the reader doesn't skip positions.
+    try {
+      await admin.rpc("compact_sentence_indexes", { p_document_id: cur.document_id });
+    } catch (_e) { /* trigger also compacts; best-effort */ }
+
+    return {
+      deleted: true,
+      id: cur.id,
+      document_id: cur.document_id,
+      document_title: doc?.title ?? null,
+      deleted_content: String(cur.content ?? "").slice(0, 400),
+    };
   },
   async mark_sentence_for_deletion(args, { user_id, admin }) {
     const { data: cur } = await admin
@@ -1441,7 +1497,8 @@ async function composeWrapUp(
     "Write a short message (1–3 sentences, plain conversational text, no markdown headers, no numbered step dump) that: " +
     "says what you actually produced, names the documents or media by title, and — when natural — offers one concrete next step. " +
     "Never invent results that aren't in the run log. If the run failed, say plainly what went wrong in human terms and suggest how to proceed. " +
-    "Start completed messages with ✅ and failed ones with ⚠️.";
+    "Start completed messages with ✅ and failed ones with ⚠️. " +
+    "If the run log contains any delete_sentence result, you MUST explicitly tell the user what was deleted (quote or paraphrase the deleted text and name the document) — never let a deletion go unreported.";
 
   const userPrompt =
     `The user asked: ${String(plan?.user_request ?? "").slice(0, 1500)}\n\n` +
@@ -1747,6 +1804,7 @@ Deno.serve(async (req) => {
       baseIndex: idx + 1,
       plan_id: plan.id,
       thread_id: plan.thread_id ?? null,
+      user_request: plan.user_request ?? "",
     });
 
     // ask_user: pause the plan and record the question. When the user replies

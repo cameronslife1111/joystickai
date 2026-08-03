@@ -96,6 +96,13 @@ WHERE RULES — every step must lock its target (this is the #1 cause of plan fa
 - BULK / "ALL MATCHING" REQUESTS: When the user asks you to act on EVERY document matching a description (e.g. "all the docs that start with Ricky - Prompt", "every meme prompt doc", "all documents about X"), enumerate the matching titles DIRECTLY from the ALL DOCUMENTS (id — title) list in the WORKSPACE SNAPSHOT and emit one step per match (e.g. one add_sentence per matching title, with the literal title text inlined). The ALL DOCUMENTS list contains the user's complete document set — there is NO five-result limit when you read titles from the snapshot, so match loosely (prefix/substring/keywords) and include EVERY doc that fits, not just a few. Do NOT call find_document_by_title for this — it only returns the 5 best matches and cannot enumerate. Only if the matching set is clearly larger than what the snapshot shows, use find_documents_by_title (plural) which returns all matches.
 - Plan as few steps as possible. Combine where reasonable — BUT for bulk "act on all matching docs" requests, one step per matching document is correct and expected (do not artificially limit the count).
 
+EDIT / REPLACE / DELETE RULES — surgical only, never destructive:
+- REPLACE means EDIT ONE SENTENCE IN PLACE. When the user says "replace X with Y", "change X to Y", "fix the line about X", "update the part that says X": locate the ONE sentence that contains X (inline its sentence_id from the WORKSPACE SNAPSHOT, or add a find_sentence_by_content / read_document step first and template {{step_N.result.id}}), then emit update_sentence_content with that sentence_id and the new_content. NEVER rewrite, clear, or re-add the whole document for a replacement. NEVER delete the document. NEVER emit a chain that removes many sentences in order to change one.
+- DELETE means REMOVE SPECIFIC SENTENCES. When the user explicitly says delete / remove / erase / get rid of / take out: use delete_sentence with a resolved sentence_id, ONE step per sentence to remove. delete_sentence permanently removes that row.
+- delete_sentence is CONSENT-GATED: it only executes if the user's own request contains an explicit deletion word (delete, remove, erase, get rid of, take out, wipe, purge). If the user did not say one of those words, do NOT use delete_sentence — use mark_sentence_for_deletion instead. Never assume deletion from vague phrasing like "clean this up" or "make it better".
+- Whole documents and media are NEVER really deleted: keep using mark_document_for_deletion / mark_media_for_deletion for those.
+- Deleting or replacing must ALWAYS target a located sentence id. If you cannot name the target sentence, add a lookup step first — never guess and never fall back to bulk rewriting.
+
 PER-STEP REASONING CONTRACT — this is the most important rule. Before you choose a tool and its args for ANY step, you must think it through and EMIT your reasoning as an "io" object on that step. A step is invalid without a complete io. Think like a strict, super-intelligent planner: for every single step answer, concretely:
 - io.inputs: what data / media this step actually uses (named documents, specific media ids, the output of a prior step, the user's literal text, or "none"). Be specific — name the document title or asset, never "the doc".
 - io.inputSource: WHERE each input comes from — a concrete workspace id (from the snapshot), a {{step_N.result...}} reference to an earlier step, or "user request". Every input named in io.inputs must have a source here AND a matching concrete id / template in the step's actual args. No input may be implied by a previous step's prose.
@@ -651,6 +658,7 @@ Deno.serve(async (req) => {
       update_sentence_content: ["sentence_id", "new_content"],
       move_sentence: ["sentence_id", "target_document_id"],
       link_sentence_to_document: ["sentence_id"],
+      delete_sentence: ["sentence_id"],
       mark_sentence_for_deletion: ["sentence_id"],
       mark_document_for_deletion: ["document_id"],
       mark_media_for_deletion: ["media_id"],
@@ -680,8 +688,28 @@ Deno.serve(async (req) => {
       return true;
     };
 
+    // DELETION CONSENT GATE (compose-time): a plan may only contain real
+    // delete_sentence steps if the user's own words asked for deletion.
+    const DELETION_WORDS = [
+      "delete", "deleting", "deleted", "remove", "removing", "removed", "removal",
+      "erase", "erasing", "erased", "get rid of", "getting rid of", "take out",
+      "taking out", "took out", "wipe", "clear out", "purge", "scrap", "trash",
+    ];
+    const requestLower = String(plan.user_request ?? "").toLowerCase();
+    const deletionAllowed = DELETION_WORDS.some((w) => requestLower.includes(w));
+
     for (const [i, s] of steps.entries()) {
       if (!s || typeof s !== "object") throw new Error(`Step ${i + 1} is malformed`);
+      if (s.tool === "delete_sentence" && !deletionAllowed) {
+        // Downgrade rather than fail the whole plan: mark instead of delete.
+        s.tool = "mark_sentence_for_deletion";
+        if (typeof s.description === "string") {
+          s.description = `${s.description} (marked for deletion — the request didn't explicitly say delete/remove)`.slice(0, 240);
+        }
+        if (s.io && typeof s.io === "object") {
+          s.io.capability = "mark_sentence_for_deletion";
+        }
+      }
       if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
         throw new Error(`Step ${i + 1} uses unknown tool: ${s.tool}`);
       }
