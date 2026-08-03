@@ -688,8 +688,28 @@ Deno.serve(async (req) => {
       return true;
     };
 
+    // DELETION CONSENT GATE (compose-time): a plan may only contain real
+    // delete_sentence steps if the user's own words asked for deletion.
+    const DELETION_WORDS = [
+      "delete", "deleting", "deleted", "remove", "removing", "removed", "removal",
+      "erase", "erasing", "erased", "get rid of", "getting rid of", "take out",
+      "taking out", "took out", "wipe", "clear out", "purge", "scrap", "trash",
+    ];
+    const requestLower = String(plan.user_request ?? "").toLowerCase();
+    const deletionAllowed = DELETION_WORDS.some((w) => requestLower.includes(w));
+
     for (const [i, s] of steps.entries()) {
       if (!s || typeof s !== "object") throw new Error(`Step ${i + 1} is malformed`);
+      if (s.tool === "delete_sentence" && !deletionAllowed) {
+        // Downgrade rather than fail the whole plan: mark instead of delete.
+        s.tool = "mark_sentence_for_deletion";
+        if (typeof s.description === "string") {
+          s.description = `${s.description} (marked for deletion — the request didn't explicitly say delete/remove)`.slice(0, 240);
+        }
+        if (s.io && typeof s.io === "object") {
+          s.io.capability = "mark_sentence_for_deletion";
+        }
+      }
       if (typeof s.tool !== "string" || !toolNames.has(s.tool)) {
         throw new Error(`Step ${i + 1} uses unknown tool: ${s.tool}`);
       }
