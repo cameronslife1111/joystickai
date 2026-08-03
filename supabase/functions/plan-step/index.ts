@@ -1497,7 +1497,8 @@ async function composeWrapUp(
     "Write a short message (1–3 sentences, plain conversational text, no markdown headers, no numbered step dump) that: " +
     "says what you actually produced, names the documents or media by title, and — when natural — offers one concrete next step. " +
     "Never invent results that aren't in the run log. If the run failed, say plainly what went wrong in human terms and suggest how to proceed. " +
-    "Start completed messages with ✅ and failed ones with ⚠️.";
+    "Start completed messages with ✅ and failed ones with ⚠️. " +
+    "If the run log contains any delete_sentence result, you MUST explicitly tell the user what was deleted (quote or paraphrase the deleted text and name the document) — never let a deletion go unreported.";
 
   const userPrompt =
     `The user asked: ${String(plan?.user_request ?? "").slice(0, 1500)}\n\n` +
