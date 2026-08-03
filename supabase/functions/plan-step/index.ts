@@ -1803,6 +1803,7 @@ Deno.serve(async (req) => {
       baseIndex: idx + 1,
       plan_id: plan.id,
       thread_id: plan.thread_id ?? null,
+      user_request: plan.user_request ?? "",
     });
 
     // ask_user: pause the plan and record the question. When the user replies
