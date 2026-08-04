@@ -972,8 +972,10 @@ function MediaPage() {
               <div className="pointer-events-none absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs text-white">
                 {viewerIdx! + 1} / {filtered.length}
               </div>
-              <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 max-w-[calc(100vw-10rem)] rounded-full bg-black/60 px-3 py-1 text-center text-[11px] text-white">
-                <span className="block truncate">{currentAsset.title || "Untitled"}</span>
+              <div className="pointer-events-none absolute inset-x-4 top-[calc(3.25rem+env(safe-area-inset-top))] text-center">
+                <span className="inline-block max-w-full rounded-xl bg-black/60 px-3 py-1.5 text-xs text-white leading-snug break-words whitespace-normal">
+                  {currentAsset.title || "Untitled"}
+                </span>
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
