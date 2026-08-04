@@ -53,6 +53,7 @@ export function useRunningPlansAdvancer(
               queryClient.invalidateQueries({ queryKey: ["plans"] });
               queryClient.invalidateQueries({ queryKey: ["plans_pending_count"] });
               queryClient.invalidateQueries({ queryKey: ["documents"] });
+              queryClient.invalidateQueries({ queryKey: ["documents_with_counts"] });
               queryClient.invalidateQueries({ queryKey: ["media_assets"] });
             }
             if (data?.status === "failed" && !notified.current.has(row.id)) {
