@@ -626,13 +626,17 @@ const TOOL_HANDLERS: Record<string, any> = {
         .eq("document_id", args.document_id);
       insertAt = count ?? 0;
     }
+    // Store one sentence per row (same as the in-app editor) so the document's
+    // sentence count is correct immediately, without a manual re-save.
+    const pieces = splitIntoSentences(String(args.content ?? ""));
+    if (pieces.length === 0) throw new Error("No content to add");
     // Atomic shift + insert. Use the SECURITY DEFINER `_as` variant via the
     // admin client so this works in background tick mode (no user JWT, so
     // auth.uid() is null and the original RPC raised "not authenticated").
     const { error: rpcErr } = await admin.rpc("insert_sentences_at_as", {
       p_user_id: user_id,
       p_document_id: args.document_id,
-      p_contents: [args.content],
+      p_contents: pieces,
       p_insert_at: insertAt,
     });
     if (rpcErr) throw new Error(rpcErr.message);
@@ -643,19 +647,33 @@ const TOOL_HANDLERS: Record<string, any> = {
       .eq("order_index", insertAt)
       .maybeSingle();
     if (selErr) throw new Error(selErr.message);
-    return ins;
+    return ins ? { ...ins, sentences_added: pieces.length } : { sentences_added: pieces.length };
   },
   async update_sentence_content(args, { user_id, admin }) {
+    const pieces = splitIntoSentences(String(args.new_content ?? ""));
+    if (pieces.length === 0) throw new Error("No content to write");
     const { data, error } = await admin
       .from("sentences")
-      .update({ content: args.new_content })
+      .update({ content: pieces[0] })
       .eq("id", args.sentence_id)
       .eq("user_id", user_id)
-      .select("id, content")
+      .select("id, content, document_id, order_index")
       .single();
     if (error) throw new Error(error.message);
-    return data;
+    // If the replacement text held more than one sentence, store the rest as
+    // their own rows right after it instead of cramming them into one row.
+    if (pieces.length > 1) {
+      const { error: rpcErr } = await admin.rpc("insert_sentences_at_as", {
+        p_user_id: user_id,
+        p_document_id: data.document_id,
+        p_contents: pieces.slice(1),
+        p_insert_at: (data.order_index ?? 0) + 1,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+    }
+    return { id: data.id, content: data.content, sentences_written: pieces.length };
   },
+
   async move_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";
     let insertAt = 0;
