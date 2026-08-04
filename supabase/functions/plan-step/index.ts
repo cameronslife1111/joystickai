@@ -58,7 +58,7 @@ async function invokeEdgeFunction(
 // ---- Runtime plan expansion (expand_plan) ----
 const PLANNER_PROVIDER = Deno.env.get("PLANNER_PROVIDER") ?? "openai";
 const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.5";
-const MAX_EXPANSION_STEPS = 120;
+const MAX_EXPANSION_STEPS = 400;
 
 async function callExpansionLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   if (PLANNER_PROVIDER !== "openai") throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
