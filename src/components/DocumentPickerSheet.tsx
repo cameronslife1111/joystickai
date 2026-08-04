@@ -40,14 +40,14 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
       if (error) throw error;
       const ids = (documents ?? []).map((d) => d.id);
       if (ids.length === 0) return [];
-      const { data: sentences } = await supabase
-        .from("sentences")
-        .select("document_id")
-        .in("document_id", ids);
+      // Grouped server-side count: a plain select of sentence rows is capped at
+      // 1000 rows, which silently undercounted every document past that cap.
+      const { data: countRows } = await supabase.rpc("document_sentence_counts");
       const counts = new Map<string, number>();
-      (sentences ?? []).forEach((s: any) => {
-        counts.set(s.document_id, (counts.get(s.document_id) ?? 0) + 1);
+      (countRows ?? []).forEach((r: any) => {
+        counts.set(r.document_id, Number(r.sentence_count) || 0);
       });
+
       return sortDocsByTitle(
         (documents ?? []).map((d) => ({
           id: d.id,

@@ -655,6 +655,13 @@ export type Database = {
         Args: { p_document_id: string }
         Returns: undefined
       }
+      document_sentence_counts: {
+        Args: never
+        Returns: {
+          document_id: string
+          sentence_count: number
+        }[]
+      }
       insert_sentences_at: {
         Args: {
           p_contents: string[]
