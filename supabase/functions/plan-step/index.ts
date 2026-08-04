@@ -1568,7 +1568,7 @@ function buildLovablePrompt(plan: any, failedStep: any, errorMessage: string): s
 const PLAN_TICK_SECRET = Deno.env.get("PLAN_TICK_SECRET") ?? "";
 
 // Hard caps — defense in depth against runaway plans.
-const MAX_TICKS = 300; // plenty for 50 media steps
+const MAX_TICKS = 1000; // raised: long multi-step plans (user can stop a plan anytime)
 const MAX_NO_PROGRESS = 300; // raised: video gens routinely take 8-15 min of "no row change"
 // Per-media wall-clock cap (ms). Videos can take 15+ min; cap at 30.
 const MAX_MEDIA_WAIT_MS = 30 * 60 * 1000;
