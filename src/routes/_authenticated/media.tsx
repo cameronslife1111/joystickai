@@ -1004,15 +1004,19 @@ function MediaPage() {
           onClick={() => setSheetAsset(null)}
         >
           <div
-            className="w-full max-w-md rounded-t-3xl border border-foreground/10 bg-card p-4"
+            className="flex max-h-[85svh] w-full max-w-md flex-col rounded-t-3xl border border-foreground/10 bg-card p-4"
             onClick={(e) => e.stopPropagation()}
             style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
           >
-            <div className="mb-3 px-2">
+            <div className="mb-3 shrink-0 px-2">
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-foreground/20" />
-              <p className="truncate text-center font-display text-base">{sheetAsset.title}</p>
+              <p className="line-clamp-2 break-words text-center font-display text-base">{sheetAsset.title}</p>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div
+              className="flex flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+
               <SheetButton icon={<Pencil className="h-4 w-4" />} label="Rename"
                 onClick={() => { setRenameText(sheetAsset.title); setRenameOpen(true); }}
               />
@@ -1431,7 +1435,7 @@ function SheetButton({
     <button
       onClick={onClick}
       className={
-        "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition active:scale-[0.98] " +
+        "flex w-full shrink-0 items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition active:scale-[0.98] " +
         (danger
           ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
           : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10")
