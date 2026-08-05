@@ -1435,7 +1435,7 @@ function SheetButton({
     <button
       onClick={onClick}
       className={
-        "flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition active:scale-[0.98] " +
+        "flex w-full shrink-0 items-center gap-3 rounded-xl border px-3 py-3 text-left text-sm transition active:scale-[0.98] " +
         (danger
           ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
           : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10")
