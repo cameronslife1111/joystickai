@@ -18,6 +18,8 @@ import {
   Circle,
   Loader2,
   AlertCircle,
+  Phone,
+  PhoneOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -50,6 +52,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+import { useRealtimeVoice } from "@/lib/use-realtime-voice";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
@@ -407,6 +410,76 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   });
 
+  // ── 📞 Hands-free call (OpenAI Realtime, interruptible) ───────────────────
+  // Everything spoken is mirrored into this thread as normal chat messages.
+  const appendVoiceMessage = useCallback(
+    async (role: "user" | "assistant", content: string) => {
+      const threadId = activeThreadId;
+      if (!threadId || !userId) return;
+      const text = role === "assistant" ? toPlainText(content) : content.trim();
+      if (!text) return;
+      const { data: row, error } = await supabase
+        .from("chat_messages")
+        .insert({ user_id: userId, thread_id: threadId, role, content: text, kind: "text" })
+        .select("id, role, content, created_at, kind, plan_id")
+        .single();
+      if (error || !row) return;
+      qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) => [
+        ...(cur ?? []),
+        row as ChatRow,
+      ]);
+      void supabase
+        .from("chat_threads")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", threadId);
+    },
+    [activeThreadId, userId, qc],
+  );
+
+  const messagesRef = useRef<ChatRow[]>([]);
+  messagesRef.current = messages;
+
+  const voice = useRealtimeVoice({
+    buildContext: useCallback(
+      () =>
+        messagesRef.current
+          .slice(-10)
+          .filter((m) => (m.content ?? "").trim())
+          .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+          .join("\n"),
+      [],
+    ),
+    onUserText: useCallback(
+      (t: string) => void appendVoiceMessage("user", t),
+      [appendVoiceMessage],
+    ),
+    onAssistantText: useCallback(
+      (t: string) => void appendVoiceMessage("assistant", t),
+      [appendVoiceMessage],
+    ),
+    onError: useCallback((m: string) => toast.error(m), []),
+  });
+
+  // Never keep a call running once the chat closes or the thread changes.
+  useEffect(() => {
+    if (!open) voice.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => {
+    if (voice.state !== "idle") voice.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId]);
+
+  // Browser text-to-speech would fight the live voice — silence it while live.
+  useEffect(() => {
+    if (voice.live && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+    }
+  }, [voice.live]);
+
+
+
   // Focus textarea on open + thread switch.
   useEffect(() => {
     if (open && activeThreadId) {
@@ -454,7 +527,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       autoSpokeThreadRef.current = null;
       return;
     }
-    if (!autoSpeak || !activeThreadId) return;
+    if (!autoSpeak || !activeThreadId || voice.live) return;
     if (autoSpokeThreadRef.current === activeThreadId) return;
     if (messages.length === 0) return;
     autoSpokeThreadRef.current = activeThreadId;
@@ -569,7 +642,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const threadId = override?.threadId ?? activeThreadId;
     if (!text || !userId || !threadId) return;
     if (busyThreadIds.has(threadId)) return;
-    const capsUsed = override?.caps ?? caps;
+    // While a hands-free call is live this is a text-only conversation.
+    const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
     if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
@@ -753,7 +827,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="flex h-[88vh] max-h-[88vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="flex flex-row items-center justify-between border-b border-foreground/10 p-3">
+          <DialogHeader className="flex flex-col gap-1 border-b border-foreground/10 p-3">
+            <div className="flex flex-row items-center justify-between">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 size="icon"
@@ -763,10 +838,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              <DialogTitle className="truncate text-base">
-                {activeThread?.title ?? "Chat"}
-              </DialogTitle>
+              <Button
+                size="sm"
+                variant={voice.state === "idle" ? "outline" : "destructive"}
+                aria-label={voice.live ? "Stop hands-free mode" : "Start hands-free mode"}
+                disabled={voice.connecting || !activeThreadId}
+                onClick={() => (voice.state === "idle" ? void voice.start() : voice.stop())}
+                className="gap-1.5"
+              >
+                {voice.connecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : voice.live ? (
+                  <PhoneOff className="h-4 w-4" />
+                ) : (
+                  <Phone className="h-4 w-4" />
+                )}
+                <span className="text-xs">
+                  {voice.connecting ? "Connecting" : voice.live ? "End call" : "Hands-free"}
+                </span>
+              </Button>
             </div>
+
             <div className="mr-8 flex items-center gap-1">
               <Button
                 size="icon"
@@ -853,7 +945,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </PopoverContent>
               </Popover>
             </div>
+            </div>
+            <DialogTitle className="px-1 text-base font-medium leading-snug break-words">
+              {activeThread?.title ?? "Chat"}
+            </DialogTitle>
+            {voice.live && (
+              <p className="px-1 text-[11px] text-muted-foreground">
+                Hands-free is live — just talk, and talk over Orby to interrupt. Planning and
+                document editing are paused until you end the call.
+              </p>
+            )}
           </DialogHeader>
+
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
