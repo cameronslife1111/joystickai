@@ -53,6 +53,7 @@ import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/l
 import { splitIntoSentences } from "@/lib/sentences";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { useRealtimeVoice } from "@/lib/use-realtime-voice";
+import { buildRealtimeDocContext } from "@/lib/realtime.functions";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
@@ -439,7 +440,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const messagesRef = useRef<ChatRow[]>([]);
   messagesRef.current = messages;
 
+  const docIdsRef = useRef<string[]>([]);
+  docIdsRef.current = contextDocIds;
+
   const voice = useRealtimeVoice({
+    buildDocumentIds: useCallback(() => docIdsRef.current, []),
     buildContext: useCallback(
       () =>
         messagesRef.current
@@ -469,6 +474,50 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (voice.state !== "idle") voice.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId]);
+
+  // Keep a live call's document context in sync when the user attaches or
+  // removes a document mid-conversation.
+  const fetchDocContext = useServerFn(buildRealtimeDocContext);
+  const pushedDocsRef = useRef<string | null>(null);
+  const docsKey = contextDocIds.join(",");
+  useEffect(() => {
+    if (!voice.live) {
+      pushedDocsRef.current = null;
+      return;
+    }
+    // The call was minted with whatever was attached at start time.
+    if (pushedDocsRef.current === null) {
+      pushedDocsRef.current = docsKey;
+      return;
+    }
+    if (pushedDocsRef.current === docsKey) return;
+    pushedDocsRef.current = docsKey;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ids = docsKey ? docsKey.split(",") : [];
+        const { block, included, trimmed } = await fetchDocContext({
+          data: { documentIds: ids },
+        });
+        if (cancelled) return;
+        if (!voice.updateContext(block)) return;
+        if (included === 0) {
+          toast.success("Orby is no longer seeing any documents");
+        } else {
+          toast.success(
+            `Orby can now see ${included} document${included === 1 ? "" : "s"}` +
+              (trimmed ? " (trimmed to fit)" : ""),
+          );
+        }
+      } catch {
+        if (!cancelled) toast.error("Couldn't update the call's documents");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docsKey, voice.live]);
 
   // Browser text-to-speech would fight the live voice — silence it while live.
   useEffect(() => {
