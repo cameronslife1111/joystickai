@@ -542,33 +542,22 @@ function MediaPage() {
       </div>
 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-2">
-          {!inFolderView && (
-            <button
-              onClick={() => {
-                if (selectMode) exitSelectMode();
-                else setSelectMode(true);
-              }}
-              aria-label={selectMode ? "Exit multi-select" : "Multi-select"}
-              title={selectMode ? "Exit multi-select" : "Select multiple"}
-              className={
-                "flex h-10 w-10 items-center justify-center rounded-full border transition active:scale-95 " +
-                (selectMode
-                  ? "border-primary/40 bg-primary/15 text-primary"
-                  : "border-foreground/10 hover:bg-foreground/10")
-              }
-            >
-              <CheckSquare className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-        <h1 className="min-w-0 truncate text-center font-display text-lg">
+      <header className="sticky top-0 z-20 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+        <h1 className="min-w-0 truncate text-left font-display text-lg">
           {selectMode ? `${selectedIds.size} selected` : inFolderView ? "Media Gallery" : folderTitle}
         </h1>
         <div className="flex items-center gap-2">
           {selectMode ? (
             <>
+              <button
+                type="button"
+                onClick={exitSelectMode}
+                aria-label="Exit multi-select"
+                title="Exit multi-select"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-primary transition active:scale-95"
+              >
+                <CheckSquare className="h-5 w-5" />
+              </button>
               <button
                 type="button"
                 disabled={selectedIds.size === 0}
@@ -610,6 +599,25 @@ function MediaPage() {
             </>
           ) : (
             <>
+              {!inFolderView && (
+                <button
+                  onClick={() => setSelectMode(true)}
+                  aria-label="Multi-select"
+                  title="Select multiple"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
+                >
+                  <CheckSquare className="h-5 w-5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setGenerateOpen(true)}
+                aria-label="Generate image"
+                title="Generate image"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/20"
+              >
+                <Sparkles className="h-5 w-5" />
+              </button>
               {(() => {
                 const downloadable = filtered.filter(
                   (a) => a.url && (a.status === "completed" || !a.status),
