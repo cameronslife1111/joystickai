@@ -2290,7 +2290,7 @@ function AppPage() {
 
 
     return filled;
-  }, [grid, openNewIdea]);
+  }, [grid, openNewIdea, handleDelegate]);
 
   return (
     <main
