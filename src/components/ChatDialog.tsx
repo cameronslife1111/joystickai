@@ -69,6 +69,19 @@ interface Props {
   startInThreadList?: boolean;
   /** Open an attached document in the reader (chat closes first). */
   onOpenDocument?: (documentId: string) => void;
+  /**
+   * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
+   * attached and immediately send `prompt` with `capabilities` checked.
+   * `id` is a nonce so each tap fires exactly once.
+   */
+  delegate?: {
+    id: string;
+    documentId: string;
+    title: string;
+    prompt: string;
+    capabilities: ChatCapabilities;
+  } | null;
+
 }
 
 type ChatRow = {
