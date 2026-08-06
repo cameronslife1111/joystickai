@@ -876,6 +876,21 @@ function MediaPage() {
         )}
       </section>
       )}
+      </div>
+
+      {/* Bottom back bar — the single way to navigate backwards */}
+      <div className="shrink-0 border-t border-foreground/10 bg-background px-4 pb-2 pt-2">
+        <button
+          type="button"
+          onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
+          aria-label={inFolderView ? "Back to Orby" : "Back to folders"}
+          className="flex h-12 w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95 hover:bg-foreground/10"
+        >
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+      </div>
+
+
 
 
       {/* Hidden file input */}
