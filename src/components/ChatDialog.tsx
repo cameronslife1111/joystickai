@@ -242,6 +242,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
+  /** Nonce of the last 🟣 Delegate request we already kicked off. */
+  const delegateRef = useRef<string | null>(null);
+
 
   // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
   const dictation = useVoiceDictation(
