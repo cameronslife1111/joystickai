@@ -332,9 +332,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       bootstrappedRef.current = false;
       return;
     }
+    // 🟣 Delegate owns the bootstrap: it creates its own fresh thread.
+    if (delegate && delegateRef.current !== delegate.id) return;
     // Slot 11 opens the chat picker first so the user chooses where to go.
     if (!bootstrappedRef.current) setDrawerOpen(!!startInThreadList && !openThreadId);
     if (bootstrappedRef.current || !userId) return;
+
     // Wait until the threads query has actually finished — the default `[]`
     // from useQuery would otherwise trick us into creating a new thread
     // before the real list arrives.
