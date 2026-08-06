@@ -1308,21 +1308,6 @@ function MediaPage() {
         </div>
       )}
 
-      {/* Floating Generate FAB — hidden when viewer is open */}
-      {viewerIdx === null && (
-        <button
-          onClick={() => setGenerateOpen(true)}
-          aria-label="Generate image"
-          className="fixed right-4 z-30 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-white shadow-lg transition active:scale-95"
-          style={{
-            bottom: "calc(1rem + env(safe-area-inset-bottom))",
-            background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-2))",
-          }}
-        >
-          <Sparkles className="h-4 w-4" />
-          Generate
-        </button>
-      )}
 
       <GenerateImageDialog open={generateOpen} onOpenChange={setGenerateOpen} />
 
