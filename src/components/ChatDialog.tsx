@@ -202,7 +202,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
