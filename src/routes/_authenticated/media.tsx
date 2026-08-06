@@ -24,6 +24,8 @@ import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
 import { DownloadAllProgress } from "@/components/DownloadAllProgress";
+import { VoiceReviseButton } from "@/components/VoiceReviseButton";
+
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
@@ -999,6 +1001,23 @@ function MediaPage() {
                   {currentAsset.title || "Untitled"}
                 </span>
               </div>
+              {(currentAsset.kind === "image" || currentAsset.kind === "video") &&
+                currentAsset.status !== "generating" &&
+                currentAsset.status !== "failed" && (
+                  <div
+                    className="absolute left-4"
+                    style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <VoiceReviseButton
+                      asset={currentAsset}
+                      onDone={() => {
+                        setViewerIdx(null);
+                        qc.invalidateQueries({ queryKey: ["media_assets"] });
+                      }}
+                    />
+                  </div>
+                )}
               <button
                 onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
                 aria-label="Options"
@@ -1007,6 +1026,7 @@ function MediaPage() {
               >
                 <MoreVertical className="h-5 w-5" />
               </button>
+
               <button
                 onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
                 aria-label="Close"
