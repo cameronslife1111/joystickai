@@ -562,6 +562,7 @@ Deno.serve(async (req) => {
     // holds: we pass ids, titles and outcomes only — never another plan's
     // steps or instructions.
     let threadContext = "";
+    let conversationSoFar = "";
     if (plan.thread_id) {
       try {
         const { data: priorPlans } = await admin
@@ -617,27 +618,44 @@ Deno.serve(async (req) => {
           .select("role, content, created_at")
           .eq("thread_id", plan.thread_id)
           .order("created_at", { ascending: false })
-          .limit(10);
-        const convo = (recentMsgs ?? [])
-          .slice()
-          .reverse()
-          .map((m: any) => `${m.role === "user" ? "User" : "Orby"}: ${String(m.content ?? "").slice(0, 400)}`)
-          .join("\n");
+          .limit(30);
+        // Build the transcript newest-first with an overall size cap, then flip
+        // it back into chronological order. This keeps the most recent (most
+        // relevant) turns even when the conversation is very long.
+        const MAX_CONVO_CHARS = 24_000;
+        const picked: string[] = [];
+        let used = 0;
+        for (const m of recentMsgs ?? []) {
+          const line =
+            `${(m as any).role === "user" ? "User" : "Orby"}: ${String((m as any).content ?? "").slice(0, 2000)}`;
+          if (used + line.length > MAX_CONVO_CHARS) break;
+          used += line.length;
+          picked.push(line);
+        }
+        const convo = picked.reverse().join("\n");
+        conversationSoFar = convo;
 
         if (planLines.length || convo) {
           threadContext =
             `\n\nCONVERSATION CONTINUITY (this request came from an ongoing chat — the items below ALREADY EXIST):` +
             (planLines.length ? `\nPlans already completed in this conversation:\n${planLines.join("\n")}` : "") +
             (convo ? `\n\nRecent chat turns:\n${convo}` : "") +
-            `\n\nHOW TO USE THIS: when the current request refers back to earlier work ("that doc", "the images you made", "keep going", "add a section to it"), resolve it to the concrete ids listed here and put those ids directly in your step args. Do NOT redo work that already completed, and do NOT pull in unrelated earlier goals — only what THIS request asks for.`;
+            `\n\nHOW TO USE THIS: the current request is the LATEST TURN of that conversation — read it in that light. Pull the concrete details the user already settled earlier (document titles, counts, styles, tone, decisions, which items to use) out of the chat turns above and put them into your step args. When the request refers back to earlier work ("that doc", "the images you made", "keep going", "add a section to it"), resolve it to the concrete ids listed here. A SHORT request like "do it", "go ahead", "make those" or "yes" means: carry out exactly what the conversation just agreed on — nothing more. Do NOT redo work that already completed, and do NOT invent goals the conversation never asked for.`;
         }
+
       } catch (_e) { /* continuity is best-effort */ }
     }
 
     const effectiveSystemPrompt = userContext
       ? `${systemPrompt}${checkInContract}${threadContext}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
       : `${systemPrompt}${checkInContract}${threadContext}`;
-    const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
+    // Hand the conversation to the planner alongside the request itself, so a
+    // mid-conversation "ok do it" is planned from the whole discussion.
+    const plannerInput = conversationSoFar
+      ? `CONVERSATION SO FAR (the user and Orby have been talking; this is the brief):\n${conversationSoFar}\n\n` +
+        `CURRENT REQUEST (the latest turn — plan THIS, using the conversation above for the concrete details):\n${plan.user_request}`
+      : String(plan.user_request ?? "");
+    const raw = await callPlannerLLM(effectiveSystemPrompt, plannerInput);
     let parsed: any;
     try {
       parsed = JSON.parse(raw);

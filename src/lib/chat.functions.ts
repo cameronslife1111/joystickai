@@ -47,7 +47,9 @@ export const ACTION_GROUPS = [
   "document_editing",
   "image_generation",
   "video_generation",
+  "scheduling",
 ] as const;
+
 
 async function buildContext(
   supabase: any,
@@ -177,23 +179,33 @@ async function classifyRoute(
   const system =
     "You are the strict intent router for Orby, a writing assistant. Decide how to handle the user's latest message. " +
     "Return STRICT JSON only: {\"route\":\"chat\"|\"web\"|\"plan\"}.\n\n" +
-    "DEFAULT TO \"chat\". Only escalate to \"web\" or \"plan\" when the user's intent is unmistakable.\n\n" +
+    (actionEnabled
+      ? "IMPORTANT CONTEXT: the user JUST deliberately switched ON action capabilities for THIS message only (these checkboxes are one-shot and clear after every send). That is a strong signal of intent to have Orby DO the work now, continuing whatever the conversation has been about. Default to \"plan\" unless the message is plainly just a question or comment seeking a text answer (\"what do you think\", \"how does this work\", \"which one is better\").\n" +
+        "Short follow-ups like \"ok do it\", \"go ahead\", \"make those\", \"yes\", \"start\" ARE \"plan\" here — the work is whatever the recent conversation just agreed on.\n\n"
+      : "DEFAULT TO \"chat\". Only escalate to \"web\" or \"plan\" when the user's intent is unmistakable.\n\n") +
     "Routes:\n" +
-    "- chat: normal conversation, questions, explanations, brainstorming, opinions, and writing help — including reading, summarizing, analyzing, or answering questions ABOUT attached documents. This is the fallback for anything ambiguous.\n" +
+    "- chat: normal conversation, questions, explanations, brainstorming, opinions, and writing help — including reading, summarizing, analyzing, or answering questions ABOUT attached documents.\n" +
     (caps.web_search
       ? "- web: the user explicitly wants current, real-world, or factual info that requires looking it up online (news, prices, live facts, 'search for', 'look up', 'what's the latest').\n"
       : "") +
     (actionEnabled
-      ? "- plan: the user gives a CLEAR, EXPLICIT INSTRUCTION for Orby to DO something to their workspace — e.g. 'edit/rewrite/add to/organize/rename this document', 'generate/make/create this image', 'make these videos'. There must be an imperative action verb aimed at their documents or media.\n"
+      ? "- plan: Orby should DO something in the user's workspace — edit/organize/create documents, generate images or videos, schedule work — either because the message says so or because the conversation has been building toward it and the user has now enabled those capabilities.\n"
       : "") +
     "\nCRITICAL RULES:\n" +
-    "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n" +
-    "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n" +
-    "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n" +
+    (actionEnabled
+      ? "1. The user turning these capabilities on for this single message IS intent. Prefer \"plan\" whenever an actionable reading of the message (in light of the conversation) is reasonable.\n"
+      : "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n") +
+    (actionEnabled
+      ? "2. Only choose \"chat\" if the message clearly asks for a text answer and does not ask for any change or creation.\n"
+      : "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n") +
+    (actionEnabled
+      ? "3. If you are unsure, choose \"plan\".\n"
+      : "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n") +
     "4. Follow-ups matter: if a previous plan already ran in this conversation and the user now says something like \"keep going\", \"now add X to it\", \"do the same for the other doc\", that is a NEW \"plan\" (when planning-type capabilities are enabled) — the target is whatever that earlier plan produced. But merely ASKING about what a previous plan did is still \"chat\".\n" +
     (memoryDigest ? `\nPlan history in this conversation: ${memoryDigest}\n` : "") +
     `Only these capabilities are ENABLED: ${enabled.join("; ") || "none"}. ` +
     "Never choose a route whose capability is disabled — fall back to chat instead.";
+
 
   try {
     const { text } = await aiSdkGenerateText({
@@ -342,24 +354,27 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     }
 
-    // Decide route with the thread's capabilities.
+    // Decide route with the thread's capabilities. A wider window so a mid-
+    // conversation "ok do it" can be understood from what came before.
     const recent = data.messages
-      .slice(-6)
-      .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+      .slice(-12)
+      .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
       .join("\n");
     let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
 
-    // Attached-documents safety net: when the user has documents attached, only
-    // let the request become a plan if they clearly asked to CHANGE something.
-    // Otherwise fall back to a normal text answer so the full attached documents
-    // are always sent and answered — regardless of which toggles are on.
-    if (route === "plan" && contextText) {
+    // Attached-documents safety net: when the user has documents attached but
+    // did NOT switch on any action capability for this message, only let the
+    // request become a plan if they clearly asked to CHANGE something. When the
+    // user did tick an action capability, that IS the intent — never override it.
+    const actionCapsOn = ACTION_GROUPS.some((g) => caps[g]);
+    if (route === "plan" && contextText && !actionCapsOn) {
       const wantsAction =
         /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
           latestText,
         );
       if (!wantsAction) route = "chat";
     }
+
 
     if (route === "plan") {
       // The client creates and auto-runs the plan; nothing to answer here.
