@@ -11,6 +11,19 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { buildDelegatePrompt, needsWebSearch } from "@/lib/delegate-prompt";
+
+/** Baseline for the Delegate payload — only what we explicitly turn on runs. */
+const NO_CHAT_CAPS: ChatCapabilities = {
+  web_search: false,
+  image_analysis: false,
+  planning: false,
+  image_generation: false,
+  video_generation: false,
+  document_editing: false,
+  scheduling: false,
+};
+
 import { transcribeAudio } from "@/lib/whisper.functions";
 
 import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
