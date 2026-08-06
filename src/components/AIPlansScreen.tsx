@@ -228,15 +228,21 @@ export function AIPlansScreen({ onClose }: Props) {
         onOpenChange={(v: boolean) => { if (!v) setApprovalId(null); }}
       />
 
-      {/* Back to Orby — floating bottom-left */}
-      <button
-        onClick={onClose}
-        aria-label="Back to Orby"
-        className="fixed left-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-foreground/10 bg-card/90 text-foreground shadow-lg backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-        style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+      {/* Wide bottom back bar */}
+      <div
+        className="shrink-0 border-t border-foreground/10 bg-background px-4 pt-2"
+        style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
       >
-        <ArrowLeft className="h-5 w-5" />
-      </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back to Orby"
+          className="flex h-12 w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95 hover:bg-foreground/10"
+        >
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+      </div>
+
     </div>
   );
 }
