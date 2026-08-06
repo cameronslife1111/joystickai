@@ -2776,7 +2776,7 @@ function AppPage() {
                 </button>
               )}
             </div>
-            <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1">
               {Array.from({ length: 50 }).map((_, i) => {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
@@ -2802,6 +2802,14 @@ function AppPage() {
                 );
               })}
             </div>
+            <button
+              onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+              aria-label="Back"
+              className="mt-3 flex w-full shrink-0 items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 hover:bg-card hover:text-foreground"
+            >
+              <span className="text-lg">←</span>
+            </button>
+
           </div>
 
           {pickerSlot !== null && (() => {
