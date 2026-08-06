@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
-import { createRealtimeSession } from "@/lib/realtime.functions";
+import {
+  composeRealtimeInstructions,
+  createRealtimeSession,
+} from "@/lib/realtime.functions";
 
 export type CallState = "idle" | "connecting" | "live";
 
 type Options = {
   /** Recent conversation text handed to the model as call context. */
   buildContext: () => string;
+  /** Documents currently attached to the thread. */
+  buildDocumentIds: () => string[];
   /** A finished user turn (speech transcript). */
   onUserText: (text: string) => void;
   /** A finished Orby turn (spoken reply, as text). */
@@ -23,7 +28,13 @@ type Options = {
  * Turn-taking + barge-in interruption are handled server-side by semantic VAD,
  * so the user can simply talk over Orby to cut her off.
  */
-export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, onError }: Options) {
+export function useRealtimeVoice({
+  buildContext,
+  buildDocumentIds,
+  onUserText,
+  onAssistantText,
+  onError,
+}: Options) {
   const mintSession = useServerFn(createRealtimeSession);
   const [state, setState] = useState<CallState>("idle");
   const [speaking, setSpeaking] = useState(false);
@@ -31,6 +42,7 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
   const busyRef = useRef(false);
 
   const cbRef = useRef({ onUserText, onAssistantText, onError });
@@ -44,6 +56,7 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
       /* already torn down */
     }
     pcRef.current = null;
+    dcRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (audioRef.current) {
@@ -61,7 +74,9 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
     busyRef.current = true;
     setState("connecting");
     try {
-      const { token, model } = await mintSession({ data: { context: buildContext() } });
+      const { token, model } = await mintSession({
+        data: { context: buildContext(), documentIds: buildDocumentIds() },
+      });
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -84,6 +99,7 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
       for (const track of stream.getTracks()) pc.addTrack(track, stream);
 
       const dc = pc.createDataChannel("oai-events");
+      dcRef.current = dc;
       dc.onmessage = (e) => {
         let evt: any;
         try {
@@ -167,7 +183,33 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
     } finally {
       busyRef.current = false;
     }
-  }, [buildContext, mintSession, stop]);
+  }, [buildContext, buildDocumentIds, mintSession, stop]);
+
+  /**
+   * Push a new attached-document block into the live session so mid-call
+   * attach/remove takes effect without dropping the call.
+   */
+  const updateContext = useCallback(
+    (docBlock: string) => {
+      const dc = dcRef.current;
+      if (!dc || dc.readyState !== "open") return false;
+      try {
+        dc.send(
+          JSON.stringify({
+            type: "session.update",
+            session: {
+              type: "realtime",
+              instructions: composeRealtimeInstructions(buildContext(), docBlock),
+            },
+          }),
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [buildContext],
+  );
 
   // Always release the mic when the component goes away.
   useEffect(() => stop, [stop]);
@@ -179,5 +221,6 @@ export function useRealtimeVoice({ buildContext, onUserText, onAssistantText, on
     speaking,
     start,
     stop,
+    updateContext,
   };
 }
