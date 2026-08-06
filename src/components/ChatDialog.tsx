@@ -535,21 +535,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || !userId || !activeThreadId) return;
-    const threadId = activeThreadId;
+  /**
+   * Send a message. `override` lets a programmatic caller (the Delegate
+   * button) send its own text / capabilities / thread / attachments without
+   * waiting for React state to settle.
+   */
+  const handleSend = async (override?: {
+    text?: string;
+    caps?: ChatCapabilities;
+    threadId?: string;
+    docIds?: string[];
+  }) => {
+    const text = (override?.text ?? input).trim();
+    const threadId = override?.threadId ?? activeThreadId;
+    if (!text || !userId || !threadId) return;
     if (busyThreadIds.has(threadId)) return;
-    if (caps.image_analysis && pickedImages.some((a) => !a.url)) {
+    const capsUsed = override?.caps ?? caps;
+    const docIdsUsed = override?.docIds ?? contextDocIds;
+    if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
       return;
     }
 
     markBusy(threadId);
-    setInput("");
-    // Capability checkboxes are one-shot: this send uses `caps` (captured from
-    // this render) and the boxes immediately return to unchecked.
+    if (!override?.text) setInput("");
+    // Capability checkboxes are one-shot: this send uses `capsUsed` (captured
+    // from this render) and the boxes immediately return to unchecked.
     setPendingCaps(NO_CAPS);
+
 
     const optimisticUser: ChatRow = {
       id: `tmp-${Date.now()}`,
