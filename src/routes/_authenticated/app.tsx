@@ -2277,7 +2277,7 @@ function AppPage() {
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } }; // 13 New idea
     filled[13] = grid[21];  // 14 AI Plans
-    filled[14] = grid[25]; // 15 Mark with trash
+    filled[14] = { e: "🟣", t: "Delegate", fn: handleDelegate }; // 15 Delegate
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
