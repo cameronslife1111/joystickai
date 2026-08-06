@@ -47,7 +47,9 @@ export const ACTION_GROUPS = [
   "document_editing",
   "image_generation",
   "video_generation",
+  "scheduling",
 ] as const;
+
 
 async function buildContext(
   supabase: any,
