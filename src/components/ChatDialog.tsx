@@ -69,6 +69,19 @@ interface Props {
   startInThreadList?: boolean;
   /** Open an attached document in the reader (chat closes first). */
   onOpenDocument?: (documentId: string) => void;
+  /**
+   * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
+   * attached and immediately send `prompt` with `capabilities` checked.
+   * `id` is a nonce so each tap fires exactly once.
+   */
+  delegate?: {
+    id: string;
+    documentId: string;
+    title: string;
+    prompt: string;
+    capabilities: ChatCapabilities;
+  } | null;
+
 }
 
 type ChatRow = {
@@ -189,7 +202,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
@@ -229,6 +242,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
+  /** Nonce of the last 🟣 Delegate request we already kicked off. */
+  const delegateRef = useRef<string | null>(null);
+
 
   // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
   const dictation = useVoiceDictation(
@@ -319,9 +335,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       bootstrappedRef.current = false;
       return;
     }
+    // 🟣 Delegate owns the bootstrap: it creates its own fresh thread.
+    if (delegate && delegateRef.current !== delegate.id) return;
     // Slot 11 opens the chat picker first so the user chooses where to go.
     if (!bootstrappedRef.current) setDrawerOpen(!!startInThreadList && !openThreadId);
     if (bootstrappedRef.current || !userId) return;
+
     // Wait until the threads query has actually finished — the default `[]`
     // from useQuery would otherwise trick us into creating a new thread
     // before the real list arrives.
@@ -535,21 +554,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || !userId || !activeThreadId) return;
-    const threadId = activeThreadId;
+  /**
+   * Send a message. `override` lets a programmatic caller (the Delegate
+   * button) send its own text / capabilities / thread / attachments without
+   * waiting for React state to settle.
+   */
+  const handleSend = async (override?: {
+    text?: string;
+    caps?: ChatCapabilities;
+    threadId?: string;
+    docIds?: string[];
+  }) => {
+    const text = (override?.text ?? input).trim();
+    const threadId = override?.threadId ?? activeThreadId;
+    if (!text || !userId || !threadId) return;
     if (busyThreadIds.has(threadId)) return;
-    if (caps.image_analysis && pickedImages.some((a) => !a.url)) {
+    const capsUsed = override?.caps ?? caps;
+    const docIdsUsed = override?.docIds ?? contextDocIds;
+    if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
       return;
     }
 
     markBusy(threadId);
-    setInput("");
-    // Capability checkboxes are one-shot: this send uses `caps` (captured from
-    // this render) and the boxes immediately return to unchecked.
+    if (!override?.text) setInput("");
+    // Capability checkboxes are one-shot: this send uses `capsUsed` (captured
+    // from this render) and the boxes immediately return to unchecked.
     setPendingCaps(NO_CAPS);
+
 
     const optimisticUser: ChatRow = {
       id: `tmp-${Date.now()}`,
@@ -584,12 +616,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const result = await send({
         data: {
           messages: history,
-          contextDocumentIds: contextDocIds,
-          imageUrls: caps.image_analysis
+          contextDocumentIds: docIdsUsed,
+          imageUrls: capsUsed.image_analysis
             ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
             : [],
           threadId,
-          capabilities: caps,
+          capabilities: capsUsed,
         },
       });
 
@@ -600,16 +632,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         insertedAssistant = null;
       } else if (result.route === "plan") {
         // Create + auto-run a plan tied to this thread.
-        const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => caps[g]);
+        const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => capsUsed[g]);
         const { data: planRow, error: planErr } = await supabase
           .from("plans")
           .insert({
             user_id: userId,
             status: "composing",
             user_request: text,
-            attached_document_ids: contextDocIds,
+            attached_document_ids: docIdsUsed,
             thread_id: threadId,
           })
+
           .select("id")
           .single();
         if (planErr || !planRow) throw new Error(planErr?.message || "Couldn't start the plan");
@@ -690,7 +723,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
+  // 🟣 Delegate (menu slot 15): fresh thread + attached doc + one automatic
+  // send with the delegate capabilities. Runs exactly once per tap.
+  useEffect(() => {
+    if (!open || !delegate || !userId) return;
+    if (delegateRef.current === delegate.id) return;
+    delegateRef.current = delegate.id;
+    (async () => {
+      const t = await createThread(`Delegate: ${delegate.title}`.slice(0, 80));
+      if (!t) return;
+      setDrawerOpen(false);
+      setActiveThreadId(t.id);
+      setPendingCaps(delegate.capabilities);
+      await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
+      await handleSend({
+        text: delegate.prompt,
+        caps: delegate.capabilities,
+        threadId: t.id,
+        docIds: [delegate.documentId],
+      });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, delegate, userId]);
+
   const enabledCapCount = Object.values(caps).filter(Boolean).length;
+
 
   return (
     <>

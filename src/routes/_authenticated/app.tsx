@@ -11,6 +11,19 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { buildDelegatePrompt, needsWebSearch } from "@/lib/delegate-prompt";
+
+/** Baseline for the Delegate payload — only what we explicitly turn on runs. */
+const NO_CHAT_CAPS: ChatCapabilities = {
+  web_search: false,
+  image_analysis: false,
+  planning: false,
+  image_generation: false,
+  video_generation: false,
+  document_editing: false,
+  scheduling: false,
+};
+
 import { transcribeAudio } from "@/lib/whisper.functions";
 
 import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
@@ -136,6 +149,15 @@ function AppPage() {
   const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
   /** Slot 11 opens the chat list first instead of the last conversation. */
   const [chatStartInList, setChatStartInList] = useState(false);
+  /** 🟣 Delegate (slot 15) payload handed to ChatDialog on open. */
+  const [delegatePayload, setDelegatePayload] = useState<{
+    id: string;
+    documentId: string;
+    title: string;
+    prompt: string;
+    capabilities: ChatCapabilities;
+  } | null>(null);
+
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
@@ -2007,7 +2029,38 @@ function AppPage() {
   }, [lockFavorites, saveLockFavorites, saveLockedDoc, activeDocId]);
 
   // Menu actions
+  // 🟣 Delegate (slot 15): hand the step the user is on to Orby in a brand-new
+  // chat, with the current document attached and the right capabilities on.
+  const handleDelegate = useCallback(() => {
+    const list = sentences ?? [];
+    if (!activeDoc || list.length === 0) {
+      toast.error("Nothing to delegate yet");
+      return;
+    }
+    const idx = Math.max(0, Math.min(currentIdx, list.length - 1));
+    const texts = list.map((s) => s.content);
+    const prompt = buildDelegatePrompt({ title: activeDoc.title, sentences: texts, index: idx });
+    setMenuOpen(false);
+    setPendingChatThreadId(null);
+    setChatStartInList(false);
+    setDelegatePayload({
+      id: `${Date.now()}`,
+      documentId: activeDoc.id,
+      title: activeDoc.title,
+      prompt,
+      capabilities: {
+        ...NO_CHAT_CAPS,
+        planning: true,
+        document_editing: true,
+        image_generation: true,
+        web_search: needsWebSearch(texts[idx] ?? ""),
+      },
+    });
+    setChatOpen(true);
+  }, [activeDoc, sentences, currentIdx]);
+
   const grid = useMemo(() => [
+
     { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
     {
       e: muted ? "🔇" : "🔊",
@@ -2224,7 +2277,7 @@ function AppPage() {
     filled[11] = grid[9];  // 12 Jump to
     filled[12] = { e: "💡", t: "New idea", fn: () => { setMenuOpen(false); openNewIdea(); } }; // 13 New idea
     filled[13] = grid[21];  // 14 AI Plans
-    filled[14] = grid[25]; // 15 Mark with trash
+    filled[14] = { e: "🟣", t: "Delegate", fn: handleDelegate }; // 15 Delegate
     filled[15] = grid[8];  // 16 Favorites
     filled[16] = grid[17]; // 17 Export text
     filled[17] = grid[18]; // 18 Link to doc
@@ -2237,7 +2290,7 @@ function AppPage() {
 
 
     return filled;
-  }, [grid, openNewIdea]);
+  }, [grid, openNewIdea, handleDelegate]);
 
   return (
     <main
@@ -3401,13 +3454,16 @@ function AppPage() {
           if (!o) {
             setPendingChatThreadId(null);
             setChatStartInList(false);
+            setDelegatePayload(null);
           }
         }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
         startInThreadList={chatStartInList}
+        delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
+
       />
       {currentSentence && (
         <LinkDocumentDialog
