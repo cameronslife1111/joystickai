@@ -642,7 +642,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const threadId = override?.threadId ?? activeThreadId;
     if (!text || !userId || !threadId) return;
     if (busyThreadIds.has(threadId)) return;
-    const capsUsed = override?.caps ?? caps;
+    // While a hands-free call is live this is a text-only conversation.
+    const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
     if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
