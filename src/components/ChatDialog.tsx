@@ -942,7 +942,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </PopoverContent>
               </Popover>
             </div>
+            </div>
+            <DialogTitle className="px-1 text-base font-medium leading-snug break-words">
+              {activeThread?.title ?? "Chat"}
+            </DialogTitle>
+            {voice.live && (
+              <p className="px-1 text-[11px] text-muted-foreground">
+                Hands-free is live — just talk, and talk over Orby to interrupt. Planning and
+                document editing are paused until you end the call.
+              </p>
+            )}
           </DialogHeader>
+
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
