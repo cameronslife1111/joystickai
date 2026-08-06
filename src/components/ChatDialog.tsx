@@ -407,6 +407,76 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   });
 
+  // ── 📞 Hands-free call (OpenAI Realtime, interruptible) ───────────────────
+  // Everything spoken is mirrored into this thread as normal chat messages.
+  const appendVoiceMessage = useCallback(
+    async (role: "user" | "assistant", content: string) => {
+      const threadId = activeThreadId;
+      if (!threadId || !userId) return;
+      const text = role === "assistant" ? toPlainText(content) : content.trim();
+      if (!text) return;
+      const { data: row, error } = await supabase
+        .from("chat_messages")
+        .insert({ user_id: userId, thread_id: threadId, role, content: text, kind: "text" })
+        .select("id, role, content, created_at, kind, plan_id")
+        .single();
+      if (error || !row) return;
+      qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) => [
+        ...(cur ?? []),
+        row as ChatRow,
+      ]);
+      void supabase
+        .from("chat_threads")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", threadId);
+    },
+    [activeThreadId, userId, qc],
+  );
+
+  const messagesRef = useRef<ChatRow[]>([]);
+  messagesRef.current = messages;
+
+  const voice = useRealtimeVoice({
+    buildContext: useCallback(
+      () =>
+        messagesRef.current
+          .slice(-10)
+          .filter((m) => (m.content ?? "").trim())
+          .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+          .join("\n"),
+      [],
+    ),
+    onUserText: useCallback(
+      (t: string) => void appendVoiceMessage("user", t),
+      [appendVoiceMessage],
+    ),
+    onAssistantText: useCallback(
+      (t: string) => void appendVoiceMessage("assistant", t),
+      [appendVoiceMessage],
+    ),
+    onError: useCallback((m: string) => toast.error(m), []),
+  });
+
+  // Never keep a call running once the chat closes or the thread changes.
+  useEffect(() => {
+    if (!open) voice.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => {
+    if (voice.state !== "idle") voice.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId]);
+
+  // Browser text-to-speech would fight the live voice — silence it while live.
+  useEffect(() => {
+    if (voice.live && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+    }
+  }, [voice.live]);
+
+
+
   // Focus textarea on open + thread switch.
   useEffect(() => {
     if (open && activeThreadId) {
