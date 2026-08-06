@@ -354,24 +354,27 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     }
 
-    // Decide route with the thread's capabilities.
+    // Decide route with the thread's capabilities. A wider window so a mid-
+    // conversation "ok do it" can be understood from what came before.
     const recent = data.messages
-      .slice(-6)
-      .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+      .slice(-12)
+      .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
       .join("\n");
     let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
 
-    // Attached-documents safety net: when the user has documents attached, only
-    // let the request become a plan if they clearly asked to CHANGE something.
-    // Otherwise fall back to a normal text answer so the full attached documents
-    // are always sent and answered — regardless of which toggles are on.
-    if (route === "plan" && contextText) {
+    // Attached-documents safety net: when the user has documents attached but
+    // did NOT switch on any action capability for this message, only let the
+    // request become a plan if they clearly asked to CHANGE something. When the
+    // user did tick an action capability, that IS the intent — never override it.
+    const actionCapsOn = ACTION_GROUPS.some((g) => caps[g]);
+    if (route === "plan" && contextText && !actionCapsOn) {
       const wantsAction =
         /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
           latestText,
         );
       if (!wantsAction) route = "chat";
     }
+
 
     if (route === "plan") {
       // The client creates and auto-runs the plan; nothing to answer here.
