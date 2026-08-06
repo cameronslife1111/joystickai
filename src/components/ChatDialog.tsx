@@ -597,12 +597,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const result = await send({
         data: {
           messages: history,
-          contextDocumentIds: contextDocIds,
-          imageUrls: caps.image_analysis
+          contextDocumentIds: docIdsUsed,
+          imageUrls: capsUsed.image_analysis
             ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
             : [],
           threadId,
-          capabilities: caps,
+          capabilities: capsUsed,
         },
       });
 
@@ -613,16 +613,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         insertedAssistant = null;
       } else if (result.route === "plan") {
         // Create + auto-run a plan tied to this thread.
-        const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => caps[g]);
+        const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => capsUsed[g]);
         const { data: planRow, error: planErr } = await supabase
           .from("plans")
           .insert({
             user_id: userId,
             status: "composing",
             user_request: text,
-            attached_document_ids: contextDocIds,
+            attached_document_ids: docIdsUsed,
             thread_id: threadId,
           })
+
           .select("id")
           .single();
         if (planErr || !planRow) throw new Error(planErr?.message || "Couldn't start the plan");
