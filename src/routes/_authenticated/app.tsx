@@ -3454,13 +3454,16 @@ function AppPage() {
           if (!o) {
             setPendingChatThreadId(null);
             setChatStartInList(false);
+            setDelegatePayload(null);
           }
         }}
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
         startInThreadList={chatStartInList}
+        delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
+
       />
       {currentSentence && (
         <LinkDocumentDialog
