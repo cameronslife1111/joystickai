@@ -136,6 +136,15 @@ function AppPage() {
   const [pendingChatThreadId, setPendingChatThreadId] = useState<string | null>(null);
   /** Slot 11 opens the chat list first instead of the last conversation. */
   const [chatStartInList, setChatStartInList] = useState(false);
+  /** 🟣 Delegate (slot 15) payload handed to ChatDialog on open. */
+  const [delegatePayload, setDelegatePayload] = useState<{
+    id: string;
+    documentId: string;
+    title: string;
+    prompt: string;
+    capabilities: ChatCapabilities;
+  } | null>(null);
+
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
