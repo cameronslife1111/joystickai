@@ -527,7 +527,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       autoSpokeThreadRef.current = null;
       return;
     }
-    if (!autoSpeak || !activeThreadId) return;
+    if (!autoSpeak || !activeThreadId || voice.live) return;
     if (autoSpokeThreadRef.current === activeThreadId) return;
     if (messages.length === 0) return;
     autoSpokeThreadRef.current = activeThreadId;
