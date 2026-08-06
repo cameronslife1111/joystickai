@@ -721,11 +721,17 @@ function MediaPage() {
 
       {/* Upload progress banner */}
       {uploadProgress && (
-        <div className="mx-4 mb-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-primary">
+        <div className="mx-4 mb-2 shrink-0 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-primary">
           Uploading {Math.min(uploadProgress.done + 1, uploadProgress.total)} of {uploadProgress.total}…
         </div>
       )}
 
+      {/* Scrollable content region — keeps the page shell itself unscrollable so
+          mobile browser chrome stays collapsed (same model as /app). */}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto"
+        style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+      >
       {/* Folders home */}
       {inFolderView && (
         <MediaFoldersView
