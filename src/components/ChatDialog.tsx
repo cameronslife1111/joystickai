@@ -50,6 +50,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+import { useRealtimeVoice } from "@/lib/use-realtime-voice";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
