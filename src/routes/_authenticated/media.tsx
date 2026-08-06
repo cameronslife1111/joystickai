@@ -666,7 +666,7 @@ function MediaPage() {
 
       {/* Select-all bar */}
       {selectMode && (
-        <div className="flex items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
           <span className="text-muted-foreground">
             {selectedIds.size === 0 ? "Tap items to select" : `${selectedIds.size} of ${filtered.length} selected`}
           </span>
@@ -692,7 +692,7 @@ function MediaPage() {
 
       {/* Filter chips */}
       {!inFolderView && (
-      <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto px-4 py-3">
+      <div className="mx-auto flex w-full max-w-3xl shrink-0 gap-2 overflow-x-auto px-4 py-3">
         {([
           { id: "all", label: "All" },
           { id: "image", label: "Images" },
