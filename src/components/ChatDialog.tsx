@@ -824,7 +824,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="flex h-[88vh] max-h-[88vh] w-[96vw] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="flex flex-row items-center justify-between border-b border-foreground/10 p-3">
+          <DialogHeader className="flex flex-col gap-1 border-b border-foreground/10 p-3">
+            <div className="flex flex-row items-center justify-between">
             <div className="flex min-w-0 items-center gap-2">
               <Button
                 size="icon"
@@ -834,10 +835,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              <DialogTitle className="truncate text-base">
-                {activeThread?.title ?? "Chat"}
-              </DialogTitle>
+              <Button
+                size="sm"
+                variant={voice.state === "idle" ? "outline" : "destructive"}
+                aria-label={voice.live ? "Stop hands-free mode" : "Start hands-free mode"}
+                disabled={voice.connecting || !activeThreadId}
+                onClick={() => (voice.state === "idle" ? void voice.start() : voice.stop())}
+                className="gap-1.5"
+              >
+                {voice.connecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : voice.live ? (
+                  <PhoneOff className="h-4 w-4" />
+                ) : (
+                  <Phone className="h-4 w-4" />
+                )}
+                <span className="text-xs">
+                  {voice.connecting ? "Connecting" : voice.live ? "End call" : "Hands-free"}
+                </span>
+              </Button>
             </div>
+
             <div className="mr-8 flex items-center gap-1">
               <Button
                 size="icon"
