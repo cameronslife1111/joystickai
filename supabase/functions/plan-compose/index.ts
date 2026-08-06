@@ -562,6 +562,7 @@ Deno.serve(async (req) => {
     // holds: we pass ids, titles and outcomes only — never another plan's
     // steps or instructions.
     let threadContext = "";
+    let conversationSoFar = "";
     if (plan.thread_id) {
       try {
         const { data: priorPlans } = await admin
