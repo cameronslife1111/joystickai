@@ -723,7 +723,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
+  // 🟣 Delegate (menu slot 15): fresh thread + attached doc + one automatic
+  // send with the delegate capabilities. Runs exactly once per tap.
+  useEffect(() => {
+    if (!open || !delegate || !userId) return;
+    if (delegateRef.current === delegate.id) return;
+    delegateRef.current = delegate.id;
+    (async () => {
+      const t = await createThread(`Delegate: ${delegate.title}`.slice(0, 80));
+      if (!t) return;
+      setDrawerOpen(false);
+      setActiveThreadId(t.id);
+      setPendingCaps(delegate.capabilities);
+      await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
+      await handleSend({
+        text: delegate.prompt,
+        caps: delegate.capabilities,
+        threadId: t.id,
+        docIds: [delegate.documentId],
+      });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, delegate, userId]);
+
   const enabledCapCount = Object.values(caps).filter(Boolean).length;
+
 
   return (
     <>
