@@ -542,15 +542,8 @@ function MediaPage() {
       </div>
 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
-            aria-label={inFolderView ? "Back to app" : "Back to folders"}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
           {!inFolderView && (
             <button
               onClick={() => {
