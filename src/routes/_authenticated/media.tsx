@@ -1003,7 +1003,7 @@ function MediaPage() {
                 onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
                 aria-label="Options"
                 className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
-                style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+                style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
               >
                 <MoreVertical className="h-5 w-5" />
               </button>
@@ -1014,7 +1014,23 @@ function MediaPage() {
               >
                 <X className="h-5 w-5" />
               </button>
+              {/* Wide bottom back bar */}
+              <div
+                className="absolute inset-x-0 bottom-0 px-4 pt-2 pb-2"
+                style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
+                  aria-label="Back to gallery"
+                  className="flex h-12 w-full items-center justify-center rounded-2xl border border-white/15 bg-black/60 text-white backdrop-blur transition active:scale-95 hover:bg-white/10"
+                >
+                  <ArrowLeft className="h-6 w-6" />
+                </button>
+              </div>
             </>
+
           )}
         </div>
       )}
