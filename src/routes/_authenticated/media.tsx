@@ -24,6 +24,8 @@ import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
 import { DownloadAllProgress } from "@/components/DownloadAllProgress";
+import { VoiceReviseButton } from "@/components/VoiceReviseButton";
+
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
   WebkitTouchCallout: "none",
