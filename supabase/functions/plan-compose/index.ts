@@ -649,7 +649,13 @@ Deno.serve(async (req) => {
     const effectiveSystemPrompt = userContext
       ? `${systemPrompt}${checkInContract}${threadContext}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
       : `${systemPrompt}${checkInContract}${threadContext}`;
-    const raw = await callPlannerLLM(effectiveSystemPrompt, plan.user_request);
+    // Hand the conversation to the planner alongside the request itself, so a
+    // mid-conversation "ok do it" is planned from the whole discussion.
+    const plannerInput = conversationSoFar
+      ? `CONVERSATION SO FAR (the user and Orby have been talking; this is the brief):\n${conversationSoFar}\n\n` +
+        `CURRENT REQUEST (the latest turn — plan THIS, using the conversation above for the concrete details):\n${plan.user_request}`
+      : String(plan.user_request ?? "");
+    const raw = await callPlannerLLM(effectiveSystemPrompt, plannerInput);
     let parsed: any;
     try {
       parsed = JSON.parse(raw);
