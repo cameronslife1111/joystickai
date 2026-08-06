@@ -529,7 +529,7 @@ function MediaPage() {
 
   return (
     <main
-      className="relative flex h-[100svh] flex-col overflow-y-auto overscroll-contain bg-background text-foreground"
+      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-background text-foreground"
       style={{
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
@@ -542,15 +542,8 @@ function MediaPage() {
       </div>
 
       {/* Top bar */}
-      <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
-            aria-label={inFolderView ? "Back to app" : "Back to folders"}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
           {!inFolderView && (
             <button
               onClick={() => {
@@ -673,7 +666,7 @@ function MediaPage() {
 
       {/* Select-all bar */}
       {selectMode && (
-        <div className="flex items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-foreground/10 bg-foreground/5 px-4 py-2 text-sm">
           <span className="text-muted-foreground">
             {selectedIds.size === 0 ? "Tap items to select" : `${selectedIds.size} of ${filtered.length} selected`}
           </span>
@@ -699,7 +692,7 @@ function MediaPage() {
 
       {/* Filter chips */}
       {!inFolderView && (
-      <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto px-4 py-3">
+      <div className="mx-auto flex w-full max-w-3xl shrink-0 gap-2 overflow-x-auto px-4 py-3">
         {([
           { id: "all", label: "All" },
           { id: "image", label: "Images" },
@@ -728,11 +721,17 @@ function MediaPage() {
 
       {/* Upload progress banner */}
       {uploadProgress && (
-        <div className="mx-4 mb-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-primary">
+        <div className="mx-4 mb-2 shrink-0 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-center text-sm text-primary">
           Uploading {Math.min(uploadProgress.done + 1, uploadProgress.total)} of {uploadProgress.total}…
         </div>
       )}
 
+      {/* Scrollable content region — keeps the page shell itself unscrollable so
+          mobile browser chrome stays collapsed (same model as /app). */}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto"
+        style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+      >
       {/* Folders home */}
       {inFolderView && (
         <MediaFoldersView
@@ -877,6 +876,21 @@ function MediaPage() {
         )}
       </section>
       )}
+      </div>
+
+      {/* Bottom back bar — the single way to navigate backwards */}
+      <div className="shrink-0 border-t border-foreground/10 bg-background px-4 pb-2 pt-2">
+        <button
+          type="button"
+          onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
+          aria-label={inFolderView ? "Back to Orby" : "Back to folders"}
+          className="flex h-12 w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95 hover:bg-foreground/10"
+        >
+          <ArrowLeft className="h-6 w-6" />
+        </button>
+      </div>
+
+
 
 
       {/* Hidden file input */}
