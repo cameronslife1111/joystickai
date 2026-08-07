@@ -52,7 +52,12 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
         const isVideo = asset.kind === "video";
 
         const { prompt } = await rewrite({
-          data: { originalPrompt: original, change: spoken, kind: isVideo ? "video" : "image" },
+          data: {
+            originalPrompt: original,
+            change: spoken,
+            kind: isVideo ? "video" : "image",
+            mode: isVideo ? "rewrite" : "edit",
+          },
         });
 
         const { data: u } = await supabase.auth.getUser();
@@ -138,21 +143,37 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
             if (error) throw error;
           }
         } else {
+          // Always remix the image being previewed: it is the first reference,
+          // followed by the original reference images so faces/style survive.
           const refIds = Array.isArray(params.source_asset_ids)
             ? (params.source_asset_ids as unknown[]).filter((v): v is string => typeof v === "string")
             : [];
+          const singleRef = str(params.source_asset_id);
+          if (singleRef) refIds.push(singleRef);
+
           const urls: string[] = [];
-          for (const id of refIds) {
-            const u2 = await urlOf(id);
-            if (u2) urls.push(u2);
+          const usedIds: string[] = [];
+          if (asset.url) {
+            urls.push(asset.url);
+            usedIds.push(asset.id);
           }
-          if (urls.length === 0 && asset.url) urls.push(asset.url);
+          for (const id of refIds) {
+            if (usedIds.includes(id)) continue;
+            const u2 = await urlOf(id);
+            if (u2 && !urls.includes(u2)) {
+              urls.push(u2);
+              usedIds.push(id);
+            }
+            if (urls.length >= 16) break;
+          }
 
           const imageSize = str(params.image_size) ?? "portrait_16_9";
           const quality = str(params.quality) ?? "high";
-          const row = await insertRow("image");
 
           if (urls.length > 0) {
+            baseParams.mode = "voice-remix";
+            baseParams.source_asset_ids = usedIds;
+            const row = await insertRow("image");
             const { error } = await supabase.functions.invoke("edit-image", {
               body: {
                 row_id: row.id,
@@ -165,6 +186,7 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
             });
             if (error) throw error;
           } else {
+            const row = await insertRow("image");
             const { error } = await supabase.functions.invoke("generate-image", {
               body: {
                 row_id: row.id,
@@ -178,7 +200,7 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
           }
         }
 
-        toast(isVideo ? "Regenerating your video..." : "Regenerating your image...", {
+        toast(isVideo ? "Regenerating your video..." : "Remixing your image...", {
           description: "It'll appear in the gallery when ready.",
         });
         onDone();
