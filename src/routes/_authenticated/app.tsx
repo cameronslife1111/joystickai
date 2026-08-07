@@ -1193,6 +1193,7 @@ function AppPage() {
 
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
+    if (recordingRef.current) return; // red recording glow is active — ignore tap
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
