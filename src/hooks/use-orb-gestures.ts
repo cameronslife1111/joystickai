@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type SwipeDirection = "up" | "down" | "left" | "right";
 
