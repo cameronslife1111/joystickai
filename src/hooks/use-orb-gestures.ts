@@ -33,9 +33,17 @@ export function useOrbGestures(
   const cbRef = useRef(cb);
   cbRef.current = cb;
 
+  // Safety net: if the element isn't mounted yet when the effect runs, retry on
+  // the next frame so listeners always end up attached to the live node.
+  const [retry, setRetry] = useState(0);
+
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el) {
+      const raf = requestAnimationFrame(() => setRetry((n) => n + 1));
+      return () => cancelAnimationFrame(raf);
+    }
+
 
     let startX = 0;
     let startY = 0;
