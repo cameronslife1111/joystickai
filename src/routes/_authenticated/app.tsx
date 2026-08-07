@@ -2446,7 +2446,7 @@ function AppPage() {
               }}
               placeholder="Edit your document. Sentences split automatically on periods, question marks, and exclamation marks."
               inputMode="text"
-              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-2xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-3xl"
+              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-2xl"
               style={{ minHeight: "60vh", maxHeight: "70vh" }}
             />
           ) : (
