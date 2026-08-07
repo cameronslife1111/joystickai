@@ -1193,6 +1193,7 @@ function AppPage() {
 
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
+    if (recordingRef.current) return; // red recording glow is active — ignore tap
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -1500,12 +1501,9 @@ function AppPage() {
   }, [editText, caretToSentenceIdx, commitFullEdit]);
 
   const handleEditJump = useCallback(async () => {
-    const el = editTextareaRef.current;
-    const caret = el?.selectionStart ?? 0;
-    const idx = caretToSentenceIdx(editText, caret);
-    const ok = await commitFullEdit(idx);
-    if (ok) toast("Jumped", { id: "edit-jumped" });
-  }, [editText, caretToSentenceIdx, commitFullEdit]);
+    const ok = await commitFullEdit(0);
+    if (ok) toast("Jumped to top", { id: "edit-jumped" });
+  }, [commitFullEdit]);
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
@@ -2448,8 +2446,8 @@ function AppPage() {
               }}
               placeholder="Edit your document. Sentences split automatically on periods, question marks, and exclamation marks."
               inputMode="text"
-              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-2xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-3xl"
-              style={{ minHeight: "60vh", maxHeight: "70vh" }}
+              className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-2xl"
+              style={{ minHeight: "60vh", maxHeight: "82vh" }}
             />
           ) : (
             <p className="font-display text-3xl leading-tight md:text-4xl">
@@ -2539,27 +2537,6 @@ function AppPage() {
       )}
 
       {/* Edit action buttons (above orb) */}
-      {editing && (
-        <div className="pointer-events-none flex justify-center pb-4">
-          <div className="pointer-events-auto flex gap-3">
-            <button
-              onClick={handleEditDone}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              Done
-            </button>
-            <button
-              onClick={handleEditJump}
-              disabled={!editText.trim()}
-              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
-              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
-            >
-              Jump To
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Floating dictation button while the document editor is open. */}
       {editing && (
@@ -2603,59 +2580,86 @@ function AppPage() {
         </div>
       )}
 
-      <section className="relative flex shrink-0 items-center justify-center pb-4">
+      {!editing && (
+        <section className="relative flex shrink-0 items-center justify-center pb-4">
+          <div
+            className={`orb-stage${recording ? " orb-recording" : ""}`}
+            style={{
+              width: "min(55vw, 28svh, 220px)",
+              height: "min(55vw, 28svh, 220px)",
+            }}
+          >
+            <div className="orb-aura" aria-hidden />
+            {flare && (
+              <div
+                className={`orb-flare orb-flare-${flare}`}
+                aria-hidden
+                onAnimationEnd={() => setFlare(null)}
+              />
+            )}
+            {/* Linked-document pill moved to the header, under the title. */}
+            {docIconUrl ? (
+              <DocumentIconAvatar
+                ref={orbRef}
+                url={docIconUrl}
+                state={orbState}
+                className="!w-full !h-full"
+              />
+            ) : (
+              <Orb
+                ref={orbRef}
+                state={orbState}
+                size={0}
+                className="!w-full !h-full"
+              />
+            )}
+            {/* Swipe gestures on the orb handle directional navigation. */}
+            {/* Invisible flanking buttons: left = delete, right = repeat */}
+            <button
+              type="button"
+              onClick={() => {
+                void deleteCurrent();
+              }}
+              className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
+              aria-label="Delete sentence"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const text = currentSentence?.content;
+                if (text) speak(text, claimSpeech());
+              }}
+              className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
+              aria-label="Repeat sentence"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Edit action buttons pinned to the bottom while editing. */}
+      {editing && (
         <div
-          className={`orb-stage${recording ? " orb-recording" : ""}`}
-          style={{
-            width: "min(55vw, 28svh, 220px)",
-            height: "min(55vw, 28svh, 220px)",
-          }}
+          className="flex shrink-0 items-center justify-center gap-3 border-t border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         >
-          <div className="orb-aura" aria-hidden />
-          {flare && (
-            <div
-              className={`orb-flare orb-flare-${flare}`}
-              aria-hidden
-              onAnimationEnd={() => setFlare(null)}
-            />
-          )}
-          {/* Linked-document pill moved to the header, under the title. */}
-          {docIconUrl ? (
-            <DocumentIconAvatar
-              ref={orbRef}
-              url={docIconUrl}
-              state={orbState}
-              className="!w-full !h-full"
-            />
-          ) : (
-            <Orb
-              ref={orbRef}
-              state={orbState}
-              size={0}
-              className="!w-full !h-full"
-            />
-          )}
-          {/* Swipe gestures on the orb handle directional navigation. */}
-          {/* Invisible flanking buttons: left = delete, right = repeat */}
           <button
-            type="button"
-            onClick={() => {
-              void deleteCurrent();
-            }}
-            className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Delete sentence"
-          />
+            onClick={handleEditDone}
+            className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+          >
+            Done
+          </button>
           <button
-            type="button"
-            onClick={() => {
-              const text = currentSentence?.content;
-              if (text) speak(text, claimSpeech());
-            }}
-            className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
-            aria-label="Repeat sentence"
-          />
+            onClick={handleEditJump}
+            disabled={!editText.trim()}
+            className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+            style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+          >
+            Jump to top
+          </button>
         </div>
-      </section>
+      )}
+
 
       {/* Grid menu overlay */}
       {menuOpen && (
