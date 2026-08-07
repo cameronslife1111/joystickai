@@ -1501,12 +1501,9 @@ function AppPage() {
   }, [editText, caretToSentenceIdx, commitFullEdit]);
 
   const handleEditJump = useCallback(async () => {
-    const el = editTextareaRef.current;
-    const caret = el?.selectionStart ?? 0;
-    const idx = caretToSentenceIdx(editText, caret);
-    const ok = await commitFullEdit(idx);
-    if (ok) toast("Jumped", { id: "edit-jumped" });
-  }, [editText, caretToSentenceIdx, commitFullEdit]);
+    const ok = await commitFullEdit(0);
+    if (ok) toast("Jumped to top", { id: "edit-jumped" });
+  }, [commitFullEdit]);
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
