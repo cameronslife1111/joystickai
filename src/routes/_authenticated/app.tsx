@@ -1317,7 +1317,13 @@ function AppPage() {
         else if (dir === "right") void onSwipeRight();
       },
     },
-    { swipeThreshold: 38, moveCancelPx: 16, rebindKey: docIconUrl ?? "orb" },
+    {
+      swipeThreshold: 38,
+      moveCancelPx: 16,
+      // The orb is unmounted while the editor is open, so exiting edit mode
+      // creates a brand-new element — rebind listeners to it.
+      rebindKey: `${docIconUrl ?? "orb"}|${editing ? "edit" : "read"}`,
+    },
   );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
