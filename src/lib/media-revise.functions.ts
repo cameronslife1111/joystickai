@@ -8,6 +8,8 @@ const schema = z.object({
   originalPrompt: z.string().max(20000).default(""),
   change: z.string().min(1).max(4000),
   kind: z.enum(["image", "video"]).default("image"),
+  /** "edit" = instruction applied to an attached image, "video" = full prompt rewrite. */
+  mode: z.enum(["edit", "rewrite"]).default("rewrite"),
 });
 
 /**
