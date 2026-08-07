@@ -52,7 +52,12 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
         const isVideo = asset.kind === "video";
 
         const { prompt } = await rewrite({
-          data: { originalPrompt: original, change: spoken, kind: isVideo ? "video" : "image" },
+          data: {
+            originalPrompt: original,
+            change: spoken,
+            kind: isVideo ? "video" : "image",
+            mode: isVideo ? "rewrite" : "edit",
+          },
         });
 
         const { data: u } = await supabase.auth.getUser();
