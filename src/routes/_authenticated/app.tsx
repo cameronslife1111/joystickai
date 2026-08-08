@@ -869,12 +869,21 @@ function AppPage() {
       p_to_index: to,
     });
     if (error) { toast.error(error.message || "Failed to move"); return; }
-    await setIndex(to);
+    // Land on the sentence that followed the moved one and read it.
+    const last = sentences.length - 1;
+    const hasNext = from + 1 <= last;
+    const nextContent = hasNext
+      ? sentences[from + 1]?.content
+      : sentences[Math.min(to > from ? last : from, last)]?.content;
+    const landing = hasNext
+      ? Math.min(to > from ? from : from + 1, last)
+      : last;
+    await setIndex(landing);
     await qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
-    const moved = sentences.find((s) => s.order_index === from);
-    if (moved) speak(moved.content, token);
+    if (nextContent) speak(nextContent, token);
     setMoveOpen(false);
   }, [activeDocId, sentences, currentIdx, setIndex, qc, speak, claimSpeech]);
+
 
   const moveCurrentToBottom = useCallback(async () => {
     if (!activeDocId || !sentences || sentences.length === 0) return;
