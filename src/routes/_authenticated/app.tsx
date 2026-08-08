@@ -1045,7 +1045,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return;
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1056,9 +1056,7 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
 
     setActiveDocId(targetId);
@@ -1098,7 +1096,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return;
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(docId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1109,9 +1107,7 @@ function AppPage() {
       prev?.map((d) => d.id === docId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", docId);
+      persistIndex(docId, clamped);
     }
 
     setActiveDocId(docId);
@@ -1140,7 +1136,7 @@ function AppPage() {
     ]);
     if (token !== speechTokenRef.current) return;
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1150,9 +1146,7 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
@@ -1283,7 +1277,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return; // superseded by newer action
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1301,9 +1295,7 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
 
     setActiveDocId(targetId);
@@ -1910,7 +1902,7 @@ function AppPage() {
     ]);
     if (token !== speechTokenRef.current) return;
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(nextDoc.id, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0 ? 0 : Math.max(0, Math.min(savedIdx, list.length - 1));
     const resolved = list[clamped];
     qc.setQueryData<Sentence[]>(["sentences", nextDoc.id], list);
@@ -1918,9 +1910,7 @@ function AppPage() {
       prev?.map((d) => d.id === nextDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", nextDoc.id);
+      persistIndex(nextDoc.id, clamped);
     }
     setActiveDocId(nextDoc.id);
     toast.success(`Swapped to "${nextDoc.title}" in ${slotsHolding.length} slot${slotsHolding.length === 1 ? "" : "s"}`);
