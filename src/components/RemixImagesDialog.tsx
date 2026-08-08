@@ -18,6 +18,7 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { nextRedoTitle } from "@/lib/redo-title";
 
 interface InitialAsset {
   id: string;
@@ -107,7 +108,7 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
         .from("media_assets")
         .insert({
           user_id: u.user.id,
-          title: prompt.trim().slice(0, 60) || "Remixed image",
+          title: await nextRedoTitle(initialAsset.title),
           kind: "image",
           status: "generating",
           generation_params: {
