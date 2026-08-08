@@ -1753,9 +1753,7 @@ function AppPage() {
     // In move mode we never move the *source* reader, so skip this when the
     // target is the document we're currently reading.
     if (!(movingId && targetDocId === activeDocId)) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: insertAt })
-        .eq("id", targetDocId);
+      persistIndex(targetDocId, insertAt);
       qc.setQueryData<Doc[]>(["documents"], (prev) =>
         prev?.map((d) => d.id === targetDocId ? { ...d, current_sentence_index: insertAt } : d) ?? prev,
       );
