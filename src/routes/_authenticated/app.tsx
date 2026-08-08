@@ -1141,6 +1141,27 @@ function AppPage() {
     }
     if (!targetId) return;
 
+    // FAST PATH: when the target document's ordered sentence list is already
+    // in cache (warmed by the prefetch effect), switch and speak instantly —
+    // no network wait. The spoken text still comes from the exact same array
+    // the UI renders, by array position, so display === speech.
+    const cachedList = qc.getQueryData<Sentence[]>(["sentences", targetId]);
+    const cachedSavedIdx =
+      docs.find((d) => d.id === targetId)?.current_sentence_index ?? 0;
+    let spokenContent: string | null = null;
+    if (cachedList && cachedList.length > 0) {
+      const fastIdx = Math.max(0, Math.min(cachedSavedIdx, cachedList.length - 1));
+      const fastResolved = cachedList[fastIdx];
+      qc.setQueryData<Doc[]>(["documents"], (prev) =>
+        prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: fastIdx } : d) ?? prev,
+      );
+      setActiveDocId(targetId);
+      if (fastResolved?.content) {
+        spokenContent = fastResolved.content;
+        speak(fastResolved.content, token);
+      }
+    }
+
     // Fetch the target doc's saved index AND its full ordered sentence list
     // in parallel. The spoken text is then resolved from the SAME list the
     // UI will render, by array position — never by order_index lookup. This
@@ -1186,7 +1207,12 @@ function AppPage() {
 
     setActiveDocId(targetId);
 
-    if (resolved?.content) speak(resolved.content, token);
+    // Only speak here if the fast path didn't already say this exact sentence
+    // (fresh data can differ if the doc changed on another device).
+    if (resolved?.content && resolved.content !== spokenContent) {
+      speak(resolved.content, token);
+    }
+
   }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument, openLinkedChat]);
   onSwipeRightRef.current = onSwipeRight;
 
