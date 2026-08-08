@@ -734,10 +734,13 @@ function AppPage() {
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === activeDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
-    await supabase.from("documents")
+    // Fire-and-forget: the optimistic cache write above is what the UI reads,
+    // so the reader must never wait on this round-trip (slow cellular = lag).
+    void supabase.from("documents")
       .update({ current_sentence_index: clamped })
       .eq("id", activeDoc.id);
   }, [activeDoc, qc]);
+
 
 
   const jumpTo = useCallback(async (target: number) => {
