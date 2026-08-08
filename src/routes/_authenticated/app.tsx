@@ -310,11 +310,66 @@ function AppPage() {
     if (typeof window !== "undefined") window.localStorage.setItem("orby_theme", theme);
   }, [theme]);
 
-  // Last sentence index this device wrote per document. A background refetch
-  // (reconnect after the app is foregrounded, plan watcher invalidation) can
-  // return a row that was read BEFORE our write landed; without this guard its
-  // response overwrites the fresh index and the reader snaps back a sentence.
-  const localIdxRef = useRef<Record<string, { index: number; writtenAt: number }>>({});
+  // Last sentence index this device wrote per document. `pending` stays true
+  // until the write is CONFIRMED by the server. A background refetch (reconnect
+  // after the app is foregrounded, plan watcher invalidation) can return a row
+  // that was read before our write landed; while pending, the local value wins
+  // so the reader never snaps back to an older sentence.
+  const localIdxRef = useRef<Record<string, { index: number; pending: boolean }>>({});
+
+  /**
+   * Persists a document's current sentence index without blocking the UI.
+   * The optimistic cache write is what the reader paints from, so this never
+   * awaits. Retries a couple of times (dropped cellular request) and keeps the
+   * local override in place until the value is actually stored.
+   */
+  const persistIndex = useCallback((docId: string, index: number) => {
+    localIdxRef.current[docId] = { index, pending: true };
+    void (async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase
+          .from("documents")
+          .update({ current_sentence_index: index })
+          .eq("id", docId);
+        const entry = localIdxRef.current[docId];
+        // A newer write for this doc superseded us — it owns the entry now.
+        if (!entry || entry.index !== index) return;
+        if (!error) {
+          entry.pending = false;
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+    })();
+  }, []);
+
+  /** Authoritative saved index for a doc: unconfirmed local write beats server. */
+  const savedIndexFor = useCallback((docId: string, serverIdx: number) => {
+    const p = localIdxRef.current[docId];
+    return p && p.pending ? p.index : serverIdx;
+  }, []);
+
+  // Flush any unconfirmed index write when the app is backgrounded or closed.
+  useEffect(() => {
+    const flush = () => {
+      for (const [docId, entry] of Object.entries(localIdxRef.current)) {
+        if (!entry.pending) continue;
+        void supabase
+          .from("documents")
+          .update({ current_sentence_index: entry.index })
+          .eq("id", docId);
+      }
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   // Load docs
   const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
@@ -322,7 +377,6 @@ function AppPage() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async (): Promise<Doc[]> => {
-      const startedAt = Date.now();
       const { data, error } = await supabase
         .from("documents").select("*").order("position", { ascending: true });
       if (error) throw error;
@@ -336,15 +390,17 @@ function AppPage() {
           delete local[d.id];
           return d;
         }
-        // Our write happened after this fetch started: the row is stale.
-        if (pending.writtenAt >= startedAt) {
+        // Our write hasn't been confirmed yet: this row is stale, keep ours.
+        if (pending.pending) {
           return { ...d, current_sentence_index: pending.index };
         }
+        // Confirmed earlier and the server now differs (another device) — trust it.
         delete local[d.id];
         return d;
       });
     },
   });
+
 
 
   // Bootstrap: create first doc if none
@@ -776,16 +832,15 @@ function AppPage() {
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
     const clamped = Math.max(0, newIdx);
-    localIdxRef.current[activeDoc.id] = { index: clamped, writtenAt: Date.now() };
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === activeDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
-    // Fire-and-forget: the optimistic cache write above is what the UI reads,
-    // so the reader must never wait on this round-trip (slow cellular = lag).
-    void supabase.from("documents")
-      .update({ current_sentence_index: clamped })
-      .eq("id", activeDoc.id);
-  }, [activeDoc, qc]);
+    // Non-blocking: the optimistic cache write above is what the UI reads, so
+    // the reader never waits on this round-trip (slow cellular = lag). The
+    // write is tracked + retried until confirmed by persistIndex.
+    persistIndex(activeDoc.id, clamped);
+  }, [activeDoc, qc, persistIndex]);
+
 
 
 
@@ -990,7 +1045,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return;
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1001,14 +1056,12 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
 
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [currentSentence, docs, claimSpeech, speak, qc]);
+  }, [currentSentence, docs, claimSpeech, speak, qc, savedIndexFor, persistIndex]);
 
 
 
@@ -1043,7 +1096,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return;
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(docId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1054,14 +1107,12 @@ function AppPage() {
       prev?.map((d) => d.id === docId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", docId);
+      persistIndex(docId, clamped);
     }
 
     setActiveDocId(docId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
+  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc, savedIndexFor, persistIndex]);
 
   // Load an arbitrary document by id at its saved sentence (same prime pattern
   // used by openLinkedDocument). Used to return to the locked list.
@@ -1085,7 +1136,7 @@ function AppPage() {
     ]);
     if (token !== speechTokenRef.current) return;
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1095,13 +1146,11 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, claimSpeech, speak, qc]);
+  }, [docs, claimSpeech, speak, qc, savedIndexFor, persistIndex]);
 
   /**
    * Opens the chat thread linked to the current sentence, exactly like
@@ -1192,8 +1241,10 @@ function AppPage() {
     // no network wait. The spoken text still comes from the exact same array
     // the UI renders, by array position, so display === speech.
     const cachedList = qc.getQueryData<Sentence[]>(["sentences", targetId]);
-    const cachedSavedIdx =
-      docs.find((d) => d.id === targetId)?.current_sentence_index ?? 0;
+    const cachedSavedIdx = savedIndexFor(
+      targetId,
+      docs.find((d) => d.id === targetId)?.current_sentence_index ?? 0,
+    );
     let spokenContent: string | null = null;
     if (cachedList && cachedList.length > 0) {
       const fastIdx = Math.max(0, Math.min(cachedSavedIdx, cachedList.length - 1));
@@ -1228,7 +1279,7 @@ function AppPage() {
     if (token !== speechTokenRef.current) return; // superseded by newer action
 
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
       ? 0
       : Math.max(0, Math.min(savedIdx, list.length - 1));
@@ -1246,9 +1297,7 @@ function AppPage() {
       prev?.map((d) => d.id === targetId ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", targetId);
+      persistIndex(targetId, clamped);
     }
 
     setActiveDocId(targetId);
@@ -1259,7 +1308,7 @@ function AppPage() {
       speak(resolved.content, token);
     }
 
-  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument, openLinkedChat]);
+  }, [docs, activeDoc, activeDocId, favorites, speak, claimSpeech, qc, saveLastFavoriteSlot, lockFavorites, lockedDocId, goToDocument, sentences, currentIdx, currentSentence, openLinkedDocument, openLinkedChat, savedIndexFor, persistIndex]);
   onSwipeRightRef.current = onSwipeRight;
 
 
@@ -1704,9 +1753,7 @@ function AppPage() {
     // In move mode we never move the *source* reader, so skip this when the
     // target is the document we're currently reading.
     if (!(movingId && targetDocId === activeDocId)) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: insertAt })
-        .eq("id", targetDocId);
+      persistIndex(targetDocId, insertAt);
       qc.setQueryData<Doc[]>(["documents"], (prev) =>
         prev?.map((d) => d.id === targetDocId ? { ...d, current_sentence_index: insertAt } : d) ?? prev,
       );
@@ -1766,7 +1813,7 @@ function AppPage() {
       const token = claimSpeech();
       speak(spoken, token);
     }
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak, moveSendSourceId, setIndex]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak, moveSendSourceId, setIndex, persistIndex]);
 
   // "Send to document" from the Move sentence sheet: relocate the current
   // sentence using the same "Send to which list?" flow as New idea.
@@ -1855,7 +1902,7 @@ function AppPage() {
     ]);
     if (token !== speechTokenRef.current) return;
     const list = (rows ?? []) as Sentence[];
-    const savedIdx = freshDoc?.current_sentence_index ?? 0;
+    const savedIdx = savedIndexFor(nextDoc.id, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0 ? 0 : Math.max(0, Math.min(savedIdx, list.length - 1));
     const resolved = list[clamped];
     qc.setQueryData<Sentence[]>(["sentences", nextDoc.id], list);
@@ -1863,14 +1910,12 @@ function AppPage() {
       prev?.map((d) => d.id === nextDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
     if (clamped !== savedIdx) {
-      void supabase.from("documents")
-        .update({ current_sentence_index: clamped })
-        .eq("id", nextDoc.id);
+      persistIndex(nextDoc.id, clamped);
     }
     setActiveDocId(nextDoc.id);
     toast.success(`Swapped to "${nextDoc.title}" in ${slotsHolding.length} slot${slotsHolding.length === 1 ? "" : "s"}`);
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak]);
+  }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak, savedIndexFor, persistIndex]);
 
 
 
