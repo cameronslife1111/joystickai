@@ -1061,7 +1061,7 @@ function AppPage() {
 
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [currentSentence, docs, claimSpeech, speak, qc]);
+  }, [currentSentence, docs, claimSpeech, speak, qc, savedIndexFor, persistIndex]);
 
 
 
@@ -1112,7 +1112,7 @@ function AppPage() {
 
     setActiveDocId(docId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc]);
+  }, [pinnedDocId, docs, claimSpeech, speak, qc, savePinnedDoc, savedIndexFor, persistIndex]);
 
   // Load an arbitrary document by id at its saved sentence (same prime pattern
   // used by openLinkedDocument). Used to return to the locked list.
@@ -1150,7 +1150,7 @@ function AppPage() {
     }
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, claimSpeech, speak, qc]);
+  }, [docs, claimSpeech, speak, qc, savedIndexFor, persistIndex]);
 
   /**
    * Opens the chat thread linked to the current sentence, exactly like
@@ -1241,8 +1241,10 @@ function AppPage() {
     // no network wait. The spoken text still comes from the exact same array
     // the UI renders, by array position, so display === speech.
     const cachedList = qc.getQueryData<Sentence[]>(["sentences", targetId]);
-    const cachedSavedIdx =
-      docs.find((d) => d.id === targetId)?.current_sentence_index ?? 0;
+    const cachedSavedIdx = savedIndexFor(
+      targetId,
+      docs.find((d) => d.id === targetId)?.current_sentence_index ?? 0,
+    );
     let spokenContent: string | null = null;
     if (cachedList && cachedList.length > 0) {
       const fastIdx = Math.max(0, Math.min(cachedSavedIdx, cachedList.length - 1));
@@ -1915,7 +1917,7 @@ function AppPage() {
     setActiveDocId(nextDoc.id);
     toast.success(`Swapped to "${nextDoc.title}" in ${slotsHolding.length} slot${slotsHolding.length === 1 ? "" : "s"}`);
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak]);
+  }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak, savedIndexFor, persistIndex]);
 
 
 
