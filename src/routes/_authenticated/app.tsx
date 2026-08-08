@@ -310,11 +310,66 @@ function AppPage() {
     if (typeof window !== "undefined") window.localStorage.setItem("orby_theme", theme);
   }, [theme]);
 
-  // Last sentence index this device wrote per document. A background refetch
-  // (reconnect after the app is foregrounded, plan watcher invalidation) can
-  // return a row that was read BEFORE our write landed; without this guard its
-  // response overwrites the fresh index and the reader snaps back a sentence.
-  const localIdxRef = useRef<Record<string, { index: number; writtenAt: number }>>({});
+  // Last sentence index this device wrote per document. `pending` stays true
+  // until the write is CONFIRMED by the server. A background refetch (reconnect
+  // after the app is foregrounded, plan watcher invalidation) can return a row
+  // that was read before our write landed; while pending, the local value wins
+  // so the reader never snaps back to an older sentence.
+  const localIdxRef = useRef<Record<string, { index: number; pending: boolean }>>({});
+
+  /**
+   * Persists a document's current sentence index without blocking the UI.
+   * The optimistic cache write is what the reader paints from, so this never
+   * awaits. Retries a couple of times (dropped cellular request) and keeps the
+   * local override in place until the value is actually stored.
+   */
+  const persistIndex = useCallback((docId: string, index: number) => {
+    localIdxRef.current[docId] = { index, pending: true };
+    void (async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error } = await supabase
+          .from("documents")
+          .update({ current_sentence_index: index })
+          .eq("id", docId);
+        const entry = localIdxRef.current[docId];
+        // A newer write for this doc superseded us — it owns the entry now.
+        if (!entry || entry.index !== index) return;
+        if (!error) {
+          entry.pending = false;
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+    })();
+  }, []);
+
+  /** Authoritative saved index for a doc: unconfirmed local write beats server. */
+  const savedIndexFor = useCallback((docId: string, serverIdx: number) => {
+    const p = localIdxRef.current[docId];
+    return p && p.pending ? p.index : serverIdx;
+  }, []);
+
+  // Flush any unconfirmed index write when the app is backgrounded or closed.
+  useEffect(() => {
+    const flush = () => {
+      for (const [docId, entry] of Object.entries(localIdxRef.current)) {
+        if (!entry.pending) continue;
+        void supabase
+          .from("documents")
+          .update({ current_sentence_index: entry.index })
+          .eq("id", docId);
+      }
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   // Load docs
   const { data: docs, error: docsError, isLoading: docsLoading, refetch: refetchDocs } = useQuery({
@@ -322,7 +377,6 @@ function AppPage() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async (): Promise<Doc[]> => {
-      const startedAt = Date.now();
       const { data, error } = await supabase
         .from("documents").select("*").order("position", { ascending: true });
       if (error) throw error;
@@ -336,15 +390,17 @@ function AppPage() {
           delete local[d.id];
           return d;
         }
-        // Our write happened after this fetch started: the row is stale.
-        if (pending.writtenAt >= startedAt) {
+        // Our write hasn't been confirmed yet: this row is stale, keep ours.
+        if (pending.pending) {
           return { ...d, current_sentence_index: pending.index };
         }
+        // Confirmed earlier and the server now differs (another device) — trust it.
         delete local[d.id];
         return d;
       });
     },
   });
+
 
 
   // Bootstrap: create first doc if none
