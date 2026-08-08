@@ -2641,6 +2641,27 @@ function AppPage() {
         </div>
       )}
 
+      {/* Floating trophy button while the New idea composer is open — prepends a
+          trophy emoji to the beginning of the composer text. */}
+      {composing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setComposeText((prev) => (prev.trim() ? `🏆 ${prev}` : "🏆"));
+          }}
+          aria-label="Add trophy to idea"
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+          style={{ bottom: "68svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          🏆
+        </button>
+      )}
+
       {/* Floating dictation button while the New idea composer is open, so the
           mobile keyboard can't cover it. */}
       {composing && (
