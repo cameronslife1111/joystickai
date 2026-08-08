@@ -874,7 +874,7 @@ function AppPage() {
     const hasNext = from + 1 <= last;
     const nextContent = hasNext
       ? sentences[from + 1]?.content
-      : sentences[Math.min(to > from ? last : from, last)]?.content;
+      : (sentences[last - 1]?.content ?? sentences[last]?.content);
     const landing = hasNext
       ? Math.min(to > from ? from : from + 1, last)
       : last;
