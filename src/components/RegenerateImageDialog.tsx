@@ -17,6 +17,7 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { nextRedoTitle } from "@/lib/redo-title";
 
 interface SourceAsset {
   id: string;
@@ -63,7 +64,7 @@ export function RegenerateImageDialog({ open, onOpenChange, sourceAsset, onSubmi
         .from("media_assets")
         .insert({
           user_id: u.user.id,
-          title: prompt.trim().slice(0, 60) || "Regenerated image",
+          title: await nextRedoTitle(sourceAsset.title),
           kind: "image",
           status: "generating",
           generation_params: {

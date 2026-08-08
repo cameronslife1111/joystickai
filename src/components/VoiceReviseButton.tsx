@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useVoiceDictation } from "@/lib/use-voice-dictation";
 import { rewriteMediaPrompt } from "@/lib/media-revise.functions";
+import { nextRedoTitle } from "@/lib/redo-title";
 
 type Params = Record<string, unknown> | null | undefined;
 
@@ -70,12 +71,14 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
           revision_text: spoken,
         };
 
+        const redoTitle = await nextRedoTitle(asset.title);
+
         const insertRow = async (kind: string) => {
           const { data: row, error } = await supabase
             .from("media_assets")
             .insert({
               user_id: u.user!.id,
-              title: prompt.slice(0, 60) || asset.title || "Revised media",
+              title: redoTitle,
               kind,
               status: "generating",
               generation_params: baseParams,
