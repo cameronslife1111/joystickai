@@ -832,16 +832,15 @@ function AppPage() {
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
     const clamped = Math.max(0, newIdx);
-    localIdxRef.current[activeDoc.id] = { index: clamped, writtenAt: Date.now() };
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === activeDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
-    // Fire-and-forget: the optimistic cache write above is what the UI reads,
-    // so the reader must never wait on this round-trip (slow cellular = lag).
-    void supabase.from("documents")
-      .update({ current_sentence_index: clamped })
-      .eq("id", activeDoc.id);
-  }, [activeDoc, qc]);
+    // Non-blocking: the optimistic cache write above is what the UI reads, so
+    // the reader never waits on this round-trip (slow cellular = lag). The
+    // write is tracked + retried until confirmed by persistIndex.
+    persistIndex(activeDoc.id, clamped);
+  }, [activeDoc, qc, persistIndex]);
+
 
 
 
