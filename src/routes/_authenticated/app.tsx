@@ -1813,7 +1813,7 @@ function AppPage() {
       const token = claimSpeech();
       speak(spoken, token);
     }
-  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak, moveSendSourceId, setIndex]);
+  }, [composeText, docs, sendTargetSentences, qc, cancelCompose, activeDocId, currentIdx, sentences, claimSpeech, speak, moveSendSourceId, setIndex, persistIndex]);
 
   // "Send to document" from the Move sentence sheet: relocate the current
   // sentence using the same "Send to which list?" flow as New idea.
