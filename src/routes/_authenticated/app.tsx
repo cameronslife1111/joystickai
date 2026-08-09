@@ -1351,61 +1351,25 @@ function AppPage() {
     async (audioBlob: Blob) => {
       const listeningId = `voice-${Date.now()}`;
       toast.loading("Transcribing…", { id: listeningId });
-      const isNet = (e: unknown) => {
-        const m = (e instanceof Error ? e.message : String(e ?? "")).toLowerCase();
-        return (
-          m.includes("load failed") ||
-          m.includes("failed to fetch") ||
-          m.includes("network") ||
-          m.includes("aborted") ||
-          m.includes("timeout")
-        );
-      };
-      const run = async (audioBase64: string) => {
-        let lastErr: unknown = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const { text } = await transcribe({
-              data: { audioBase64, mimeType: "audio/wav" },
-            });
-            const transcript = (text ?? "").trim();
-            if (!transcript) {
-              toast.dismiss(listeningId);
-              return;
-            }
-            openNewIdea();
-            setComposeText((prev) => appendTranscript(prev, transcript));
-            toast.dismiss(listeningId);
-            return;
-          } catch (err) {
-            lastErr = err;
-            if (!isNet(err)) break;
-            await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-          }
-        }
-        toast.dismiss(listeningId);
-        toast.error(
-          isNet(lastErr)
-            ? "Couldn't reach the server — your recording is saved"
-            : lastErr instanceof Error
-              ? lastErr.message
-              : "Transcription failed",
-          {
-            duration: 30000,
-            action: { label: "Retry", onClick: () => void run(audioBase64) },
-          },
-        );
-      };
       try {
         const audioBase64 = await blobToBase64(audioBlob);
-        await run(audioBase64);
-      } catch {
-        toast.error("Couldn't prepare the recording — try again", { id: listeningId });
+        const { text } = await transcribe({
+          data: { audioBase64, mimeType: "audio/wav" },
+        });
+        const transcript = (text ?? "").trim();
+        if (!transcript) {
+          toast.dismiss(listeningId);
+          return;
+        }
+        openNewIdea();
+        setComposeText((prev) => appendTranscript(prev, transcript));
+        toast.dismiss(listeningId);
+      } catch (err: any) {
+        toast.error(err?.message ?? "Transcription failed", { id: listeningId });
       }
     },
     [transcribe, openNewIdea],
   );
-
 
 
   const micStartingRef = useRef(false);
