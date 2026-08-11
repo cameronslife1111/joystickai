@@ -2286,40 +2286,21 @@ function AppPage() {
     // Slots 14 & 15 (Analyze img / Web search) folded into Chat — kept inert to preserve grid indices.
     { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
     { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
-    { e: "➕", t: "New doc", fn: async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const title = prompt("Document title?") || "Untitled";
-      const pos = (docs?.length ?? 0);
-      const { data } = await supabase.from("documents")
-        .insert({ user_id: u.user.id, title, position: pos })
-        .select().single();
-      if (data) setActiveDocId(data.id);
-      qc.invalidateQueries({ queryKey: ["documents"] });
+    { e: "➕", t: "New doc", fn: () => {
       setMenuOpen(false);
+      setNewDocText("");
+      setNewDocOpen(true);
     }},
-    { e: "✏️", t: "Rename", fn: async () => {
+    { e: "✏️", t: "Rename", fn: () => {
       if (!activeDoc) return;
-      const title = prompt("New title?", activeDoc.title);
-      if (!title) return;
-      await supabase.from("documents").update({ title }).eq("id", activeDoc.id);
-      qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+      setRenameText(activeDoc.title ?? "");
+      setRenameOpen(true);
     }},
-    { e: "🗑️", t: "Delete doc", fn: async () => {
+    { e: "🗑️", t: "Delete doc", fn: () => {
       if (!activeDoc) return;
-      if (!confirm(`Delete "${activeDoc.title}"? This cannot be undone.`)) return;
-      const deletedId = activeDoc.id;
-      await supabase.from("documents").delete().eq("id", deletedId);
-      // Prune from favorites
-      if (favorites.some((id) => id === deletedId)) {
-        const pruned = favorites.map((id) => (id === deletedId ? null : id));
-        await saveFavorites(pruned);
-      }
-      setActiveDocId(null);
-      favIdxRef.current = -1;
-      qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+      setDeleteDocOpen(true);
     }},
     { e: "⭐", t: "Favorites", fn: () => {
       setMenuOpen(false);
