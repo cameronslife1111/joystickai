@@ -3350,6 +3350,90 @@ function AppPage() {
         );
       })()}
       {/* Jump-to overlay */}
+      {renameOpen && activeDoc && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setRenameOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 font-display text-base">Rename document</p>
+            <input
+              autoFocus
+              value={renameText}
+              onChange={(e) => setRenameText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitRenameDoc();
+                if (e.key === "Escape") setRenameOpen(false);
+              }}
+              className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setRenameOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitRenameDoc()}
+                className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newDocOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setNewDocOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 font-display text-base">New document</p>
+            <input
+              autoFocus
+              placeholder="Document title"
+              value={newDocText}
+              onChange={(e) => setNewDocText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitNewDoc();
+                if (e.key === "Escape") setNewDocOpen(false);
+              }}
+              className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setNewDocOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitNewDoc()}
+                className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDocOpen && activeDoc && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setDeleteDocOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 font-display text-base">Delete document</p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Delete “{activeDoc.title}”? This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteDocOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitDeleteDoc()}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {jumpOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
