@@ -147,6 +147,41 @@ async function runWebSearch(
   }
 }
 
+/**
+ * Turn a possibly-elliptical follow-up ("what about prices for that one?") into a
+ * standalone search question using the thread transcript. Falls back to the raw
+ * message when the rewrite fails or looks unusable.
+ */
+async function resolveSearchQuery(
+  model: any,
+  latestText: string,
+  transcript: string,
+): Promise<string> {
+  if (!transcript.trim()) return latestText;
+  try {
+    const { text } = await aiSdkGenerateText({
+      model,
+      system:
+        "Rewrite the user's latest message as a single, self-contained web search question. " +
+        "Resolve every pronoun and shorthand (it, that, those, the second one) into the actual names " +
+        "from the conversation. Keep the user's intent exactly; add no new questions and no commentary. " +
+        "Reply with the rewritten question only, as plain text.",
+      messages: [
+        {
+          role: "user",
+          content: `CONVERSATION SO FAR:\n${transcript.slice(-16_000)}\n\nLATEST MESSAGE:\n${latestText}\n\nRewritten standalone question:`,
+        },
+      ],
+    });
+    const out = (text ?? "").trim().replace(/^["']|["']$/g, "");
+    if (out && out.length <= 2000) return out;
+  } catch (e) {
+    console.warn("[chat resolveSearchQuery] failed", e);
+  }
+  return latestText;
+}
+
+
 function tryParseJson<T = any>(raw: string): T | null {
   const t = (raw ?? "").trim();
   const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
