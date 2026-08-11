@@ -130,6 +130,11 @@ function AppPage() {
   const [pickerQuery, setPickerQuery] = useState("");
   const [replaceMatching, setReplaceMatching] = useState(true);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameText, setRenameText] = useState("");
+  const [newDocOpen, setNewDocOpen] = useState(false);
+  const [newDocText, setNewDocText] = useState("");
+  const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -778,6 +783,9 @@ function AppPage() {
     menuOpen ||
     favoritesOpen ||
     jumpOpen ||
+    renameOpen ||
+    newDocOpen ||
+    deleteDocOpen ||
     moveOpen ||
     searchOpen ||
     recentOpen ||
@@ -2192,6 +2200,45 @@ function AppPage() {
     setChatOpen(true);
   }, [activeDoc, sentences, currentIdx]);
 
+  // In-app dialogs replace native prompt()/confirm(), which browsers can
+  // silently suppress (installed/mobile web apps, embedded previews, or after
+  // repeated dialogs) — that made Rename look dead until a page reload.
+  const submitRenameDoc = useCallback(async () => {
+    if (!activeDoc) { setRenameOpen(false); return; }
+    const title = renameText.trim();
+    if (!title) return;
+    setRenameOpen(false);
+    await supabase.from("documents").update({ title }).eq("id", activeDoc.id);
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [activeDoc, renameText, qc]);
+
+  const submitNewDoc = useCallback(async () => {
+    const title = newDocText.trim() || "Untitled";
+    setNewDocOpen(false);
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const pos = (docs?.length ?? 0);
+    const { data } = await supabase.from("documents")
+      .insert({ user_id: u.user.id, title, position: pos })
+      .select().single();
+    if (data) setActiveDocId(data.id);
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [newDocText, docs, qc]);
+
+  const submitDeleteDoc = useCallback(async () => {
+    if (!activeDoc) { setDeleteDocOpen(false); return; }
+    const deletedId = activeDoc.id;
+    setDeleteDocOpen(false);
+    await supabase.from("documents").delete().eq("id", deletedId);
+    if (favorites.some((id) => id === deletedId)) {
+      const pruned = favorites.map((id) => (id === deletedId ? null : id));
+      await saveFavorites(pruned);
+    }
+    setActiveDocId(null);
+    favIdxRef.current = -1;
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [activeDoc, favorites, saveFavorites, qc]);
+
   const grid = useMemo(() => [
 
     { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
@@ -2239,40 +2286,21 @@ function AppPage() {
     // Slots 14 & 15 (Analyze img / Web search) folded into Chat — kept inert to preserve grid indices.
     { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
     { e: "💬", t: "Chat", fn: () => { setMenuOpen(false); setChatOpen(true); }},
-    { e: "➕", t: "New doc", fn: async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const title = prompt("Document title?") || "Untitled";
-      const pos = (docs?.length ?? 0);
-      const { data } = await supabase.from("documents")
-        .insert({ user_id: u.user.id, title, position: pos })
-        .select().single();
-      if (data) setActiveDocId(data.id);
-      qc.invalidateQueries({ queryKey: ["documents"] });
+    { e: "➕", t: "New doc", fn: () => {
       setMenuOpen(false);
+      setNewDocText("");
+      setNewDocOpen(true);
     }},
-    { e: "✏️", t: "Rename", fn: async () => {
+    { e: "✏️", t: "Rename", fn: () => {
       if (!activeDoc) return;
-      const title = prompt("New title?", activeDoc.title);
-      if (!title) return;
-      await supabase.from("documents").update({ title }).eq("id", activeDoc.id);
-      qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+      setRenameText(activeDoc.title ?? "");
+      setRenameOpen(true);
     }},
-    { e: "🗑️", t: "Delete doc", fn: async () => {
+    { e: "🗑️", t: "Delete doc", fn: () => {
       if (!activeDoc) return;
-      if (!confirm(`Delete "${activeDoc.title}"? This cannot be undone.`)) return;
-      const deletedId = activeDoc.id;
-      await supabase.from("documents").delete().eq("id", deletedId);
-      // Prune from favorites
-      if (favorites.some((id) => id === deletedId)) {
-        const pruned = favorites.map((id) => (id === deletedId ? null : id));
-        await saveFavorites(pruned);
-      }
-      setActiveDocId(null);
-      favIdxRef.current = -1;
-      qc.invalidateQueries({ queryKey: ["documents"] });
       setMenuOpen(false);
+      setDeleteDocOpen(true);
     }},
     { e: "⭐", t: "Favorites", fn: () => {
       setMenuOpen(false);
@@ -3322,6 +3350,90 @@ function AppPage() {
         );
       })()}
       {/* Jump-to overlay */}
+      {renameOpen && activeDoc && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setRenameOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 font-display text-base">Rename document</p>
+            <input
+              autoFocus
+              value={renameText}
+              onChange={(e) => setRenameText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitRenameDoc();
+                if (e.key === "Escape") setRenameOpen(false);
+              }}
+              className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setRenameOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitRenameDoc()}
+                className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newDocOpen && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setNewDocOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 font-display text-base">New document</p>
+            <input
+              autoFocus
+              placeholder="Document title"
+              value={newDocText}
+              onChange={(e) => setNewDocText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submitNewDoc();
+                if (e.key === "Escape") setNewDocOpen(false);
+              }}
+              className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setNewDocOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitNewDoc()}
+                className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDocOpen && activeDoc && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
+          onClick={() => setDeleteDocOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 font-display text-base">Delete document</p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Delete “{activeDoc.title}”? This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteDocOpen(false)}
+                className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => void submitDeleteDoc()}
+                className="rounded-xl border border-destructive/40 bg-destructive/15 px-3 py-2 text-sm text-destructive hover:bg-destructive/25">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {jumpOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
