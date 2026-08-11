@@ -130,6 +130,11 @@ function AppPage() {
   const [pickerQuery, setPickerQuery] = useState("");
   const [replaceMatching, setReplaceMatching] = useState(true);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameText, setRenameText] = useState("");
+  const [newDocOpen, setNewDocOpen] = useState(false);
+  const [newDocText, setNewDocText] = useState("");
+  const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -778,6 +783,9 @@ function AppPage() {
     menuOpen ||
     favoritesOpen ||
     jumpOpen ||
+    renameOpen ||
+    newDocOpen ||
+    deleteDocOpen ||
     moveOpen ||
     searchOpen ||
     recentOpen ||
