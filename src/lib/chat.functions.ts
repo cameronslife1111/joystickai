@@ -92,10 +92,14 @@ async function buildContext(
   return parts.join("\n\n");
 }
 
-async function runWebSearch(query: string): Promise<{ ok: boolean; text: string }> {
+async function runWebSearch(
+  query: string,
+  transcript = "",
+): Promise<{ ok: boolean; text: string }> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) return { ok: false, text: "Web search isn't configured." };
   try {
+    const convo = transcript.trim().slice(-16_000);
     const res = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
@@ -111,13 +115,22 @@ async function runWebSearch(query: string): Promise<{ ok: boolean; text: string 
               "You are Orby, a helpful assistant. Answer the user's question using up-to-date web information. " +
               "Write a clear, conversational answer in PLAIN TEXT ONLY: never use asterisks, underscores, backticks, '#' headings, or bullet characters. " +
               "Use numbered lists (1. 2. 3.) only when a list truly helps, separate paragraphs with a blank line, and always use normal punctuation. Emojis are fine. " +
-              "No inline citation markers like [1] and do not paste raw reference lists.",
+              "No inline citation markers like [1] and do not paste raw reference lists." +
+              (convo
+                ? " You are continuing an ongoing conversation; the transcript is provided as context. Use it to understand what the user is referring to."
+                : ""),
 
           },
-          { role: "user", content: query },
+          {
+            role: "user",
+            content: convo
+              ? `CONVERSATION SO FAR:\n${convo}\n\nCURRENT REQUEST (the latest turn of that conversation):\n${query}`
+              : query,
+          },
         ],
       }),
     });
+
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.warn("[chat webSearch] perplexity error", res.status, t.slice(0, 300));
@@ -133,6 +146,41 @@ async function runWebSearch(query: string): Promise<{ ok: boolean; text: string 
     return { ok: false, text: "The web search failed." };
   }
 }
+
+/**
+ * Turn a possibly-elliptical follow-up ("what about prices for that one?") into a
+ * standalone search question using the thread transcript. Falls back to the raw
+ * message when the rewrite fails or looks unusable.
+ */
+async function resolveSearchQuery(
+  model: any,
+  latestText: string,
+  transcript: string,
+): Promise<string> {
+  if (!transcript.trim()) return latestText;
+  try {
+    const { text } = await aiSdkGenerateText({
+      model,
+      system:
+        "Rewrite the user's latest message as a single, self-contained web search question. " +
+        "Resolve every pronoun and shorthand (it, that, those, the second one) into the actual names " +
+        "from the conversation. Keep the user's intent exactly; add no new questions and no commentary. " +
+        "Reply with the rewritten question only, as plain text.",
+      messages: [
+        {
+          role: "user",
+          content: `CONVERSATION SO FAR:\n${transcript.slice(-16_000)}\n\nLATEST MESSAGE:\n${latestText}\n\nRewritten standalone question:`,
+        },
+      ],
+    });
+    const out = (text ?? "").trim().replace(/^["']|["']$/g, "");
+    if (out && out.length <= 2000) return out;
+  } catch (e) {
+    console.warn("[chat resolveSearchQuery] failed", e);
+  }
+  return latestText;
+}
+
 
 function tryParseJson<T = any>(raw: string): T | null {
   const t = (raw ?? "").trim();
@@ -382,12 +430,15 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (route === "web") {
-      // User question first, then the full attached documents as reference.
-      const query = latestWithDocs;
-      const { ok, text } = await runWebSearch(query);
+      // Resolve short follow-ups against the thread, then search with the whole
+      // conversation as context. Attached documents ride along as reference.
+      const standalone = await resolveSearchQuery(model, latestText, recent);
+      const query = `${standalone}${docBlock}`;
+      const { ok, text } = await runWebSearch(query, recent);
       if (!ok) throw new Error(text);
       return { route: "chat", text: toPlainText(text) };
     }
+
 
     // Normal chat route — append the documents to the final user message so
     // they come after the user's text, and rebuild fresh on every send.
