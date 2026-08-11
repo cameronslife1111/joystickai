@@ -92,10 +92,14 @@ async function buildContext(
   return parts.join("\n\n");
 }
 
-async function runWebSearch(query: string): Promise<{ ok: boolean; text: string }> {
+async function runWebSearch(
+  query: string,
+  transcript = "",
+): Promise<{ ok: boolean; text: string }> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) return { ok: false, text: "Web search isn't configured." };
   try {
+    const convo = transcript.trim().slice(-16_000);
     const res = await fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
@@ -111,13 +115,22 @@ async function runWebSearch(query: string): Promise<{ ok: boolean; text: string 
               "You are Orby, a helpful assistant. Answer the user's question using up-to-date web information. " +
               "Write a clear, conversational answer in PLAIN TEXT ONLY: never use asterisks, underscores, backticks, '#' headings, or bullet characters. " +
               "Use numbered lists (1. 2. 3.) only when a list truly helps, separate paragraphs with a blank line, and always use normal punctuation. Emojis are fine. " +
-              "No inline citation markers like [1] and do not paste raw reference lists.",
+              "No inline citation markers like [1] and do not paste raw reference lists." +
+              (convo
+                ? " You are continuing an ongoing conversation; the transcript is provided as context. Use it to understand what the user is referring to."
+                : ""),
 
           },
-          { role: "user", content: query },
+          {
+            role: "user",
+            content: convo
+              ? `CONVERSATION SO FAR:\n${convo}\n\nCURRENT REQUEST (the latest turn of that conversation):\n${query}`
+              : query,
+          },
         ],
       }),
     });
+
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.warn("[chat webSearch] perplexity error", res.status, t.slice(0, 300));
