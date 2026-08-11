@@ -430,12 +430,15 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (route === "web") {
-      // User question first, then the full attached documents as reference.
-      const query = latestWithDocs;
-      const { ok, text } = await runWebSearch(query);
+      // Resolve short follow-ups against the thread, then search with the whole
+      // conversation as context. Attached documents ride along as reference.
+      const standalone = await resolveSearchQuery(model, latestText, recent);
+      const query = `${standalone}${docBlock}`;
+      const { ok, text } = await runWebSearch(query, recent);
       if (!ok) throw new Error(text);
       return { route: "chat", text: toPlainText(text) };
     }
+
 
     // Normal chat route — append the documents to the final user message so
     // they come after the user's text, and rebuild fresh on every send.
