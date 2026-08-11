@@ -2200,6 +2200,45 @@ function AppPage() {
     setChatOpen(true);
   }, [activeDoc, sentences, currentIdx]);
 
+  // In-app dialogs replace native prompt()/confirm(), which browsers can
+  // silently suppress (installed/mobile web apps, embedded previews, or after
+  // repeated dialogs) — that made Rename look dead until a page reload.
+  const submitRenameDoc = useCallback(async () => {
+    if (!activeDoc) { setRenameOpen(false); return; }
+    const title = renameText.trim();
+    if (!title) return;
+    setRenameOpen(false);
+    await supabase.from("documents").update({ title }).eq("id", activeDoc.id);
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [activeDoc, renameText, qc]);
+
+  const submitNewDoc = useCallback(async () => {
+    const title = newDocText.trim() || "Untitled";
+    setNewDocOpen(false);
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const pos = (docs?.length ?? 0);
+    const { data } = await supabase.from("documents")
+      .insert({ user_id: u.user.id, title, position: pos })
+      .select().single();
+    if (data) setActiveDocId(data.id);
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [newDocText, docs, qc]);
+
+  const submitDeleteDoc = useCallback(async () => {
+    if (!activeDoc) { setDeleteDocOpen(false); return; }
+    const deletedId = activeDoc.id;
+    setDeleteDocOpen(false);
+    await supabase.from("documents").delete().eq("id", deletedId);
+    if (favorites.some((id) => id === deletedId)) {
+      const pruned = favorites.map((id) => (id === deletedId ? null : id));
+      await saveFavorites(pruned);
+    }
+    setActiveDocId(null);
+    favIdxRef.current = -1;
+    qc.invalidateQueries({ queryKey: ["documents"] });
+  }, [activeDoc, favorites, saveFavorites, qc]);
+
   const grid = useMemo(() => [
 
     { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
