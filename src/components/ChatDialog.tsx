@@ -454,12 +454,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         ...(cur ?? []),
         row as ChatRow,
       ]);
-      void supabase
-        .from("chat_threads")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", threadId);
+      bumpThread(threadId);
     },
-    [activeThreadId, userId, qc],
+    [activeThreadId, userId, qc, bumpThread],
+
   );
 
   const messagesRef = useRef<ChatRow[]>([]);
