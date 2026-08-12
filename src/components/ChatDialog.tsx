@@ -309,6 +309,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const contextDocIds = activeThread?.attached_document_ids ?? [];
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
+  /**
+   * Mark a thread as just-used: persist a fresh `updated_at` and immediately
+   * re-sort the cached thread list so the chat jumps to the top of the list
+   * without waiting for a reload.
+   */
+  const bumpThread = useCallback(
+    (id: string) => {
+      if (!id) return;
+      const now = new Date().toISOString();
+      qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
+        (cur ?? [])
+          .map((t) => (t.id === id ? { ...t, updated_at: now } : t))
+          .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0)),
+      );
+      void supabase
+        .from("chat_threads")
+        .update({ updated_at: now })
+        .eq("id", id)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["chat_threads", userId] });
+        });
+    },
+    [qc, userId],
+  );
+
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
     const { data, error } = await supabase
