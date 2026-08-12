@@ -14,6 +14,7 @@ import {
   Pencil,
   MessagesSquare,
   Menu,
+  Search,
   CheckCircle2,
   Circle,
   Loader2,
@@ -235,6 +236,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [threadSearch, setThreadSearch] = useState("");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
@@ -305,6 +307,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     () => threads.find((t) => t.id === activeThreadId) ?? null,
     [threads, activeThreadId],
   );
+  const filteredThreads = useMemo(() => {
+    const q = threadSearch.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((t) => (t.title || "Untitled").toLowerCase().includes(q));
+  }, [threads, threadSearch]);
   const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
@@ -393,6 +400,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId, threadsFetched, threads, openThreadId]);
+
+  // Reset chat search when the threads drawer closes so it opens fresh next time.
+  useEffect(() => {
+    if (!drawerOpen) setThreadSearch("");
+  }, [drawerOpen]);
 
   // If a caller flips openThreadId while the dialog is ALREADY open (e.g.
   // tapping the "Open" action on a voice-note toast), jump to that thread.
@@ -1244,7 +1256,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     size="icon"
                     variant="ghost"
                     aria-label="Close chats"
-                    onClick={() => setDrawerOpen(false)}
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      setThreadSearch("");
+                    }}
                   >
                     <X className="h-5 w-5" />
                   </Button>
@@ -1254,12 +1269,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <Plus className="mr-1 h-3.5 w-3.5" /> New
                 </Button>
               </div>
+              <div className="border-b border-foreground/10 px-3 pb-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={threadSearch}
+                    onChange={(e) => setThreadSearch(e.target.value)}
+                    placeholder="Search chats…"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
               <div className="flex-1 overflow-y-auto p-3">
-                {threads.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-muted-foreground">No chats yet.</p>
+                {filteredThreads.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-muted-foreground">
+                    {threads.length === 0 ? "No chats yet." : "No chats match your search."}
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
-                    {threads.map((t) => (
+                    {filteredThreads.map((t) => (
                       <li
                         key={t.id}
                         className={`flex items-center gap-2 rounded-lg px-2 ${
