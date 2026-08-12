@@ -307,6 +307,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     () => threads.find((t) => t.id === activeThreadId) ?? null,
     [threads, activeThreadId],
   );
+  const filteredThreads = useMemo(() => {
+    const q = threadSearch.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((t) => (t.title || "Untitled").toLowerCase().includes(q));
+  }, [threads, threadSearch]);
   const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
