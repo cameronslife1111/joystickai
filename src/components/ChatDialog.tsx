@@ -1270,6 +1270,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           type="button"
                           onClick={() => {
                             setActiveThreadId(t.id);
+                            bumpThread(t.id);
                             setDrawerOpen(false);
                           }}
                           className="min-w-0 flex-1 truncate px-1 py-3.5 text-left text-base"
