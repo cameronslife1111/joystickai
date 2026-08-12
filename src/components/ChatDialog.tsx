@@ -401,6 +401,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userId, threadsFetched, threads, openThreadId]);
 
+  // Reset chat search when the threads drawer closes so it opens fresh next time.
+  useEffect(() => {
+    if (!drawerOpen) setThreadSearch("");
+  }, [drawerOpen]);
+
   // If a caller flips openThreadId while the dialog is ALREADY open (e.g.
   // tapping the "Open" action on a voice-note toast), jump to that thread.
   useEffect(() => {
