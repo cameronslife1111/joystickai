@@ -842,7 +842,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         }
       }
       // bump thread ordering
-      void supabase.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
+      bumpThread(threadId);
 
       // Auto-name the thread from the first message (background, non-blocking).
       const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
