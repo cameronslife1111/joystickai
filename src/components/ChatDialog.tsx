@@ -236,6 +236,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [threadSearch, setThreadSearch] = useState("");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
