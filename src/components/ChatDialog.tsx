@@ -1251,7 +1251,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     size="icon"
                     variant="ghost"
                     aria-label="Close chats"
-                    onClick={() => setDrawerOpen(false)}
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      setThreadSearch("");
+                    }}
                   >
                     <X className="h-5 w-5" />
                   </Button>
@@ -1261,12 +1264,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <Plus className="mr-1 h-3.5 w-3.5" /> New
                 </Button>
               </div>
+              <div className="border-b border-foreground/10 px-3 pb-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={threadSearch}
+                    onChange={(e) => setThreadSearch(e.target.value)}
+                    placeholder="Search chats…"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
               <div className="flex-1 overflow-y-auto p-3">
-                {threads.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-muted-foreground">No chats yet.</p>
+                {filteredThreads.length === 0 ? (
+                  <p className="p-6 text-center text-sm text-muted-foreground">
+                    {threads.length === 0 ? "No chats yet." : "No chats match your search."}
+                  </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
-                    {threads.map((t) => (
+                    {filteredThreads.map((t) => (
                       <li
                         key={t.id}
                         className={`flex items-center gap-2 rounded-lg px-2 ${
