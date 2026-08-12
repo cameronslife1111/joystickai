@@ -14,6 +14,7 @@ import {
   Pencil,
   MessagesSquare,
   Menu,
+  Search,
   CheckCircle2,
   Circle,
   Loader2,
