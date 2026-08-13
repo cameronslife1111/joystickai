@@ -2798,14 +2798,15 @@ function AppPage() {
               />
             )}
             {/* Swipe gestures on the orb handle directional navigation. */}
-            {/* Invisible flanking buttons: left = delete, right = repeat */}
+            {/* Visible glowing-orb flanking buttons: left = delete, right = repeat */}
             <button
               type="button"
               onClick={() => {
                 void deleteCurrent();
               }}
-              className="absolute top-1/2 right-full mr-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
+              className="glow-orb glow-orb-blue absolute top-1/2 right-full mr-3 -translate-y-1/2 z-10"
               aria-label="Delete sentence"
+              title="Delete sentence"
             />
             <button
               type="button"
@@ -2813,9 +2814,11 @@ function AppPage() {
                 const text = currentSentence?.content;
                 if (text) speak(text, claimSpeech());
               }}
-              className="absolute top-1/2 left-full ml-4 h-2/3 w-[22vw] max-w-[120px] -translate-y-1/2 opacity-0"
+              className="glow-orb glow-orb-green absolute top-1/2 left-full ml-3 -translate-y-1/2 z-10"
               aria-label="Repeat sentence"
+              title="Repeat sentence"
             />
+
           </div>
         </section>
       )}

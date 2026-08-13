@@ -462,3 +462,45 @@
   }
 }
 
+/* Small flanking glowing-orb buttons */
+@utility glow-orb {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--glow-orb-color, white) 40%, transparent);
+  background:
+    radial-gradient(circle at 35% 30%, color-mix(in oklab, var(--glow-orb-color, white) 55%, transparent), transparent 55%),
+    radial-gradient(circle at 50% 100%, color-mix(in oklab, var(--glow-orb-color, white) 30%, transparent), transparent 60%);
+  box-shadow:
+    0 0 22px -4px color-mix(in oklab, var(--glow-orb-color, white) 55%, transparent),
+    inset 0 0 14px color-mix(in oklab, var(--glow-orb-color, white) 25%, transparent);
+  backdrop-filter: blur(3px);
+  transition: transform 150ms ease, box-shadow 200ms ease;
+  animation: glow-orb-pulse 2.5s ease-in-out infinite;
+  pointer-events: auto;
+  &:active {
+    transform: scale(0.92);
+    box-shadow: 0 0 30px -2px color-mix(in oklab, var(--glow-orb-color, white) 70%, transparent);
+  }
+}
+@utility glow-orb-green {
+  --glow-orb-color: oklch(0.65 0.22 145);
+}
+@utility glow-orb-blue {
+  --glow-orb-color: oklch(0.62 0.2 250);
+}
+
+@keyframes glow-orb-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-orb { animation: none; }
+}
+
+
