@@ -2749,6 +2749,44 @@ function AppPage() {
         </button>
       )}
 
+      {/* Floating trophy button while the document editor is open — inserts a
+          trophy emoji at the current caret position. */}
+      {editing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            // Keep the textarea focused so the caret position stays valid.
+            e.preventDefault();
+            e.stopPropagation();
+            const el = editTextareaRef.current;
+            const start = el?.selectionStart ?? editText.length;
+            const end = el?.selectionEnd ?? start;
+            setEditText((prev) => {
+              const s = Math.min(start, prev.length);
+              const en = Math.min(Math.max(end, s), prev.length);
+              const before = prev.slice(0, s);
+              const after = prev.slice(en);
+              const insert = "🏆";
+              const caret = s + insert.length;
+              editCaretRef.current = { start: caret, end: caret };
+              requestAnimationFrame(() => {
+                const t = editTextareaRef.current;
+                if (!t) return;
+                t.focus();
+                try { t.setSelectionRange(caret, caret); } catch {}
+              });
+              return before + insert + after;
+            });
+          }}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Add trophy at cursor"
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+          style={{ bottom: "68svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          🏆
+        </button>
+      )}
+
 
       {!composing && !currentSentence?.linked_document_id && currentSentence?.linked_thread_id && (
         <div className="z-10 flex justify-center pb-2">
