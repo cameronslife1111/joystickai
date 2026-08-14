@@ -580,7 +580,41 @@ function MediaPage() {
               >
                 <CopyPlus className="h-5 w-5" />
               </button>
+              {(() => {
+                const sel = filtered.filter(
+                  (a) => selectedIds.has(a.id) && a.url && (a.status === "completed" || !a.status),
+                );
+                const busy = downloadAll.progress
+                  && downloadAll.progress.phase !== "done"
+                  && downloadAll.progress.phase !== "error"
+                  && downloadAll.progress.phase !== "cancelled";
+                return (
+                  <button
+                    type="button"
+                    disabled={sel.length === 0 || !!busy}
+                    onClick={() => {
+                      downloadAll.start(
+                        sel.map((a) => ({
+                          id: a.id,
+                          title: a.title,
+                          kind: a.kind,
+                          url: a.url,
+                          mime_type: a.mime_type,
+                          size_bytes: a.size_bytes,
+                        })),
+                        "selected",
+                      );
+                    }}
+                    aria-label={`Download ${sel.length} selected`}
+                    title={sel.length === 0 ? "Nothing downloadable selected" : `Download selected (${sel.length})`}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-foreground/10 transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  >
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+                  </button>
+                );
+              })()}
               <button
+
                 type="button"
                 disabled={selectedIds.size === 0 || batchDeleting}
                 onClick={() => setConfirmBatchDelete(true)}
