@@ -3072,24 +3072,7 @@ function AppPage() {
               setReplaceMatching(true);
             };
             const pickDoc = async (docId: string) => {
-              // iOS-safe: speak synchronously inside the tap gesture if unmuted.
-              if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
-                try {
-                  const picked = docs?.find((d) => d.id === docId);
-                  const cached = qc.getQueryData<Sentence[]>(["sentences", docId]);
-                  const idx = picked?.current_sentence_index ?? 0;
-                  const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
-                  if (text) {
-                    const clean = stripEmoji(text);
-                    if (clean) {
-                      window.speechSynthesis.cancel();
-                      const u = new SpeechSynthesisUtterance(clean);
-                      u.rate = 1; u.pitch = 1;
-                      window.speechSynthesis.speak(u);
-                    }
-                  }
-                } catch {}
-              }
+              // Assign the slot only — stay on the current document/sentence.
               const next = [...favorites];
               while (next.length < 50) next.push(null);
               if (replaceMatching && targetId) {
@@ -3099,11 +3082,11 @@ function AppPage() {
               } else {
                 next[pickerSlot!] = docId;
               }
-              setActiveDocId(docId);
               closePicker();
               setFavoritesOpen(false);
               await saveFavorites(next);
             };
+
             return (
             <div
               className="absolute inset-0 z-10 flex items-end justify-center bg-background/70 px-4 pb-6 backdrop-blur-sm"
