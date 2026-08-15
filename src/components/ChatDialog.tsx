@@ -259,6 +259,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
+  /** Live document context for the delegate card (thread, doc, sentences). */
+  const delegateDocRef = useRef<{
+    threadId: string;
+    documentId: string;
+    title: string;
+    sentences: string[];
+    index: number;
+  } | null>(null);
+  /** The 🟣 Delegate checkbox card shown inline in the chat. */
+  const [delegateCard, setDelegateCard] = useState<DelegateCardState | null>(null);
+  const suggestTasks = useServerFn(suggestDelegateTasks);
+
+
 
 
   // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
