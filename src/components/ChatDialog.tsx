@@ -80,16 +80,16 @@ interface Props {
   onOpenDocument?: (documentId: string) => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
-   * attached and immediately send `prompt` with `capabilities` checked.
+   * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
    * `id` is a nonce so each tap fires exactly once.
    */
   delegate?: {
     id: string;
     documentId: string;
     title: string;
-    prompt: string;
-    capabilities: ChatCapabilities;
+    index: number;
   } | null;
+
 
 }
 
