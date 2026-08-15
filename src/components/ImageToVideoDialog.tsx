@@ -136,10 +136,10 @@ export function ImageToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
           <DialogHeader>
             <DialogTitle>Image to Video</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-4">
+          <div className="flex w-full min-w-0 max-w-full flex-col gap-4">
             {/* Source */}
-            <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
+            <div className="grid w-full min-w-0 max-w-full grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2 rounded-xl border border-foreground/10 bg-foreground/5 p-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-3">
+              <div className="h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-lg bg-foreground/10 sm:h-24 sm:w-24">
                 {sourceImage.url && (
                   <img src={proxyMediaUrl(sourceImage.url)} alt={sourceImage.title} className="h-full w-full object-cover" />
                 )}
@@ -155,15 +155,15 @@ export function ImageToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe the motion or action..."
               rows={3}
-              className="max-h-48 min-h-[80px] resize-y"
+              className="max-h-48 min-h-[80px] w-full min-w-0 max-w-full resize-y"
             />
 
-            <div className="flex flex-col gap-2">
+            <div className="flex w-full min-w-0 max-w-full flex-col gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="self-start"
+                className="h-auto max-w-full self-start whitespace-normal py-2 text-left"
                 onClick={() => setDocPickerOpen(true)}
               >
                 <Paperclip className="mr-2 h-4 w-4" /> Attach documents
@@ -177,11 +177,11 @@ export function ImageToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
               )}
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
               <Label>Duration</Label>
               <Select value={String(duration)} onValueChange={(v) => setDuration(Number(v))}>
                 <SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[calc(100vw-2rem)]">
                   {DURATIONS.map((d) => (
                     <SelectItem key={d} value={String(d)}>{d} sec</SelectItem>
                   ))}
@@ -189,7 +189,7 @@ export function ImageToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
               </Select>
             </div>
 
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+            <div className="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
               <div className="min-w-0">
                 <Label className="text-sm">Generate audio</Label>
                 <p className="text-xs text-muted-foreground">Native speech / sound for the video.</p>
@@ -197,44 +197,44 @@ export function ImageToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
               <Switch checked={generateAudio} onCheckedChange={setGenerateAudio} />
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
               <Label>End image (optional)</Label>
               {endImage ? (
-                <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+                <div className="grid w-full min-w-0 max-w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-foreground/10 bg-foreground/5 p-2 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto_auto] sm:gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                     {endImage.url && (
                       <img src={proxyMediaUrl(endImage.url)} alt={endImage.title} className="h-full w-full object-cover" />
                     )}
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">{endImage.title}</p>
-                  <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setEndPickerOpen(true)}>Change</Button>
+                  <Button size="sm" variant="ghost" className="col-start-3 row-start-1 shrink-0 px-2 sm:col-auto sm:row-auto sm:px-3" onClick={() => setEndPickerOpen(true)}>Change</Button>
                   <button
                     type="button"
                     onClick={() => setEndImage(null)}
                     aria-label="Remove end image"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                    className="col-start-3 row-start-2 flex h-7 w-7 shrink-0 items-center justify-center justify-self-end rounded-full text-muted-foreground hover:text-foreground sm:col-auto sm:row-auto"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
-                <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setEndPickerOpen(true)}>
+                <Button type="button" variant="outline" size="sm" className="h-auto max-w-full self-start whitespace-normal py-2 text-left" onClick={() => setEndPickerOpen(true)}>
                   <ImageIcon className="mr-2 h-4 w-4" /> Choose end image from gallery
                 </Button>
               )}
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
               <Label>Negative prompt</Label>
               <Textarea
                 value={negativePrompt}
                 onChange={(e) => setNegativePrompt(e.target.value)}
                 rows={2}
-                className="resize-y"
+                className="w-full min-w-0 max-w-full resize-y"
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <Label>CFG scale</Label>
                 <span className="text-xs tabular-nums text-muted-foreground">{cfgScale.toFixed(2)}</span>
