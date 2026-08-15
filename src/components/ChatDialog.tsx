@@ -1209,6 +1209,24 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <span aria-hidden>🔴</span>
                 )}
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  if (!activeThreadId) return;
+                  if (!input.trim()) {
+                    toast.error("Type the message you want to schedule first");
+                    return;
+                  }
+                  setScheduleOpen(true);
+                }}
+                aria-label="Schedule this message"
+                title="Send this message later (works with the app closed)"
+                className="shrink-0"
+              >
+                <Clock className="h-4 w-4" />
+              </Button>
               <Textarea
 
                 ref={textareaRef}
