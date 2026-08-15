@@ -23,6 +23,10 @@ const scheduleInputSchema = z.object({
   ends_at: z.string().datetime().nullable().optional(),
   max_runs: z.number().int().min(1).max(10000).nullable().optional(),
   enabled: z.boolean().optional(),
+  /** Chat-scheduled messages carry the thread they belong to plus what was checked. */
+  thread_id: z.string().uuid().nullable().optional(),
+  capabilities: z.record(z.string(), z.boolean()).optional(),
+  image_urls: z.array(z.string().url()).max(6).optional(),
 });
 
 
