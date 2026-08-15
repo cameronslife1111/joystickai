@@ -3521,7 +3521,10 @@ function AppPage() {
             <div className="flex flex-col gap-1.5">
               {[
                 { label: "⤒  Move to top", target: 0, disabled: currentIdx === 0 },
-                { label: "⏫  Move up 2", target: currentIdx - 2, disabled: currentIdx < 1 },
+                { label: "⏫  Move up 5", target: currentIdx - 5, disabled: currentIdx < 5 },
+                { label: "⏫  Move up 4", target: currentIdx - 4, disabled: currentIdx < 4 },
+                { label: "⏫  Move up 3", target: currentIdx - 3, disabled: currentIdx < 3 },
+                { label: "⏫  Move up 2", target: currentIdx - 2, disabled: currentIdx < 2 },
                 { label: "🔼  Move up 1", target: currentIdx - 1, disabled: currentIdx === 0 },
               ].map((opt) => (
                 <button
@@ -3544,7 +3547,10 @@ function AppPage() {
 
               {[
                 { label: "🔽  Move down 1", target: currentIdx + 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
-                { label: "⏬  Move down 2", target: currentIdx + 2, disabled: !sentences || currentIdx >= sentences.length - 1 },
+                { label: "⏬  Move down 2", target: currentIdx + 2, disabled: !sentences || currentIdx >= sentences.length - 2 },
+                { label: "⏬  Move down 3", target: currentIdx + 3, disabled: !sentences || currentIdx >= sentences.length - 3 },
+                { label: "⏬  Move down 4", target: currentIdx + 4, disabled: !sentences || currentIdx >= sentences.length - 4 },
+                { label: "⏬  Move down 5", target: currentIdx + 5, disabled: !sentences || currentIdx >= sentences.length - 5 },
                 { label: "⤓  Move to bottom", target: (sentences?.length ?? 1) - 1, disabled: !sentences || currentIdx >= sentences.length - 1 },
               ].map((opt) => (
                 <button
