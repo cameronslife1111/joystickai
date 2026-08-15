@@ -1506,6 +1506,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onConfirm={setContextDocIds}
       />
 
+      {/* Schedule the message currently in the composer, in this thread. */}
+      <ScheduleEditorDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        defaults={{
+          title: input.trim().slice(0, 60) || "Scheduled message",
+          user_request: input.trim(),
+          attached_document_ids: contextDocIds,
+          thread_id: activeThreadId,
+          capabilities: caps as unknown as Record<string, boolean>,
+          image_urls: pickedImages.map((a) => a.url).filter((u): u is string => !!u),
+        }}
+        onSaved={() => {
+          setInput("");
+          setPendingCaps(NO_CAPS);
+          setPickedImages([]);
+          refetchSchedules();
+          toast.success("Orby will send that later");
+        }}
+      />
+
       <MediaGalleryPicker
         open={imagePickerOpen}
         onOpenChange={setImagePickerOpen}
