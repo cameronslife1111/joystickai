@@ -2159,8 +2159,8 @@ function AppPage() {
   }, [lockFavorites, saveLockFavorites, saveLockedDoc, activeDocId]);
 
   // Menu actions
-  // 🟣 Delegate (slot 15): hand the step the user is on to Orby in a brand-new
-  // chat, with the current document attached and the right capabilities on.
+  // 🟣 Delegate (slot 15): open a brand-new chat with the current document
+  // attached; Orby proposes 5 tasks as checkboxes there and the user approves.
   const handleDelegate = useCallback(() => {
     const list = sentences ?? [];
     if (!activeDoc || list.length === 0) {
@@ -2168,8 +2168,6 @@ function AppPage() {
       return;
     }
     const idx = Math.max(0, Math.min(currentIdx, list.length - 1));
-    const texts = list.map((s) => s.content);
-    const prompt = buildDelegatePrompt({ title: activeDoc.title, sentences: texts, index: idx });
     setMenuOpen(false);
     setPendingChatThreadId(null);
     setChatStartInList(false);
@@ -2177,17 +2175,11 @@ function AppPage() {
       id: `${Date.now()}`,
       documentId: activeDoc.id,
       title: activeDoc.title,
-      prompt,
-      capabilities: {
-        ...NO_CHAT_CAPS,
-        planning: true,
-        document_editing: true,
-        image_generation: true,
-        web_search: needsWebSearch(texts[idx] ?? ""),
-      },
+      index: idx,
     });
     setChatOpen(true);
   }, [activeDoc, sentences, currentIdx]);
+
 
   // In-app dialogs replace native prompt()/confirm(), which browsers can
   // silently suppress (installed/mobile web apps, embedded previews, or after
