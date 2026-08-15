@@ -189,7 +189,7 @@ export const runScheduleNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase } = context;
     const { data: schedule, error: sErr } = await supabase
       .from("plan_schedules")
       .select("*")
@@ -197,42 +197,23 @@ export const runScheduleNow = createServerFn({ method: "POST" })
       .single();
     if (sErr || !schedule) throw new Error(sErr?.message || "Schedule not found");
 
-    // Spacing check: 30 min global window.
-    const winStart = new Date(Date.now() - 30 * 60_000).toISOString();
-    const winEnd = new Date(Date.now() + 30 * 60_000).toISOString();
-    const { data: nearby } = await supabase
-      .from("plans")
-      .select("id")
-      .eq("user_id", userId)
-      .gte("scheduled_for", winStart)
-      .lte("scheduled_for", winEnd)
-      .not("status", "in", "(completed,failed,cancelled)")
-      .limit(1);
-    if (nearby && nearby.length > 0) {
-      throw new Error("Another plan is scheduled within 30 minutes — try again later.");
-    }
-
-    const { data: plan, error: pErr } = await supabase
-      .from("plans")
-      .insert({
-        user_id: userId,
-        status: "composing",
-        user_request: schedule.user_request,
-        attached_document_ids: schedule.attached_document_ids ?? [],
-        schedule_id: schedule.id,
-        scheduled_for: new Date().toISOString(),
-      })
-      .select()
-      .single();
-    if (pErr || !plan) throw new Error(pErr?.message || "Failed to start plan");
-
-    // Kick off composer; the existing plan-tick cron will execute steps.
-    void supabase.functions.invoke("plan-compose", { body: { plan_id: plan.id } });
-
+    // Run it through the exact same path the background scheduler uses, so a
+    // chat-bound schedule posts into its chat and a plan schedule composes.
+    // next_run_at is preserved: "Run now" is an extra run, not a reschedule.
+    const { fireSchedule } = await import("@/lib/schedule-fire.server");
+    const preservedNextRun = schedule.next_run_at;
+    const res = await fireSchedule({ ...schedule, next_run_at: new Date().toISOString() });
     await supabase
       .from("plan_schedules")
-      .update({ last_plan_id: plan.id, last_run_at: new Date().toISOString() })
+      .update({ next_run_at: preservedNextRun, claim_at: null })
       .eq("id", schedule.id);
 
-    return { plan_id: plan.id };
+    if (res.outcome !== "fired") {
+      throw new Error(
+        res.outcome === "deferred_spacing"
+          ? "Another plan is running within 30 minutes — try again later."
+          : `Couldn't run: ${res.outcome}`,
+      );
+    }
+    return { plan_id: res.plan_id ?? null };
   });
