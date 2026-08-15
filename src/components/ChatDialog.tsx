@@ -927,6 +927,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const loadDelegateSuggestions = useCallback(
     async (threadId: string, documentId: string, index: number) => {
       setDelegateCard({ phase: "loading" });
+      delegateDocRef.current = { threadId, documentId, title: "", sentences: [], index };
       try {
         const res = await suggestTasks({ data: { documentId, index } });
         delegateDocRef.current = {
@@ -936,6 +937,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           sentences: res.sentences,
           index: res.index,
         };
+
         setDelegateCard({
           phase: "choose",
           taskContext: res.taskContext,
