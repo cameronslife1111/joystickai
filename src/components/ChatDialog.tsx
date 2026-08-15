@@ -21,6 +21,10 @@ import {
   AlertCircle,
   Phone,
   PhoneOff,
+  Clock,
+  Pause,
+  Play,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -236,6 +240,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Composer clock button → schedule this message for later. */
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [threadSearch, setThreadSearch] = useState("");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
