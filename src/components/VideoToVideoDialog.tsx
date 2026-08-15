@@ -153,7 +153,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Video to Video</DialogTitle>
           </DialogHeader>
@@ -162,7 +162,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
           </p>
           <div className="flex flex-col gap-4">
             {/* Source */}
-            <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+            <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
               <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                 {sourceImage.url && (
                   <img src={proxyMediaUrl(sourceImage.url)} alt={sourceImage.title} className="h-full w-full object-cover" />
@@ -187,7 +187,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
                 <Paperclip className="mr-2 h-4 w-4" /> Attach documents
               </Button>
               {docIds.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="flex min-w-0 max-w-full gap-2 overflow-x-auto pb-1">
                   {docIds.map((id) => (
                     <DocChip key={id} id={id} onRemove={() => setDocIds((cur) => cur.filter((x) => x !== id))} />
                   ))}
@@ -198,19 +198,19 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             <div className="flex flex-col gap-1.5">
               <Label>Reference video (motion source)</Label>
               {refVideo ? (
-                <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+                <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                   <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                     {refVideo.url && (
                       <video src={proxyMediaUrl(refVideo.url)} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                     )}
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">{refVideo.title}</p>
-                  <Button size="sm" variant="ghost" onClick={() => setVideoPickerOpen(true)}>Change</Button>
+                  <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setVideoPickerOpen(true)}>Change</Button>
                   <button
                     type="button"
                     onClick={() => setRefVideo(null)}
                     aria-label="Remove reference video"
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -237,7 +237,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             <div className="flex flex-col gap-1.5">
               <Label>Character orientation</Label>
               <Select value={orientation} onValueChange={(v) => setOrientation(v as Orientation)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="image">Match reference image — better for camera moves (≤10s)</SelectItem>
                   <SelectItem value="video">Match reference video — better for complex motion (≤30s)</SelectItem>
@@ -246,7 +246,7 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             </div>
 
             <div className="flex items-start justify-between gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
-              <div>
+              <div className="min-w-0">
                 <Label className="text-sm">Keep original sound</Label>
                 <p className="text-xs text-muted-foreground">Carry audio from the reference video into the output.</p>
               </div>
@@ -261,19 +261,19 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
                 </p>
               ) : elementImage ? (
                 <>
-                  <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+                  <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                       {elementImage.url && (
                         <img src={proxyMediaUrl(elementImage.url)} alt={elementImage.title} className="h-full w-full object-cover" />
                       )}
                     </div>
                     <p className="min-w-0 flex-1 truncate text-sm">{elementImage.title}</p>
-                    <Button size="sm" variant="ghost" onClick={() => setElementPickerOpen(true)}>Change</Button>
+                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setElementPickerOpen(true)}>Change</Button>
                     <button
                       type="button"
                       onClick={() => setElementImage(null)}
                       aria-label="Remove element image"
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -295,8 +295,8 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { onOpenChange(false); reset(); }}>Cancel</Button>
-            <Button onClick={handleGenerate} disabled={!canSubmit}>
+            <Button variant="ghost" className="w-full sm:w-auto" onClick={() => { onOpenChange(false); reset(); }}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handleGenerate} disabled={!canSubmit}>
               {submitting ? "Starting…" : "Generate"}
             </Button>
           </DialogFooter>

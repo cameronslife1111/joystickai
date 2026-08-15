@@ -115,7 +115,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Audio + Image to Video</DialogTitle>
           </DialogHeader>
@@ -125,7 +125,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
 
           <div className="flex flex-col gap-4">
             {/* Source image */}
-            <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+            <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
               <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-foreground/10">
                 {sourceImage.url && (
                   <img src={proxyMediaUrl(sourceImage.url)} alt={sourceImage.title} className="h-full w-full object-cover" />
@@ -144,17 +144,17 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             <div className="flex flex-col gap-1.5">
               <Label>Audio clip (lip-sync source)</Label>
               {audioAsset ? (
-                <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
+                <div className="flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-2">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-foreground/10">
                     <Mic2 className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">{audioAsset.title}</p>
-                  <Button size="sm" variant="ghost" onClick={() => setAudioPickerOpen(true)}>Change</Button>
+                  <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setAudioPickerOpen(true)}>Change</Button>
                   <button
                     type="button"
                     onClick={() => setAudioAsset(null)}
                     aria-label="Remove audio clip"
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -170,7 +170,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             <div className="flex flex-col gap-1.5">
               <Label>Talking style</Label>
               <Select value={talkingStyle} onValueChange={(v) => setTalkingStyle(v as TalkingStyle)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="stable">Stable — minimal movement</SelectItem>
                   <SelectItem value="expressive">Expressive — more animation</SelectItem>
@@ -181,7 +181,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             <div className="flex flex-col gap-1.5">
               <Label>Resolution</Label>
               <Select value={resolution} onValueChange={(v) => setResolution(v as Resolution)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="360p">360p</SelectItem>
                   <SelectItem value="480p">480p</SelectItem>
@@ -195,7 +195,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             <div className="flex flex-col gap-1.5">
               <Label>Aspect ratio</Label>
               <Select value={aspectRatio} onValueChange={(v) => setAspectRatio(v as Aspect)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full min-w-0"><SelectValue className="truncate" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="9:16">Portrait (9:16)</SelectItem>
                   <SelectItem value="16:9">Landscape (16:9)</SelectItem>
@@ -205,7 +205,7 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
             </div>
 
             <div className="flex items-start justify-between gap-3 rounded-xl border border-foreground/10 bg-foreground/5 p-3">
-              <div>
+              <div className="min-w-0">
                 <Label className="text-sm">Captions</Label>
                 <p className="text-xs text-muted-foreground">Burn captions into the video.</p>
               </div>
@@ -214,8 +214,8 @@ export function AudioImageToVideoDialog({ open, onOpenChange, sourceImage, onSub
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { onOpenChange(false); reset(); }}>Cancel</Button>
-            <Button onClick={handleGenerate} disabled={!canSubmit}>
+            <Button variant="ghost" className="w-full sm:w-auto" onClick={() => { onOpenChange(false); reset(); }}>Cancel</Button>
+            <Button className="w-full sm:w-auto" onClick={handleGenerate} disabled={!canSubmit}>
               {submitting ? "Starting…" : "Generate"}
             </Button>
           </DialogFooter>
