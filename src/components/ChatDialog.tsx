@@ -325,6 +325,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [threads, threadSearch]);
   const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
+
+  // Scheduled messages waiting to be sent in this chat.
+  const { data: scheduleData, refetch: refetchSchedules } = useQuery({
+    queryKey: ["chat_schedules", activeThreadId],
+    enabled: open && !!activeThreadId,
+    refetchInterval: 30_000,
+    queryFn: async () => await listSchedulesFn({}),
+  });
+  const threadSchedules = useMemo(
+    () =>
+      (scheduleData?.schedules ?? []).filter(
+        (s: any) => s.thread_id && s.thread_id === activeThreadId,
+      ),
+    [scheduleData, activeThreadId],
+  );
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
   /**
