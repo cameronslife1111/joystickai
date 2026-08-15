@@ -10,6 +10,8 @@ import { ScheduledPlansList } from "./plan/ScheduledPlansList";
 
 interface Props {
   onClose: () => void;
+  /** Jump to the chat a plan came from. */
+  onOpenChat?: (threadId: string) => void;
 }
 
 type Plan = {
@@ -22,6 +24,10 @@ type Plan = {
   acknowledged: boolean;
   schedule_id: string | null;
   scheduled_for: string | null;
+  thread_id: string | null;
+  plan_summary: string | null;
+  error_message: string | null;
+  completed_at: string | null;
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -47,11 +53,15 @@ function timeAgo(iso: string): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function AIPlansScreen({ onClose }: Props) {
+export function AIPlansScreen({ onClose, onOpenChat }: Props) {
   const qc = useQueryClient();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [tab, setTab] = useState<"active" | "scheduled" | "history">("active");
+  /** Hub filters: free-text search + status + where the plan came from. */
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "chat" | "scheduled" | "manual">("all");
 
   const { data: plans } = useQuery({
     queryKey: ["plans"],
@@ -59,7 +69,7 @@ export function AIPlansScreen({ onClose }: Props) {
     queryFn: async (): Promise<Plan[]> => {
       const { data } = await supabase
         .from("plans")
-        .select("id, status, user_request, current_step, total_steps, created_at, acknowledged, schedule_id, scheduled_for")
+        .select("id, status, user_request, current_step, total_steps, created_at, acknowledged, schedule_id, scheduled_for, thread_id, plan_summary, error_message, completed_at")
         .order("created_at", { ascending: false });
       return (data as any) ?? [];
     },
@@ -77,8 +87,24 @@ export function AIPlansScreen({ onClose }: Props) {
     })();
   }, [qc]);
 
-  const active = useMemo(() => (plans ?? []).filter((p) => ACTIVE_STATUSES.has(p.status)), [plans]);
-  const history = useMemo(() => (plans ?? []).filter((p) => HISTORY_STATUSES.has(p.status)), [plans]);
+  // Search + filters apply to both Active and History lists.
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (plans ?? []).filter((p) => {
+      if (q) {
+        const hay = `${p.user_request} ${p.plan_summary ?? ""} ${p.error_message ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusFilter !== "all" && p.status !== statusFilter) return false;
+      if (sourceFilter === "chat" && !p.thread_id) return false;
+      if (sourceFilter === "scheduled" && !p.schedule_id) return false;
+      if (sourceFilter === "manual" && (p.thread_id || p.schedule_id)) return false;
+      return true;
+    });
+  }, [plans, search, statusFilter, sourceFilter]);
+
+  const active = useMemo(() => visible.filter((p) => ACTIVE_STATUSES.has(p.status)), [visible]);
+  const history = useMemo(() => visible.filter((p) => HISTORY_STATUSES.has(p.status)), [visible]);
 
   const handleRowClick = (p: Plan) => {
     if (p.status === "proposed" || p.status === "composing") {
@@ -133,6 +159,11 @@ export function AIPlansScreen({ onClose }: Props) {
                 scheduled
               </span>
             )}
+            {p.thread_id && (
+              <span className="ml-2 rounded-full bg-foreground/10 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                chat
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {p.status === "proposed"
@@ -143,6 +174,14 @@ export function AIPlansScreen({ onClose }: Props) {
           </div>
         </div>
       </button>
+      {p.thread_id && onOpenChat && (
+        <button
+          onClick={() => onOpenChat(p.thread_id!)}
+          className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          Open chat
+        </button>
+      )}
       {stoppable ? (
         <button
           onClick={() => cancelPlan(p.id)}
@@ -174,6 +213,44 @@ export function AIPlansScreen({ onClose }: Props) {
             <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
             <TabsTrigger value="history">History ({history.length})</TabsTrigger>
           </TabsList>
+        </div>
+
+        <div className="shrink-0 space-y-2 border-b border-border px-3 py-2 sm:px-4">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search requests, summaries, errors…"
+            className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+          />
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            {(["all", "proposed", "running", "awaiting_media", "completed", "failed", "cancelled"] as const).map((s2) => (
+              <button
+                key={s2}
+                onClick={() => setStatusFilter(s2)}
+                className={`rounded-full border px-2 py-0.5 ${
+                  statusFilter === s2
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s2 === "awaiting_media" ? "media" : s2}
+              </button>
+            ))}
+            <span className="mx-1 text-muted-foreground/40">|</span>
+            {(["all", "chat", "scheduled", "manual"] as const).map((s2) => (
+              <button
+                key={s2}
+                onClick={() => setSourceFilter(s2)}
+                className={`rounded-full border px-2 py-0.5 ${
+                  sourceFilter === s2
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s2}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-4 sm:px-4">
