@@ -311,11 +311,13 @@ export type Database = {
         Row: {
           attached_document_ids: string[]
           cadence: string
+          capabilities: Json
           claim_at: string | null
           created_at: string
           enabled: boolean
           ends_at: string | null
           id: string
+          image_urls: string[]
           interval_n: number
           last_plan_id: string | null
           last_run_at: string | null
@@ -324,6 +326,7 @@ export type Database = {
           next_run_at: string | null
           run_count: number
           starts_at: string | null
+          thread_id: string | null
           time_of_day: string | null
           timezone: string
           title: string
@@ -336,11 +339,13 @@ export type Database = {
         Insert: {
           attached_document_ids?: string[]
           cadence: string
+          capabilities?: Json
           claim_at?: string | null
           created_at?: string
           enabled?: boolean
           ends_at?: string | null
           id?: string
+          image_urls?: string[]
           interval_n?: number
           last_plan_id?: string | null
           last_run_at?: string | null
@@ -349,6 +354,7 @@ export type Database = {
           next_run_at?: string | null
           run_count?: number
           starts_at?: string | null
+          thread_id?: string | null
           time_of_day?: string | null
           timezone?: string
           title?: string
@@ -361,11 +367,13 @@ export type Database = {
         Update: {
           attached_document_ids?: string[]
           cadence?: string
+          capabilities?: Json
           claim_at?: string | null
           created_at?: string
           enabled?: boolean
           ends_at?: string | null
           id?: string
+          image_urls?: string[]
           interval_n?: number
           last_plan_id?: string | null
           last_run_at?: string | null
@@ -374,6 +382,7 @@ export type Database = {
           next_run_at?: string | null
           run_count?: number
           starts_at?: string | null
+          thread_id?: string | null
           time_of_day?: string | null
           timezone?: string
           title?: string
@@ -383,7 +392,15 @@ export type Database = {
           weekdays?: number[]
           year_month_days?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plan_schedules_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       plans: {
         Row: {
@@ -618,11 +635,13 @@ export type Database = {
         Returns: {
           attached_document_ids: string[]
           cadence: string
+          capabilities: Json
           claim_at: string | null
           created_at: string
           enabled: boolean
           ends_at: string | null
           id: string
+          image_urls: string[]
           interval_n: number
           last_plan_id: string | null
           last_run_at: string | null
@@ -631,6 +650,7 @@ export type Database = {
           next_run_at: string | null
           run_count: number
           starts_at: string | null
+          thread_id: string | null
           time_of_day: string | null
           timezone: string
           title: string
