@@ -66,6 +66,8 @@ import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
+import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
+import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
 
 interface Props {
   open: boolean;
@@ -215,6 +217,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
+  const listSchedulesFn = useServerFn(listSchedules);
+  const deleteScheduleFn = useServerFn(deleteSchedule);
+  const toggleScheduleFn = useServerFn(toggleSchedule);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
