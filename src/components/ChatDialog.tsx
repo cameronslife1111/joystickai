@@ -1205,6 +1205,60 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               )}
             </div>
 
+            {threadSchedules.length > 0 && (
+              <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                {threadSchedules.map((s: any) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                    title={s.user_request}
+                  >
+                    <Clock className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">
+                      {s.enabled && s.next_run_at
+                        ? new Date(s.next_run_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : "paused"}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={s.enabled ? "Pause scheduled message" : "Resume scheduled message"}
+                      onClick={async () => {
+                        try {
+                          await toggleScheduleFn({ data: { id: s.id, enabled: !s.enabled } });
+                          refetchSchedules();
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Couldn't update");
+                        }
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      {s.enabled ? <Pause className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete scheduled message"
+                      onClick={async () => {
+                        try {
+                          await deleteScheduleFn({ data: { id: s.id } });
+                          refetchSchedules();
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Couldn't delete");
+                        }
+                      }}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
               {enabledCapCount === 0
