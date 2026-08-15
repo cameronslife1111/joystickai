@@ -905,8 +905,36 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
-  // 🟣 Delegate (menu slot 15): fresh thread + attached doc + one automatic
-  // send with the delegate capabilities. Runs exactly once per tap.
+  // 🟣 Delegate (menu slot 15): fresh thread + attached doc, then Orby proposes
+  // 5 tasks as checkboxes in that chat. Runs exactly once per tap.
+  const loadDelegateSuggestions = useCallback(
+    async (threadId: string, documentId: string, index: number) => {
+      setDelegateCard({ phase: "loading" });
+      try {
+        const res = await suggestTasks({ data: { documentId, index } });
+        delegateDocRef.current = {
+          threadId,
+          documentId,
+          title: res.title,
+          sentences: res.sentences,
+          index: res.index,
+        };
+        setDelegateCard({
+          phase: "choose",
+          taskContext: res.taskContext,
+          suggestions: res.suggestions,
+          checked: res.suggestions.map(() => false),
+        });
+      } catch (err) {
+        setDelegateCard({
+          phase: "error",
+          message: err instanceof Error ? err.message : "Couldn't load suggestions",
+        });
+      }
+    },
+    [suggestTasks],
+  );
+
   useEffect(() => {
     if (!open || !delegate || !userId) return;
     if (delegateRef.current === delegate.id) return;
@@ -916,17 +944,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       if (!t) return;
       setDrawerOpen(false);
       setActiveThreadId(t.id);
-      setPendingCaps(delegate.capabilities);
       await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
-      await handleSend({
-        text: delegate.prompt,
-        caps: delegate.capabilities,
-        threadId: t.id,
-        docIds: [delegate.documentId],
-      });
+      await loadDelegateSuggestions(t.id, delegate.documentId, delegate.index);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, delegate, userId]);
+
+  const approveDelegate = async () => {
+    const ctx = delegateDocRef.current;
+    if (!ctx || !delegateCard || delegateCard.phase !== "choose") return;
+    const picked = delegateCard.suggestions.filter((_, i) => delegateCard.checked[i]);
+    if (picked.length === 0) return;
+    setDelegateCard({ phase: "approved", taskContext: delegateCard.taskContext, picked });
+    const prompt = buildDelegatePlanPrompt({
+      title: ctx.title,
+      sentences: ctx.sentences,
+      index: ctx.index,
+      taskContext: delegateCard.taskContext,
+      picked,
+    });
+    await handleSend({
+      text: prompt,
+      caps: DEFAULT_CAPS,
+      threadId: ctx.threadId,
+      docIds: [ctx.documentId],
+    });
+  };
+
+
 
   const enabledCapCount = Object.values(caps).filter(Boolean).length;
 
