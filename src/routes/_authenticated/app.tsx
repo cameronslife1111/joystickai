@@ -148,9 +148,9 @@ function AppPage() {
     id: string;
     documentId: string;
     title: string;
-    prompt: string;
-    capabilities: ChatCapabilities;
+    index: number;
   } | null>(null);
+
 
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<PcmRecorder | null>(null);
