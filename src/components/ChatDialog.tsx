@@ -1132,7 +1132,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
-            {messages.length === 0 && !isActiveBusy ? (
+            {messages.length === 0 && !isActiveBusy && !delegateCard ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
                 <MessagesSquare className="mb-1 h-6 w-6 opacity-50" />
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
