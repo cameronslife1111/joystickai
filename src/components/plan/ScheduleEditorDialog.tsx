@@ -27,6 +27,10 @@ interface Props {
     user_request?: string;
     attached_document_ids?: string[];
     title?: string;
+    /** When set, the scheduled message is sent inside this chat thread. */
+    thread_id?: string | null;
+    capabilities?: Record<string, boolean>;
+    image_urls?: string[];
   } | null;
   onSaved?: (scheduleId: string) => void;
 }
