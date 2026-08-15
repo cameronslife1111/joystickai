@@ -27,6 +27,10 @@ interface Props {
     user_request?: string;
     attached_document_ids?: string[];
     title?: string;
+    /** When set, the scheduled message is sent inside this chat thread. */
+    thread_id?: string | null;
+    capabilities?: Record<string, boolean>;
+    image_urls?: string[];
   } | null;
   onSaved?: (scheduleId: string) => void;
 }
@@ -195,6 +199,9 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
       cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 10 ? cur : [...cur, id],
     );
 
+  // A chat-bound schedule sends its message inside a chat thread.
+  const inChat = !!(initial?.thread_id ?? defaults?.thread_id);
+
   const save = async () => {
     if (!userRequest.trim() && attachedIds.length === 0) {
       toast.error("Add a request or attach at least one document.");
@@ -216,8 +223,17 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
         toast.success("Schedule updated");
         onSaved?.(res.schedule.id);
       } else {
-        const res = await createFn({ data: { ...(previewInput as any), enabled } });
-        toast.success("Schedule created");
+        const chatFields = defaults?.thread_id
+          ? {
+              thread_id: defaults.thread_id,
+              capabilities: defaults.capabilities ?? {},
+              image_urls: defaults.image_urls ?? [],
+            }
+          : {};
+        const res = await createFn({
+          data: { ...(previewInput as any), ...chatFields, enabled },
+        });
+        toast.success("Message scheduled");
         onSaved?.(res.schedule.id);
       }
       qc.invalidateQueries({ queryKey: ["plan_schedules"] });
@@ -233,9 +249,13 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
     <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-lg h-[88svh] p-0 gap-0 flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0 border-b border-border px-4 pt-5 pb-3 sm:px-6">
-          <DialogTitle>{editing ? "Edit schedule" : "Schedule a plan"}</DialogTitle>
+          <DialogTitle>
+            {editing ? "Edit schedule" : inChat ? "Schedule this message" : "Schedule a plan"}
+          </DialogTitle>
           <DialogDescription className="min-w-0 break-words">
-            Orby will run this plan automatically on the cadence you pick. Plans never run within 30 minutes of each other.
+            {inChat
+              ? "Orby will send this message in this chat at the times you pick — even if the app is closed. Plans it starts never run within 30 minutes of each other."
+              : "Orby will run this plan automatically on the cadence you pick. Plans never run within 30 minutes of each other."}
           </DialogDescription>
         </DialogHeader>
 

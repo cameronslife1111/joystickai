@@ -21,6 +21,8 @@ import {
   AlertCircle,
   Phone,
   PhoneOff,
+  Clock,
+  Pause,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -62,6 +64,8 @@ import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
+import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
+import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
 
 interface Props {
   open: boolean;
@@ -211,6 +215,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const nameThread = useServerFn(generateThreadTitle);
+  const listSchedulesFn = useServerFn(listSchedules);
+  const deleteScheduleFn = useServerFn(deleteSchedule);
+  const toggleScheduleFn = useServerFn(toggleSchedule);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -236,6 +243,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Composer clock button → schedule this message for later. */
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [threadSearch, setThreadSearch] = useState("");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
@@ -314,6 +323,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [threads, threadSearch]);
   const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
+
+  // Scheduled messages waiting to be sent in this chat.
+  const { data: scheduleData, refetch: refetchSchedules } = useQuery({
+    queryKey: ["chat_schedules", activeThreadId],
+    enabled: open && !!activeThreadId,
+    refetchInterval: 30_000,
+    queryFn: async () => await listSchedulesFn({}),
+  });
+  const threadSchedules = useMemo(
+    () =>
+      (scheduleData?.schedules ?? []).filter(
+        (s: any) => s.thread_id && s.thread_id === activeThreadId,
+      ),
+    [scheduleData, activeThreadId],
+  );
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
   /**
@@ -1181,6 +1205,60 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               )}
             </div>
 
+            {threadSchedules.length > 0 && (
+              <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                {threadSchedules.map((s: any) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                    title={s.user_request}
+                  >
+                    <Clock className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">
+                      {s.enabled && s.next_run_at
+                        ? new Date(s.next_run_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : "paused"}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={s.enabled ? "Pause scheduled message" : "Resume scheduled message"}
+                      onClick={async () => {
+                        try {
+                          await toggleScheduleFn({ data: { id: s.id, enabled: !s.enabled } });
+                          refetchSchedules();
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Couldn't update");
+                        }
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      {s.enabled ? <Pause className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete scheduled message"
+                      onClick={async () => {
+                        try {
+                          await deleteScheduleFn({ data: { id: s.id } });
+                          refetchSchedules();
+                        } catch (e: any) {
+                          toast.error(e?.message ?? "Couldn't delete");
+                        }
+                      }}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
               {enabledCapCount === 0
@@ -1208,6 +1286,24 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 ) : (
                   <span aria-hidden>🔴</span>
                 )}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  if (!activeThreadId) return;
+                  if (!input.trim()) {
+                    toast.error("Type the message you want to schedule first");
+                    return;
+                  }
+                  setScheduleOpen(true);
+                }}
+                aria-label="Schedule this message"
+                title="Send this message later (works with the app closed)"
+                className="shrink-0"
+              >
+                <Clock className="h-4 w-4" />
               </Button>
               <Textarea
 
@@ -1408,6 +1504,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onOpenChange={setDocPickerOpen}
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
+      />
+
+      {/* Schedule the message currently in the composer, in this thread. */}
+      <ScheduleEditorDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        defaults={{
+          title: input.trim().slice(0, 60) || "Scheduled message",
+          user_request: input.trim(),
+          attached_document_ids: contextDocIds,
+          thread_id: activeThreadId,
+          capabilities: caps as unknown as Record<string, boolean>,
+          image_urls: pickedImages.map((a) => a.url).filter((u): u is string => !!u),
+        }}
+        onSaved={() => {
+          setInput("");
+          setPendingCaps(NO_CAPS);
+          setPickedImages([]);
+          refetchSchedules();
+          toast.success("Orby will send that later");
+        }}
       />
 
       <MediaGalleryPicker

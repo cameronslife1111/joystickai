@@ -3783,7 +3783,14 @@ function AppPage() {
         }}
       />
       {plansScreenOpen && (
-        <AIPlansScreen onClose={() => setPlansScreenOpen(false)} />
+        <AIPlansScreen
+          onClose={() => setPlansScreenOpen(false)}
+          onOpenChat={(threadId) => {
+            setPlansScreenOpen(false);
+            setPendingChatThreadId(threadId);
+            setChatOpen(true);
+          }}
+        />
       )}
 
 
