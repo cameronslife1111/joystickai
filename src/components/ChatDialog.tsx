@@ -64,6 +64,10 @@ import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
+import { DelegateSuggestionsCard, type DelegateCardState } from "./DelegateSuggestionsCard";
+import { suggestDelegateTasks } from "@/lib/delegate.functions";
+import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
+
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
 
@@ -80,16 +84,16 @@ interface Props {
   onOpenDocument?: (documentId: string) => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
-   * attached and immediately send `prompt` with `capabilities` checked.
+   * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
    * `id` is a nonce so each tap fires exactly once.
    */
   delegate?: {
     id: string;
     documentId: string;
     title: string;
-    prompt: string;
-    capabilities: ChatCapabilities;
+    index: number;
   } | null;
+
 
 }
 
@@ -259,6 +263,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
+  /** Live document context for the delegate card (thread, doc, sentences). */
+  const delegateDocRef = useRef<{
+    threadId: string;
+    documentId: string;
+    title: string;
+    sentences: string[];
+    index: number;
+  } | null>(null);
+  /** The 🟣 Delegate checkbox card shown inline in the chat. */
+  const [delegateCard, setDelegateCard] = useState<DelegateCardState | null>(null);
+  const suggestTasks = useServerFn(suggestDelegateTasks);
+
+
 
 
   // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
@@ -905,8 +922,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   };
 
-  // 🟣 Delegate (menu slot 15): fresh thread + attached doc + one automatic
-  // send with the delegate capabilities. Runs exactly once per tap.
+  // 🟣 Delegate (menu slot 15): fresh thread + attached doc, then Orby proposes
+  // 5 tasks as checkboxes in that chat. Runs exactly once per tap.
+  const loadDelegateSuggestions = useCallback(
+    async (threadId: string, documentId: string, index: number) => {
+      setDelegateCard({ phase: "loading" });
+      delegateDocRef.current = { threadId, documentId, title: "", sentences: [], index };
+      try {
+        const res = await suggestTasks({ data: { documentId, index } });
+        delegateDocRef.current = {
+          threadId,
+          documentId,
+          title: res.title,
+          sentences: res.sentences,
+          index: res.index,
+        };
+
+        setDelegateCard({
+          phase: "choose",
+          taskContext: res.taskContext,
+          suggestions: res.suggestions,
+          checked: res.suggestions.map(() => false),
+        });
+      } catch (err) {
+        setDelegateCard({
+          phase: "error",
+          message: err instanceof Error ? err.message : "Couldn't load suggestions",
+        });
+      }
+    },
+    [suggestTasks],
+  );
+
   useEffect(() => {
     if (!open || !delegate || !userId) return;
     if (delegateRef.current === delegate.id) return;
@@ -916,17 +963,34 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       if (!t) return;
       setDrawerOpen(false);
       setActiveThreadId(t.id);
-      setPendingCaps(delegate.capabilities);
       await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
-      await handleSend({
-        text: delegate.prompt,
-        caps: delegate.capabilities,
-        threadId: t.id,
-        docIds: [delegate.documentId],
-      });
+      await loadDelegateSuggestions(t.id, delegate.documentId, delegate.index);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, delegate, userId]);
+
+  const approveDelegate = async () => {
+    const ctx = delegateDocRef.current;
+    if (!ctx || !delegateCard || delegateCard.phase !== "choose") return;
+    const picked = delegateCard.suggestions.filter((_, i) => delegateCard.checked[i]);
+    if (picked.length === 0) return;
+    setDelegateCard({ phase: "approved", taskContext: delegateCard.taskContext, picked });
+    const prompt = buildDelegatePlanPrompt({
+      title: ctx.title,
+      sentences: ctx.sentences,
+      index: ctx.index,
+      taskContext: delegateCard.taskContext,
+      picked,
+    });
+    await handleSend({
+      text: prompt,
+      caps: DEFAULT_CAPS,
+      threadId: ctx.threadId,
+      docIds: [ctx.documentId],
+    });
+  };
+
+
 
   const enabledCapCount = Object.values(caps).filter(Boolean).length;
 
@@ -1068,7 +1132,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
-            {messages.length === 0 && !isActiveBusy ? (
+            {messages.length === 0 && !isActiveBusy && !delegateCard ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
                 <MessagesSquare className="mb-1 h-6 w-6 opacity-50" />
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
@@ -1125,6 +1189,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </div>
                   ),
                 )}
+                {delegateCard && delegateDocRef.current?.threadId === activeThreadId && (
+                  <div className="flex flex-col items-start">
+                    <DelegateSuggestionsCard
+                      state={delegateCard}
+                      onToggle={(i) =>
+                        setDelegateCard((cur) =>
+                          cur && cur.phase === "choose"
+                            ? { ...cur, checked: cur.checked.map((c, j) => (j === i ? !c : c)) }
+                            : cur,
+                        )
+                      }
+                      onApprove={() => void approveDelegate()}
+                      onCancel={() => setDelegateCard(null)}
+                      onRetry={() => {
+                        const ctx = delegateDocRef.current;
+                        if (ctx) void loadDelegateSuggestions(ctx.threadId, ctx.documentId, ctx.index);
+                      }}
+                    />
+                  </div>
+                )}
+
                 {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
