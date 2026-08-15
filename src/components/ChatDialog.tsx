@@ -1187,6 +1187,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </div>
                   ),
                 )}
+                {delegateCard && delegateDocRef.current?.threadId === activeThreadId && (
+                  <div className="flex flex-col items-start">
+                    <DelegateSuggestionsCard
+                      state={delegateCard}
+                      onToggle={(i) =>
+                        setDelegateCard((cur) =>
+                          cur && cur.phase === "choose"
+                            ? { ...cur, checked: cur.checked.map((c, j) => (j === i ? !c : c)) }
+                            : cur,
+                        )
+                      }
+                      onApprove={() => void approveDelegate()}
+                      onCancel={() => setDelegateCard(null)}
+                      onRetry={() => {
+                        const ctx = delegateDocRef.current;
+                        if (ctx) void loadDelegateSuggestions(ctx.threadId, ctx.documentId, ctx.index);
+                      }}
+                    />
+                  </div>
+                )}
+
                 {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
