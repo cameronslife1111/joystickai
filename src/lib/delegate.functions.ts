@@ -92,12 +92,18 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
         throw new Error("Couldn't read Orby's suggestions — try again");
       }
 
+      const capSet = new Set<string>(DELEGATE_CAP_KEYS);
       return {
         title: doc.title,
         sentences,
         index,
         taskContext: parsed.task_context ?? "",
-        suggestions: parsed.suggestions.slice(0, 5),
+        suggestions: parsed.suggestions.slice(0, 5).map((s) => ({
+          title: s.title,
+          detail: s.detail,
+          capabilities: s.capabilities.filter((c): c is DelegateCapKey => capSet.has(c)),
+        })),
       };
+
     },
   );
