@@ -16,6 +16,9 @@ import { supabase } from "@/integrations/supabase/client";
 // client so the app loads on flaky/cellular networks. Must run before any
 // backend call is made.
 import "@/lib/sb-proxy";
+// Side-effect: recover from a stale cached bundle after a deploy.
+import "@/lib/stale-bundle-guard";
+
 
 function NotFoundComponent() {
   return (
