@@ -4,10 +4,13 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
 import {
+  DELEGATE_CAP_KEYS,
   DELEGATE_SUGGEST_SYSTEM,
   buildDelegateSuggestUserPrompt,
+  type DelegateCapKey,
   type DelegateSuggestion,
 } from "./delegate-prompt";
+
 
 const inputSchema = z.object({
   documentId: z.string().uuid(),
