@@ -26,10 +26,24 @@ export function needsWebSearch(sentence: string): boolean {
   return WEB_HINTS.some((h) => s.includes(h));
 }
 
+export const DELEGATE_CAP_KEYS = [
+  "web_search",
+  "image_analysis",
+  "planning",
+  "image_generation",
+  "video_generation",
+  "document_editing",
+  "scheduling",
+] as const;
+
+export type DelegateCapKey = (typeof DELEGATE_CAP_KEYS)[number];
+
 export type DelegateSuggestion = {
   title: string;
   detail: string;
+  capabilities: DelegateCapKey[];
 };
+
 
 /** The numbered window of lines around the current one (current marked >>>). */
 export function buildDocWindow(args: { sentences: string[]; index: number }): string {
