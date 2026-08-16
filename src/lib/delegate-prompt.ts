@@ -77,10 +77,14 @@ export const DELEGATE_SUGGEST_SYSTEM = [
   "- Make them distinct from each other and specific to this document's actual content.",
   "- Plain text only. No markdown, no asterisks, no hashtags, no emoji.",
   "",
+  "Also list, for each suggestion, which of your capabilities it needs. Valid values:",
+  "web_search, image_analysis, planning, image_generation, video_generation, document_editing, scheduling.",
+  "",
   "Reply with JSON only, no prose, in exactly this shape:",
   '{"task_context":"one short sentence naming the task or parent task you detected",',
-  '"suggestions":[{"title":"short action label (max 8 words)","detail":"one sentence saying exactly what you would do"}]}',
+  '"suggestions":[{"title":"short action label (max 8 words)","detail":"one sentence saying exactly what you would do","capabilities":["document_editing"]}]}',
   "The suggestions array must contain exactly 5 items.",
+
 ].join("\n");
 
 /** User message for the suggestion pass. */
