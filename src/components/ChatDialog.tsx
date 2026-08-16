@@ -943,7 +943,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           taskContext: res.taskContext,
           suggestions: res.suggestions,
           checked: res.suggestions.map(() => false),
+          notes: res.suggestions.map(() => ""),
         });
+
       } catch (err) {
         setDelegateCard({
           phase: "error",
