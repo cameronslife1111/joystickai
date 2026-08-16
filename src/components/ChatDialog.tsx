@@ -66,7 +66,7 @@ import { toPlainText } from "@/lib/plain-text";
 import { StepReasoning } from "./plan/StepReasoning";
 import { DelegateSuggestionsCard, type DelegateCardState } from "./DelegateSuggestionsCard";
 import { suggestDelegateTasks } from "@/lib/delegate.functions";
-import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
+import { buildDelegatePlanPrompt, needsWebSearch } from "@/lib/delegate-prompt";
 
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
