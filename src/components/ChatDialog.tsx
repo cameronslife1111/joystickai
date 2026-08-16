@@ -1209,11 +1209,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <div className="flex flex-col items-start">
                     <DelegateSuggestionsCard
                       state={delegateCard}
+                      onNote={(i, value) =>
+                        setDelegateCard((cur) =>
+                          cur && cur.phase === "choose"
+                            ? { ...cur, notes: cur.notes.map((n, j) => (j === i ? value : n)) }
+                            : cur,
+                        )
+                      }
                       onToggle={(i) =>
                         setDelegateCard((cur) =>
                           cur && cur.phase === "choose"
                             ? { ...cur, checked: cur.checked.map((c, j) => (j === i ? !c : c)) }
                             : cur,
+
                         )
                       }
                       onApprove={() => void approveDelegate()}
