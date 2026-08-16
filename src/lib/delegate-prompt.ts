@@ -113,12 +113,14 @@ export function buildDelegateSuggestUserPrompt(args: {
  * The request sent into the chat once the user approves their picks. It becomes
  * the plan's user_request, so it carries the location, the picks and the scope.
  */
+export type DelegatePick = { suggestion: DelegateSuggestion; note: string };
+
 export function buildDelegatePlanPrompt(args: {
   title: string;
   sentences: string[];
   index: number;
   taskContext: string;
-  picked: DelegateSuggestion[];
+  picked: DelegatePick[];
 }): string {
   const { title, sentences, index, taskContext, picked } = args;
   const total = sentences.length;
@@ -135,7 +137,12 @@ export function buildDelegatePlanPrompt(args: {
     taskContext ? `TASK CONTEXT YOU IDENTIFIED: ${taskContext}` : "",
     "",
     "I APPROVED THESE TASKS — do all of them, and only these:",
-    ...picked.map((p, i) => `${i + 1}. ${p.title} — ${p.detail}`),
+    ...picked.map((p, i) => {
+      const line = `${i + 1}. ${p.suggestion.title} — ${p.suggestion.detail}`;
+      const note = (p.note ?? "").trim().slice(0, 2000);
+      return note ? `${line}\n   EXTRA INFO FROM ME: ${note}` : line;
+    }),
+
     "",
     "What I need you to do:",
     "1. Analyze the attached document again and confirm whether the line I am on is a substep or a standalone task, and what its parent task is.",
