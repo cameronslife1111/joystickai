@@ -974,9 +974,22 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const approveDelegate = async () => {
     const ctx = delegateDocRef.current;
     if (!ctx || !delegateCard || delegateCard.phase !== "choose") return;
-    const picked = delegateCard.suggestions.filter((_, i) => delegateCard.checked[i]);
+    const picked = delegateCard.suggestions
+      .map((suggestion, i) => ({ suggestion, note: delegateCard.notes[i] ?? "", i }))
+      .filter((p) => delegateCard.checked[p.i])
+      .map(({ suggestion, note }) => ({ suggestion, note }));
     if (picked.length === 0) return;
     setDelegateCard({ phase: "approved", taskContext: delegateCard.taskContext, picked });
+
+    // Turn on exactly the capabilities the approved tasks need (planning always on).
+    const capsForPlan: ChatCapabilities = { ...NO_CAPS, planning: true };
+    for (const p of picked) {
+      for (const key of p.suggestion.capabilities) capsForPlan[key] = true;
+    }
+    const webText = `${ctx.sentences[ctx.index] ?? ""} ${picked.map((p) => p.note).join(" ")}`;
+    if (needsWebSearch(webText)) capsForPlan.web_search = true;
+    setPendingCaps(capsForPlan);
+
     const prompt = buildDelegatePlanPrompt({
       title: ctx.title,
       sentences: ctx.sentences,
@@ -986,11 +999,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
     await handleSend({
       text: prompt,
-      caps: DEFAULT_CAPS,
+      caps: capsForPlan,
       threadId: ctx.threadId,
       docIds: [ctx.documentId],
     });
   };
+
 
 
 
