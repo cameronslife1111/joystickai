@@ -1,7 +1,8 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { DelegateSuggestion } from "@/lib/delegate-prompt";
+import { Textarea } from "@/components/ui/textarea";
+import type { DelegatePick, DelegateSuggestion } from "@/lib/delegate-prompt";
 
 export type DelegateCardState =
   | { phase: "loading" }
@@ -11,18 +12,27 @@ export type DelegateCardState =
       taskContext: string;
       suggestions: DelegateSuggestion[];
       checked: boolean[];
+      notes: string[];
     }
-  | { phase: "approved"; taskContext: string; picked: DelegateSuggestion[] };
+  | { phase: "approved"; taskContext: string; picked: DelegatePick[] };
 
 interface Props {
   state: DelegateCardState;
   onToggle: (i: number) => void;
+  onNote: (i: number, value: string) => void;
   onApprove: () => void;
   onCancel: () => void;
   onRetry: () => void;
 }
 
-export function DelegateSuggestionsCard({ state, onToggle, onApprove, onCancel, onRetry }: Props) {
+export function DelegateSuggestionsCard({
+  state,
+  onToggle,
+  onNote,
+  onApprove,
+  onCancel,
+  onRetry,
+}: Props) {
   return (
     <div className="w-full max-w-[95%] rounded-2xl border border-foreground/10 bg-chat-assistant p-3 text-chat-assistant-foreground">
       <div className="mb-2 text-sm font-medium">🟣 Delegate</div>
@@ -51,28 +61,34 @@ export function DelegateSuggestionsCard({ state, onToggle, onApprove, onCancel, 
           <p className="text-sm">Pick what you want me to do, then press Approve.</p>
           <div className="space-y-2">
             {state.suggestions.map((s, i) => (
-              <label
-                key={i}
-                className="flex cursor-pointer items-start gap-2 rounded-xl border border-foreground/10 p-2"
-              >
-                <Checkbox
-                  checked={state.checked[i] ?? false}
-                  onCheckedChange={() => onToggle(i)}
-                  className="mt-0.5 shrink-0"
-                />
-                <span className="min-w-0 text-sm">
-                  <span className="font-medium">{s.title}</span>
-                  {s.detail ? <span className="block text-muted-foreground">{s.detail}</span> : null}
-                </span>
-              </label>
+              <div key={i} className="rounded-xl border border-foreground/10 p-2">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <Checkbox
+                    checked={state.checked[i] ?? false}
+                    onCheckedChange={() => onToggle(i)}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{s.title}</span>
+                    {s.detail ? (
+                      <span className="block text-muted-foreground">{s.detail}</span>
+                    ) : null}
+                  </span>
+                </label>
+                {state.checked[i] && (
+                  <Textarea
+                    value={state.notes[i] ?? ""}
+                    onChange={(e) => onNote(i, e.target.value)}
+                    placeholder="Note (optional) — extra info, documents or media gallery images to reference, links, constraints…"
+                    maxLength={2000}
+                    className="mt-2 min-h-[64px] w-full resize-y text-sm"
+                  />
+                )}
+              </div>
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={!state.checked.some(Boolean)}
-              onClick={onApprove}
-            >
+            <Button size="sm" disabled={!state.checked.some(Boolean)} onClick={onApprove}>
               Approve
             </Button>
             <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -88,7 +104,10 @@ export function DelegateSuggestionsCard({ state, onToggle, onApprove, onCancel, 
           <ul className="list-none space-y-1">
             {state.picked.map((p, i) => (
               <li key={i}>
-                {i + 1}. {p.title}
+                {i + 1}. {p.suggestion.title}
+                {p.note.trim() ? (
+                  <span className="block text-muted-foreground">Note: {p.note.trim()}</span>
+                ) : null}
               </li>
             ))}
           </ul>
