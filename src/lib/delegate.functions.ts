@@ -17,9 +17,16 @@ const inputSchema = z.object({
 const outSchema = z.object({
   task_context: z.string().default(""),
   suggestions: z
-    .array(z.object({ title: z.string().min(1), detail: z.string().default("") }))
+    .array(
+      z.object({
+        title: z.string().min(1),
+        detail: z.string().default(""),
+        capabilities: z.array(z.string()).default([]),
+      }),
+    )
     .min(1),
 });
+
 
 function stripFence(raw: string): string {
   const t = (raw ?? "").trim();
