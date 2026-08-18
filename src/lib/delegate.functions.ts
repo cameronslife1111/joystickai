@@ -4,13 +4,10 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
 import {
-  DELEGATE_CAP_KEYS,
   DELEGATE_SUGGEST_SYSTEM,
   buildDelegateSuggestUserPrompt,
-  type DelegateCapKey,
   type DelegateSuggestion,
 } from "./delegate-prompt";
-
 
 const inputSchema = z.object({
   documentId: z.string().uuid(),
@@ -20,16 +17,9 @@ const inputSchema = z.object({
 const outSchema = z.object({
   task_context: z.string().default(""),
   suggestions: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        detail: z.string().default(""),
-        capabilities: z.array(z.string()).default([]),
-      }),
-    )
+    .array(z.object({ title: z.string().min(1), detail: z.string().default("") }))
     .min(1),
 });
-
 
 function stripFence(raw: string): string {
   const t = (raw ?? "").trim();
@@ -95,18 +85,12 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
         throw new Error("Couldn't read Orby's suggestions — try again");
       }
 
-      const capSet = new Set<string>(DELEGATE_CAP_KEYS);
       return {
         title: doc.title,
         sentences,
         index,
         taskContext: parsed.task_context ?? "",
-        suggestions: parsed.suggestions.slice(0, 5).map((s) => ({
-          title: s.title,
-          detail: s.detail,
-          capabilities: s.capabilities.filter((c): c is DelegateCapKey => capSet.has(c)),
-        })),
+        suggestions: parsed.suggestions.slice(0, 5),
       };
-
     },
   );

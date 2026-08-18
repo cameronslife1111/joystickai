@@ -66,7 +66,7 @@ import { toPlainText } from "@/lib/plain-text";
 import { StepReasoning } from "./plan/StepReasoning";
 import { DelegateSuggestionsCard, type DelegateCardState } from "./DelegateSuggestionsCard";
 import { suggestDelegateTasks } from "@/lib/delegate.functions";
-import { buildDelegatePlanPrompt, needsWebSearch } from "@/lib/delegate-prompt";
+import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
@@ -943,9 +943,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           taskContext: res.taskContext,
           suggestions: res.suggestions,
           checked: res.suggestions.map(() => false),
-          notes: res.suggestions.map(() => ""),
         });
-
       } catch (err) {
         setDelegateCard({
           phase: "error",
@@ -974,22 +972,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const approveDelegate = async () => {
     const ctx = delegateDocRef.current;
     if (!ctx || !delegateCard || delegateCard.phase !== "choose") return;
-    const picked = delegateCard.suggestions
-      .map((suggestion, i) => ({ suggestion, note: delegateCard.notes[i] ?? "", i }))
-      .filter((p) => delegateCard.checked[p.i])
-      .map(({ suggestion, note }) => ({ suggestion, note }));
+    const picked = delegateCard.suggestions.filter((_, i) => delegateCard.checked[i]);
     if (picked.length === 0) return;
     setDelegateCard({ phase: "approved", taskContext: delegateCard.taskContext, picked });
-
-    // Turn on exactly the capabilities the approved tasks need (planning always on).
-    const capsForPlan: ChatCapabilities = { ...NO_CAPS, planning: true };
-    for (const p of picked) {
-      for (const key of p.suggestion.capabilities) capsForPlan[key] = true;
-    }
-    const webText = `${ctx.sentences[ctx.index] ?? ""} ${picked.map((p) => p.note).join(" ")}`;
-    if (needsWebSearch(webText)) capsForPlan.web_search = true;
-    setPendingCaps(capsForPlan);
-
     const prompt = buildDelegatePlanPrompt({
       title: ctx.title,
       sentences: ctx.sentences,
@@ -999,12 +984,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
     await handleSend({
       text: prompt,
-      caps: capsForPlan,
+      caps: DEFAULT_CAPS,
       threadId: ctx.threadId,
       docIds: [ctx.documentId],
     });
   };
-
 
 
 
@@ -1209,19 +1193,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <div className="flex flex-col items-start">
                     <DelegateSuggestionsCard
                       state={delegateCard}
-                      onNote={(i, value) =>
-                        setDelegateCard((cur) =>
-                          cur && cur.phase === "choose"
-                            ? { ...cur, notes: cur.notes.map((n, j) => (j === i ? value : n)) }
-                            : cur,
-                        )
-                      }
                       onToggle={(i) =>
                         setDelegateCard((cur) =>
                           cur && cur.phase === "choose"
                             ? { ...cur, checked: cur.checked.map((c, j) => (j === i ? !c : c)) }
                             : cur,
-
                         )
                       }
                       onApprove={() => void approveDelegate()}

@@ -26,24 +26,10 @@ export function needsWebSearch(sentence: string): boolean {
   return WEB_HINTS.some((h) => s.includes(h));
 }
 
-export const DELEGATE_CAP_KEYS = [
-  "web_search",
-  "image_analysis",
-  "planning",
-  "image_generation",
-  "video_generation",
-  "document_editing",
-  "scheduling",
-] as const;
-
-export type DelegateCapKey = (typeof DELEGATE_CAP_KEYS)[number];
-
 export type DelegateSuggestion = {
   title: string;
   detail: string;
-  capabilities: DelegateCapKey[];
 };
-
 
 /** The numbered window of lines around the current one (current marked >>>). */
 export function buildDocWindow(args: { sentences: string[]; index: number }): string {
@@ -77,14 +63,10 @@ export const DELEGATE_SUGGEST_SYSTEM = [
   "- Make them distinct from each other and specific to this document's actual content.",
   "- Plain text only. No markdown, no asterisks, no hashtags, no emoji.",
   "",
-  "Also list, for each suggestion, which of your capabilities it needs. Valid values:",
-  "web_search, image_analysis, planning, image_generation, video_generation, document_editing, scheduling.",
-  "",
   "Reply with JSON only, no prose, in exactly this shape:",
   '{"task_context":"one short sentence naming the task or parent task you detected",',
-  '"suggestions":[{"title":"short action label (max 8 words)","detail":"one sentence saying exactly what you would do","capabilities":["document_editing"]}]}',
+  '"suggestions":[{"title":"short action label (max 8 words)","detail":"one sentence saying exactly what you would do"}]}',
   "The suggestions array must contain exactly 5 items.",
-
 ].join("\n");
 
 /** User message for the suggestion pass. */
@@ -113,14 +95,12 @@ export function buildDelegateSuggestUserPrompt(args: {
  * The request sent into the chat once the user approves their picks. It becomes
  * the plan's user_request, so it carries the location, the picks and the scope.
  */
-export type DelegatePick = { suggestion: DelegateSuggestion; note: string };
-
 export function buildDelegatePlanPrompt(args: {
   title: string;
   sentences: string[];
   index: number;
   taskContext: string;
-  picked: DelegatePick[];
+  picked: DelegateSuggestion[];
 }): string {
   const { title, sentences, index, taskContext, picked } = args;
   const total = sentences.length;
@@ -137,12 +117,7 @@ export function buildDelegatePlanPrompt(args: {
     taskContext ? `TASK CONTEXT YOU IDENTIFIED: ${taskContext}` : "",
     "",
     "I APPROVED THESE TASKS — do all of them, and only these:",
-    ...picked.map((p, i) => {
-      const line = `${i + 1}. ${p.suggestion.title} — ${p.suggestion.detail}`;
-      const note = (p.note ?? "").trim().slice(0, 2000);
-      return note ? `${line}\n   EXTRA INFO FROM ME: ${note}` : line;
-    }),
-
+    ...picked.map((p, i) => `${i + 1}. ${p.title} — ${p.detail}`),
     "",
     "What I need you to do:",
     "1. Analyze the attached document again and confirm whether the line I am on is a substep or a standalone task, and what its parent task is.",
