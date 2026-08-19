@@ -9,7 +9,7 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { aiContinue } from "@/lib/ai.functions";
+import { aiContinue, cleanupText } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 
 
@@ -156,6 +156,7 @@ function AppPage() {
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
+  const [cleaningUp, setCleaningUp] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
@@ -1671,6 +1672,29 @@ function AppPage() {
     setMoveSendSourceId(null);
   }, []);
 
+  // 🧼 Cleanup: copy the draft first (so nothing can be lost), then ask the AI
+  // to fix only grammar/punctuation and swap the composer text in place.
+  const runCleanup = useCallback(async () => {
+    const text = composeText.trim();
+    if (!text || cleaningUp) return;
+    setCleaningUp(true);
+    try {
+      await copyToClipboard(text);
+      const res = await cleanupText({ data: { text } });
+      const cleaned = (res?.text ?? "").trim();
+      if (cleaned) {
+        setComposeText(cleaned);
+        toast.success("Cleaned up");
+      } else {
+        toast.error("Nothing came back — text unchanged");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cleanup failed");
+    } finally {
+      setCleaningUp(false);
+    }
+  }, [composeText, cleaningUp]);
+
   // User picked a target document; load its sentences so they can either jump
   // straight to top/bottom or scroll a sentence list and pick the exact anchor.
   const pickSendDoc = useCallback(async (docId: string) => {
@@ -2609,23 +2633,8 @@ function AppPage() {
 
       {/* Compose action buttons (above orb) */}
       {composing && (
-        <div className="pointer-events-none flex justify-center pb-4">
-          <div className="pointer-events-auto flex gap-3">
-            <button
-              onClick={async () => {
-                const text = composeText.trim();
-                if (text) {
-                  const ok = await copyToClipboard(text);
-                  if (ok) toast.success("Copied to clipboard");
-                  else toast.error("Failed to copy");
-                }
-                cancelCompose();
-              }}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              Cancel
-            </button>
+        <div className="pointer-events-none flex flex-col items-center gap-2 pb-4">
+          <div className="pointer-events-auto flex flex-wrap justify-center gap-3">
             <button
               onClick={() => {
                 if (typeof document !== "undefined") {
@@ -2634,11 +2643,19 @@ function AppPage() {
                 if (!activeDocId) return;
                 void sendIdea(activeDocId, "current");
               }}
-              disabled={!composeText.trim() || !activeDocId}
+              disabled={!composeText.trim() || !activeDocId || cleaningUp}
               className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
               style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
             >
               Add to current
+            </button>
+            <button
+              onClick={() => void runCleanup()}
+              disabled={!composeText.trim() || cleaningUp}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              {cleaningUp ? "🧼 …" : "🧼 Cleanup"}
             </button>
             <button
               onClick={() => {
@@ -2649,15 +2666,33 @@ function AppPage() {
                 }
                 setSendOpen(true);
               }}
-              disabled={!composeText.trim()}
+              disabled={!composeText.trim() || cleaningUp}
               className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
               style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
             >
               Send to…
             </button>
           </div>
+          <div className="pointer-events-auto flex justify-center">
+            <button
+              onClick={async () => {
+                const text = composeText.trim();
+                if (text) {
+                  const ok = await copyToClipboard(text);
+                  if (ok) toast.success("Copied to clipboard");
+                  else toast.error("Failed to copy");
+                }
+                cancelCompose();
+              }}
+              className="rounded-full border border-foreground/15 bg-card/70 px-6 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
+
 
       {/* Floating trophy button while the New idea composer is open — prepends a
           trophy emoji to the beginning of the composer text. */}
