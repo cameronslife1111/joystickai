@@ -2610,23 +2610,8 @@ function AppPage() {
 
       {/* Compose action buttons (above orb) */}
       {composing && (
-        <div className="pointer-events-none flex justify-center pb-4">
-          <div className="pointer-events-auto flex gap-3">
-            <button
-              onClick={async () => {
-                const text = composeText.trim();
-                if (text) {
-                  const ok = await copyToClipboard(text);
-                  if (ok) toast.success("Copied to clipboard");
-                  else toast.error("Failed to copy");
-                }
-                cancelCompose();
-              }}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              Cancel
-            </button>
+        <div className="pointer-events-none flex flex-col items-center gap-2 pb-4">
+          <div className="pointer-events-auto flex flex-wrap justify-center gap-3">
             <button
               onClick={() => {
                 if (typeof document !== "undefined") {
@@ -2635,11 +2620,19 @@ function AppPage() {
                 if (!activeDocId) return;
                 void sendIdea(activeDocId, "current");
               }}
-              disabled={!composeText.trim() || !activeDocId}
+              disabled={!composeText.trim() || !activeDocId || cleaningUp}
               className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
               style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
             >
               Add to current
+            </button>
+            <button
+              onClick={() => void runCleanup()}
+              disabled={!composeText.trim() || cleaningUp}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              {cleaningUp ? "🧼 …" : "🧼 Cleanup"}
             </button>
             <button
               onClick={() => {
@@ -2650,15 +2643,33 @@ function AppPage() {
                 }
                 setSendOpen(true);
               }}
-              disabled={!composeText.trim()}
+              disabled={!composeText.trim() || cleaningUp}
               className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
               style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
             >
               Send to…
             </button>
           </div>
+          <div className="pointer-events-auto flex justify-center">
+            <button
+              onClick={async () => {
+                const text = composeText.trim();
+                if (text) {
+                  const ok = await copyToClipboard(text);
+                  if (ok) toast.success("Copied to clipboard");
+                  else toast.error("Failed to copy");
+                }
+                cancelCompose();
+              }}
+              className="rounded-full border border-foreground/15 bg-card/70 px-6 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
+
 
       {/* Floating trophy button while the New idea composer is open — prepends a
           trophy emoji to the beginning of the composer text. */}
