@@ -1672,6 +1672,29 @@ function AppPage() {
     setMoveSendSourceId(null);
   }, []);
 
+  // 🧼 Cleanup: copy the draft first (so nothing can be lost), then ask the AI
+  // to fix only grammar/punctuation and swap the composer text in place.
+  const runCleanup = useCallback(async () => {
+    const text = composeText.trim();
+    if (!text || cleaningUp) return;
+    setCleaningUp(true);
+    try {
+      await copyToClipboard(text);
+      const res = await cleanupText({ data: { text } });
+      const cleaned = (res?.text ?? "").trim();
+      if (cleaned) {
+        setComposeText(cleaned);
+        toast.success("Cleaned up");
+      } else {
+        toast.error("Nothing came back — text unchanged");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cleanup failed");
+    } finally {
+      setCleaningUp(false);
+    }
+  }, [composeText, cleaningUp]);
+
   // User picked a target document; load its sentences so they can either jump
   // straight to top/bottom or scroll a sentence list and pick the exact anchor.
   const pickSendDoc = useCallback(async (docId: string) => {
