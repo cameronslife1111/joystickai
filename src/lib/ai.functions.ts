@@ -363,39 +363,3 @@ export const webSearch = createServerFn({ method: "POST" })
       targetDocumentId: data.targetDocumentId,
     };
   });
-
-const cleanupSchema = z.object({
-  text: z.string().min(1).max(100000),
-});
-
-/**
- * Grammar/punctuation-only cleanup for the New idea composer. Deliberately
- * narrow: never adds, removes, reorders, or rephrases content.
- */
-export const cleanupText = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => cleanupSchema.parse(input))
-  .handler(async ({ data }): Promise<{ text: string }> => {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-    const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.6-terra");
-
-    const system =
-      "You are a strict copy editor. Correct ONLY grammar, spelling, punctuation, and capitalization. " +
-      "Keep the author's exact wording and meaning as close to identical as possible — do not rephrase, " +
-      "reword, summarize, expand, reorder, or restructure anything. " +
-      "Do NOT add any new words, sentences, titles, headings, commentary, quotes, or markdown. " +
-      "Do NOT remove or move any emoji; preserve every emoji exactly where it appears. " +
-      "Preserve line breaks and paragraph structure exactly. " +
-      "Return ONLY the corrected text and nothing else.";
-
-    const { text } = await aiSdkGenerateText({
-      model,
-      system,
-      messages: [{ role: "user", content: data.text }],
-    });
-
-    const cleaned = (text ?? "").trim();
-    return { text: cleaned || data.text };
-  });
