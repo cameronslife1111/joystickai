@@ -253,6 +253,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
+  const [newDocFor, setNewDocFor] = useState<ChatRow | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
   const [renameThread, setRenameThread] = useState<Thread | null>(null);
