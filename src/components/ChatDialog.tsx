@@ -7,6 +7,7 @@ import {
   Square,
   Copy,
   FileDown,
+  FilePlus,
   Send,
   Trash2,
   Image as ImageIcon,
