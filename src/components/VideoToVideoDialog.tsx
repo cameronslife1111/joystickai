@@ -24,6 +24,8 @@ import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { DictateButton } from "./DictateButton";
+import { appendTranscript } from "@/lib/use-voice-dictation";
 
 interface SourceImage {
   id: string;

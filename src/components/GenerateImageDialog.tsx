@@ -16,6 +16,8 @@ import { QualitySelect } from "./QualitySelect";
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { DictateButton } from "./DictateButton";
+import { appendTranscript } from "@/lib/use-voice-dictation";
 
 interface Props {
   open: boolean;

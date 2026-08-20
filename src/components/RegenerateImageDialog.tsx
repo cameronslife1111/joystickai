@@ -17,6 +17,8 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { DictateButton } from "./DictateButton";
+import { appendTranscript } from "@/lib/use-voice-dictation";
 import { nextRedoTitle } from "@/lib/redo-title";
 
 interface SourceAsset {
