@@ -3629,7 +3629,7 @@ function AppPage() {
           >
             <div className="mb-3 flex items-center justify-between px-2">
               <div className="font-display text-lg">
-                {sendStage === "doc" && "Send to which list?"}
+                {sendStage === "doc" && (sendTab === "chats" ? "Send to which chat?" : "Send to which list?")}
                 {sendStage === "where" && "Where in the list?"}
                 {sendStage === "pickAnchor" && "After which sentence?"}
               </div>
@@ -3641,7 +3641,71 @@ function AppPage() {
               </button>
             </div>
 
-            {sendStage === "doc" && (
+            {sendStage === "doc" && !moveSendSourceId && (
+              <div className="mb-2 flex shrink-0 rounded-xl border border-foreground/10 bg-foreground/5 p-1">
+                {(["docs", "chats"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setSendTab(t); setSendSearchQuery(""); }}
+                    className={
+                      "flex-1 rounded-lg px-3 py-1.5 text-sm transition " +
+                      (sendTab === t
+                        ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                        : "text-muted-foreground hover:bg-foreground/10")
+                    }
+                  >
+                    {t === "docs" ? "Docs" : "Chats"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {sendStage === "doc" && sendTab === "chats" && !moveSendSourceId && (
+              <div className="flex min-h-0 flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={sendingToChat}
+                  onClick={() => void sendIdeaToChat("new")}
+                  className="w-full shrink-0 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-left text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20 disabled:opacity-40"
+                >
+                  ➕ New chat
+                </button>
+                <Input
+                  placeholder="Search chats…"
+                  value={sendSearchQuery}
+                  onChange={(e) => setSendSearchQuery(e.target.value)}
+                  className="shrink-0"
+                />
+                <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+                  {(() => {
+                    const q = sendSearchQuery.trim().toLowerCase();
+                    const list = q
+                      ? sendThreads.filter((t) => (t.title || "").toLowerCase().includes(q))
+                      : sendThreads;
+                    return list.length > 0 ? (
+                      list.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={sendingToChat}
+                          onClick={() => void sendIdeaToChat(t.id)}
+                          className="w-full shrink-0 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                        >
+                          💬 {t.title || "Chat"}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                        {q ? "No matching chats." : "No chats yet — use ➕ New chat."}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {sendStage === "doc" && (sendTab === "docs" || !!moveSendSourceId) && (
               <div className="flex min-h-0 flex-col gap-2">
                 {(() => {
                   const slot = favIdxRef.current;
