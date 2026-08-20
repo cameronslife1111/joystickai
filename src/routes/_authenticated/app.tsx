@@ -11,6 +11,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
 
 import { transcribeAudio } from "@/lib/whisper.functions";
@@ -160,6 +161,9 @@ function AppPage() {
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
+  /** Send-to overlay: Docs tab (paste into a list) vs Chats tab (send to Orby). */
+  const [sendTab, setSendTab] = useState<"docs" | "chats">("docs");
+  const [sendingToChat, setSendingToChat] = useState(false);
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
@@ -1665,11 +1669,77 @@ function AppPage() {
     setSendOpen(false);
     setSendDocId(null);
     setSendStage("doc");
+    setSendTab("docs");
     setSendTargetSentences([]);
     setSendAnchorIdx(0);
     setSendSearchQuery("");
     setMoveSendSourceId(null);
   }, []);
+
+  // Chats available in the Send-to overlay's "Chats" tab, most recent first.
+  const { data: sendThreads = [] } = useQuery({
+    queryKey: ["send_chat_threads", currentUserId],
+    enabled: sendOpen && !!currentUserId,
+    queryFn: async (): Promise<{ id: string; title: string }[]> => {
+      const { data, error } = await supabase
+        .from("chat_threads")
+        .select("id, title")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
+
+  /**
+   * Send the New idea text into a chat thread ("new" creates one first). The
+   * turn runs in the background: the composer closes immediately and the user
+   * stays on the exact document + sentence they were reading.
+   */
+  const sendIdeaToChat = useCallback(async (target: string | "new") => {
+    const text = composeText.trim();
+    if (!text) { cancelCompose(); return; }
+    if (!currentUserId) { toast.error("Not signed in"); return; }
+    if (sendingToChat) return;
+    setSendingToChat(true);
+    try {
+      let threadId = target;
+      let threadTitle =
+        sendThreads.find((t) => t.id === target)?.title ?? "New chat";
+      if (target === "new") {
+        const created = await createChatThread(currentUserId);
+        threadId = created.id;
+        threadTitle = created.title;
+      }
+      const userId = currentUserId;
+      const isNew = target === "new";
+      cancelCompose();
+      toast.success(`Sent to ${threadTitle}`);
+      // Fire-and-forget: Orby answers (or plans) in the background.
+      void (async () => {
+        try {
+          await sendTextToChatThread({ userId, threadId, text, send: sendChat });
+          if (isNew) {
+            try {
+              const { title } = await nameChatThread({ data: { message: text } });
+              if (title) {
+                await supabase.from("chat_threads").update({ title }).eq("id", threadId);
+              }
+            } catch { /* naming is best-effort */ }
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Chat send failed");
+        } finally {
+          qc.invalidateQueries({ queryKey: ["chat_threads"] });
+          qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
+          qc.invalidateQueries({ queryKey: ["send_chat_threads", userId] });
+        }
+      })();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send to chat");
+    } finally {
+      setSendingToChat(false);
+    }
+  }, [composeText, currentUserId, sendThreads, sendingToChat, cancelCompose, sendChat, nameChatThread, qc]);
 
   // User picked a target document; load its sentences so they can either jump
   // straight to top/bottom or scroll a sentence list and pick the exact anchor.
@@ -3559,7 +3629,7 @@ function AppPage() {
           >
             <div className="mb-3 flex items-center justify-between px-2">
               <div className="font-display text-lg">
-                {sendStage === "doc" && "Send to which list?"}
+                {sendStage === "doc" && (sendTab === "chats" ? "Send to which chat?" : "Send to which list?")}
                 {sendStage === "where" && "Where in the list?"}
                 {sendStage === "pickAnchor" && "After which sentence?"}
               </div>
@@ -3571,7 +3641,71 @@ function AppPage() {
               </button>
             </div>
 
-            {sendStage === "doc" && (
+            {sendStage === "doc" && !moveSendSourceId && (
+              <div className="mb-2 flex shrink-0 rounded-xl border border-foreground/10 bg-foreground/5 p-1">
+                {(["docs", "chats"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setSendTab(t); setSendSearchQuery(""); }}
+                    className={
+                      "flex-1 rounded-lg px-3 py-1.5 text-sm transition " +
+                      (sendTab === t
+                        ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                        : "text-muted-foreground hover:bg-foreground/10")
+                    }
+                  >
+                    {t === "docs" ? "Docs" : "Chats"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {sendStage === "doc" && sendTab === "chats" && !moveSendSourceId && (
+              <div className="flex min-h-0 flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={sendingToChat}
+                  onClick={() => void sendIdeaToChat("new")}
+                  className="w-full shrink-0 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-left text-sm text-primary transition active:scale-[0.98] hover:bg-primary/20 disabled:opacity-40"
+                >
+                  ➕ New chat
+                </button>
+                <Input
+                  placeholder="Search chats…"
+                  value={sendSearchQuery}
+                  onChange={(e) => setSendSearchQuery(e.target.value)}
+                  className="shrink-0"
+                />
+                <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
+                  {(() => {
+                    const q = sendSearchQuery.trim().toLowerCase();
+                    const list = q
+                      ? sendThreads.filter((t) => (t.title || "").toLowerCase().includes(q))
+                      : sendThreads;
+                    return list.length > 0 ? (
+                      list.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          disabled={sendingToChat}
+                          onClick={() => void sendIdeaToChat(t.id)}
+                          className="w-full shrink-0 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left text-sm transition active:scale-[0.98] hover:bg-foreground/10 disabled:opacity-40"
+                        >
+                          💬 {t.title || "Chat"}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                        {q ? "No matching chats." : "No chats yet — use ➕ New chat."}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {sendStage === "doc" && (sendTab === "docs" || !!moveSendSourceId) && (
               <div className="flex min-h-0 flex-col gap-2">
                 {(() => {
                   const slot = favIdxRef.current;
