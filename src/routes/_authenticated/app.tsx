@@ -1668,11 +1668,77 @@ function AppPage() {
     setSendOpen(false);
     setSendDocId(null);
     setSendStage("doc");
+    setSendTab("docs");
     setSendTargetSentences([]);
     setSendAnchorIdx(0);
     setSendSearchQuery("");
     setMoveSendSourceId(null);
   }, []);
+
+  // Chats available in the Send-to overlay's "Chats" tab, most recent first.
+  const { data: sendThreads = [] } = useQuery({
+    queryKey: ["send_chat_threads", currentUserId],
+    enabled: sendOpen && !!currentUserId,
+    queryFn: async (): Promise<{ id: string; title: string }[]> => {
+      const { data, error } = await supabase
+        .from("chat_threads")
+        .select("id, title")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
+
+  /**
+   * Send the New idea text into a chat thread ("new" creates one first). The
+   * turn runs in the background: the composer closes immediately and the user
+   * stays on the exact document + sentence they were reading.
+   */
+  const sendIdeaToChat = useCallback(async (target: string | "new") => {
+    const text = composeText.trim();
+    if (!text) { cancelCompose(); return; }
+    if (!currentUserId) { toast.error("Not signed in"); return; }
+    if (sendingToChat) return;
+    setSendingToChat(true);
+    try {
+      let threadId = target;
+      let threadTitle =
+        sendThreads.find((t) => t.id === target)?.title ?? "New chat";
+      if (target === "new") {
+        const created = await createChatThread(currentUserId);
+        threadId = created.id;
+        threadTitle = created.title;
+      }
+      const userId = currentUserId;
+      const isNew = target === "new";
+      cancelCompose();
+      toast.success(`Sent to ${threadTitle}`);
+      // Fire-and-forget: Orby answers (or plans) in the background.
+      void (async () => {
+        try {
+          await sendTextToChatThread({ userId, threadId, text, send: sendChat });
+          if (isNew) {
+            try {
+              const { title } = await nameChatThread({ data: { message: text } });
+              if (title) {
+                await supabase.from("chat_threads").update({ title }).eq("id", threadId);
+              }
+            } catch { /* naming is best-effort */ }
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Chat send failed");
+        } finally {
+          qc.invalidateQueries({ queryKey: ["chat_threads"] });
+          qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
+          qc.invalidateQueries({ queryKey: ["send_chat_threads", userId] });
+        }
+      })();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send to chat");
+    } finally {
+      setSendingToChat(false);
+    }
+  }, [composeText, currentUserId, sendThreads, sendingToChat, cancelCompose, sendChat, nameChatThread, qc]);
 
   // User picked a target document; load its sentences so they can either jump
   // straight to top/bottom or scroll a sentence list and pick the exact anchor.
