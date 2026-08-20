@@ -1186,10 +1186,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           >
                             <FileDown className="h-3.5 w-3.5" />
                           </button>
+                         )}
+                        {m.role === "assistant" && (
+                          <button
+                            type="button"
+                            onClick={() => setNewDocFor(m)}
+                            aria-label="Create new document from this reply"
+                            className="rounded-md p-1 text-muted-foreground transition hover:text-foreground"
+                          >
+                            <FilePlus className="h-3.5 w-3.5" />
+                          </button>
                         )}
-                      </div>
-                    </div>
-                  ),
+                       </div>
+                     </div>
+                   ),
                 )}
                 {delegateCard && delegateDocRef.current?.threadId === activeThreadId && (
                   <div className="flex flex-col items-start">
