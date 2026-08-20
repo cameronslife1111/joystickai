@@ -24,6 +24,8 @@ import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { DictateButton } from "./DictateButton";
+import { appendTranscript } from "@/lib/use-voice-dictation";
 
 interface SourceImage {
   id: string;
@@ -183,9 +185,12 @@ export function VideoToVideoDialog({ open, onOpenChange, sourceImage, onSubmitte
             />
 
             <div className="flex w-full min-w-0 max-w-full flex-col gap-2">
-              <Button type="button" variant="outline" size="sm" className="h-auto max-w-full self-start whitespace-normal py-2 text-left" onClick={() => setDocPickerOpen(true)}>
-                <Paperclip className="mr-2 h-4 w-4" /> Attach documents
-              </Button>
+              <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
+                <Button type="button" variant="outline" size="sm" className="h-auto max-w-full whitespace-normal py-2 text-left" onClick={() => setDocPickerOpen(true)}>
+                  <Paperclip className="mr-2 h-4 w-4" /> Attach documents
+                </Button>
+                <DictateButton onText={(t) => setPrompt((p) => appendTranscript(p, t))} />
+              </div>
               {docIds.length > 0 && (
                 <div className="flex min-w-0 max-w-full gap-2 overflow-x-auto pb-1">
                   {docIds.map((id) => (

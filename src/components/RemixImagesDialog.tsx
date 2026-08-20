@@ -18,6 +18,8 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { assembleImagePrompt } from "@/lib/media-prompt";
+import { DictateButton } from "./DictateButton";
+import { appendTranscript } from "@/lib/use-voice-dictation";
 import { nextRedoTitle } from "@/lib/redo-title";
 
 interface InitialAsset {
@@ -249,15 +251,17 @@ export function RemixImagesDialog({ open, onOpenChange, initialAsset, onSubmitte
                 />
 
                 <div className="flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="self-start"
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    <Paperclip className="mr-2 h-4 w-4" /> Attach documents
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      <Paperclip className="mr-2 h-4 w-4" /> Attach documents
+                    </Button>
+                    <DictateButton onText={(t) => setPrompt((p) => appendTranscript(p, t))} />
+                  </div>
                   {docIds.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto pb-1">
                       {docIds.map((id) => (
