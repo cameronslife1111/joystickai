@@ -160,6 +160,9 @@ function AppPage() {
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
+  /** Send-to overlay: Docs tab (paste into a list) vs Chats tab (send to Orby). */
+  const [sendTab, setSendTab] = useState<"docs" | "chats">("docs");
+  const [sendingToChat, setSendingToChat] = useState(false);
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
   const [sendAnchorIdx, setSendAnchorIdx] = useState<number>(0);
   const [sendSearchQuery, setSendSearchQuery] = useState("");
