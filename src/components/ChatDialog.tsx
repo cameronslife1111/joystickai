@@ -7,6 +7,7 @@ import {
   Square,
   Copy,
   FileDown,
+  FilePlus,
   Send,
   Trash2,
   Image as ImageIcon,
@@ -253,6 +254,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [insertFor, setInsertFor] = useState<ChatRow | null>(null);
+  const [newDocFor, setNewDocFor] = useState<ChatRow | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
   const [renameThread, setRenameThread] = useState<Thread | null>(null);
@@ -1184,10 +1186,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           >
                             <FileDown className="h-3.5 w-3.5" />
                           </button>
+                         )}
+                        {m.role === "assistant" && (
+                          <button
+                            type="button"
+                            onClick={() => setNewDocFor(m)}
+                            aria-label="Create new document from this reply"
+                            className="rounded-md p-1 text-muted-foreground transition hover:text-foreground"
+                          >
+                            <FilePlus className="h-3.5 w-3.5" />
+                          </button>
                         )}
-                      </div>
-                    </div>
-                  ),
+                       </div>
+                     </div>
+                   ),
                 )}
                 {delegateCard && delegateDocRef.current?.threadId === activeThreadId && (
                   <div className="flex flex-col items-start">
@@ -1633,7 +1645,103 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         currentDocumentId={currentDocumentId}
         documents={documents}
       />
+
+      <NewDocFromReplyDialog row={newDocFor} onClose={() => setNewDocFor(null)} />
     </>
+  );
+}
+
+/** ＋ button under a reply: create a brand-new document holding that reply. */
+function NewDocFromReplyDialog({
+  row,
+  onClose,
+}: {
+  row: ChatRow | null;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!row) return;
+    const suggestion = (row.content || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .slice(0, 6)
+      .join(" ")
+      .slice(0, 60);
+    setTitle(suggestion);
+  }, [row]);
+
+  const create = async () => {
+    if (!row || busy) return;
+    const sentences = splitIntoSentences(row.content);
+    if (sentences.length === 0) {
+      toast.error("Nothing to save");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Not signed in");
+      const { count } = await supabase
+        .from("documents")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", u.user.id);
+      const finalTitle = title.trim() || "Untitled";
+      const { data: doc, error: dErr } = await supabase
+        .from("documents")
+        .insert({ user_id: u.user.id, title: finalTitle, position: count ?? 0 })
+        .select("id")
+        .single();
+      if (dErr || !doc) throw new Error(dErr?.message || "Couldn't create the document");
+      const { error: sErr } = await supabase.rpc("insert_sentences_at", {
+        p_document_id: doc.id,
+        p_contents: sentences,
+        p_insert_at: 0,
+      });
+      if (sErr) throw sErr;
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["sentences", doc.id] });
+      toast.success(`Created ${finalTitle}`);
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create the document");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md rounded-3xl border border-foreground/10 bg-card/95 p-4 backdrop-blur">
+        <DialogHeader className="mb-2 px-1">
+          <DialogTitle className="font-display text-lg">Name your new document</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void create();
+            }
+          }}
+          placeholder="Untitled"
+        />
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={() => void create()} disabled={busy}>
+            {busy ? "Creating…" : "Create"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
