@@ -16,6 +16,7 @@ import {
   getSelectedVoiceURI,
   selectVoice,
   subscribeToVoices,
+  unlockSpeech,
   type VoiceOption,
 } from "@/lib/tts";
 import { splitIntoSentences } from "@/lib/sentences";
@@ -1468,6 +1469,7 @@ function AppPage() {
       onLongPressEnd,
       onSwipe: (dir) => {
         if (editing) return; // disable all swipes while in edit mode
+        if (!mutedRef.current) unlockSpeech();
         (orbRef.current as any)?.boostMood?.();
         setFlare(dir);
         if (dir === "up") void advanceSentence();

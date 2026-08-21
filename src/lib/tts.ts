@@ -25,6 +25,7 @@ let voice: SpeechSynthesisVoice | null = null;
 let voicesReady = false;
 let listenerBound = false;
 let lastCancelAt = 0;
+let audioUnlocked = false;
 const waiting: (() => void)[] = [];
 const voiceSubscribers = new Set<(voices: VoiceOption[]) => void>();
 const VOICE_STORAGE_KEY = "orby_tts_voice";
@@ -114,6 +115,29 @@ function bindVoiceListener() {
 export function primeVoices() {
   bindVoiceListener();
   resolveVoice();
+}
+
+/**
+ * Open WebKit's speech audio session while still inside a trusted user gesture.
+ * The real sentence may be selected only after an awaited index save, by which
+ * point iOS no longer considers it gesture-initiated.
+ */
+export function unlockSpeech() {
+  const s = synth();
+  if (!s || audioUnlocked) return;
+  bindVoiceListener();
+  try {
+    s.resume();
+    const primer = new SpeechSynthesisUtterance(" ");
+    primer.volume = 0;
+    primer.rate = 10;
+    if (voice) {
+      primer.voice = voice;
+      if (voice.lang) primer.lang = voice.lang;
+    }
+    s.speak(primer);
+    audioUnlocked = true;
+  } catch {}
 }
 
 export function getAvailableVoices(): VoiceOption[] {
