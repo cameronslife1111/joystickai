@@ -53,7 +53,6 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { speakText, cancelSpeech } from "@/lib/tts";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
@@ -166,9 +165,14 @@ const stripEmoji = (s: string) =>
 
 // Speak a short phrase with no message-bubble binding (cues, plan announcements).
 function speakPlain(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
   const clean = stripEmoji(text);
   if (!clean) return;
-  speakText(clean);
+  const u = new SpeechSynthesisUtterance(clean);
+  u.rate = 1;
+  u.pitch = 1;
+  window.speechSynthesis.speak(u);
 }
 
 // Pick a cute spoken cue from a plan's summary + step descriptions.
@@ -302,8 +306,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     try {
       window.localStorage.setItem("orby_chat_autospeak", next ? "1" : "0");
     } catch {}
-    if (!next) {
-      cancelSpeech();
+    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
       setSpeakingId(null);
     }
   };
@@ -595,8 +599,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   // Browser text-to-speech would fight the live voice — silence it while live.
   useEffect(() => {
-    if (voice.live) {
-      cancelSpeech();
+    if (voice.live && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
       setSpeakingId(null);
     }
   }, [voice.live]);
@@ -620,8 +624,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [messages, isActiveBusy, open]);
 
   useEffect(() => {
-    if (!open) {
-      cancelSpeech();
+    if (!open && typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
       setSpeakingId(null);
     }
   }, [open]);
@@ -629,12 +633,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   // Speak a message's text and mark it as the actively-spoken message so the
   // per-message Play/Stop button reflects state (and can stop it).
   const speakMessage = (id: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
     const clean = stripEmoji(text);
     if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean);
+    u.rate = 1;
+    u.pitch = 1;
+    u.onend = () => setSpeakingId((cur) => (cur === id ? null : cur));
+    u.onerror = () => setSpeakingId((cur) => (cur === id ? null : cur));
     setSpeakingId(id);
-    speakText(clean, () => true, {
-      onEnd: () => setSpeakingId((cur) => (cur === id ? null : cur)),
-    });
+    window.speechSynthesis.speak(u);
   };
 
   // When a thread is opened (e.g. via a sentence's linked chat) and "Read
@@ -661,8 +670,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
 
   const toggleSpeak = (row: ChatRow) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (speakingId === row.id) {
-      cancelSpeech();
+      window.speechSynthesis.cancel();
       setSpeakingId(null);
       return;
     }
