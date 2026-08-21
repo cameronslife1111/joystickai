@@ -9,7 +9,7 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, runSpeechDiagnostic } from "@/lib/speech";
+import { speakText, cancelSpeech } from "@/lib/speech";
 
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -2953,27 +2953,9 @@ function AppPage() {
               ))}
             </div>
             <button
-              onClick={() => {
-                // Synchronous inside this tap — required by WebKit.
-                runSpeechDiagnostic((d) => {
-                  if (!d.supported) {
-                    toast.error("Speech not supported on this browser");
-                    return;
-                  }
-                  const msg = `voices: ${d.voiceCount} · default: ${d.defaultVoice ?? "none"} · started: ${d.started ? "yes" : "no"} · speaking: ${d.speaking ? "yes" : "no"} · paused: ${d.paused ? "yes" : "no"}`;
-                  if (d.started || d.speaking) toast.success(msg);
-                  else toast.error(msg);
-                });
-              }}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-foreground/10 bg-card/60 py-3 text-sm text-foreground/80 hover:bg-card hover:text-foreground"
-            >
-              <span>🔊</span>
-              <span>Speech test</span>
-            </button>
-            <button
               onClick={() => setMenuOpen(false)}
               aria-label="Close menu"
-              className="mt-2 flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 hover:text-foreground hover:bg-card"
+              className="mt-3 flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 hover:text-foreground hover:bg-card"
             >
               <span className="text-lg">←</span>
             </button>
