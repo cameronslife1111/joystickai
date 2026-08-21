@@ -189,27 +189,67 @@ export function useOrbGestures(
     let ax = 0;
     let ay = 0;
     let lastWheel = 0;
-    let cooldownUntil = 0;
+    let wheelAxis: "x" | "y" | null = null;
+    let wheelTriggered = false;
+    let wheelEndTimer: ReturnType<typeof setTimeout> | null = null;
     const WHEEL_THRESHOLD = 70;
+    const AXIS_LOCK_THRESHOLD = 10;
+    const WHEEL_END_MS = 180;
 
-    const onWheel = (e: WheelEvent) => {
-      if (!allowed() || isTyping(e.target)) return;
-      const now = Date.now();
-      if (now < cooldownUntil) return;
-      if (now - lastWheel > 250) {
-        ax = 0;
-        ay = 0;
-      }
-      lastWheel = now;
-      ax += e.deltaX;
-      ay += e.deltaY;
-      if (Math.abs(ax) < WHEEL_THRESHOLD && Math.abs(ay) < WHEEL_THRESHOLD) return;
-      // deltas follow finger direction: fingers up => deltaY > 0.
-      const dir: SwipeDirection =
-        Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? "left" : "right") : ay > 0 ? "up" : "down";
+    const resetWheelGesture = () => {
       ax = 0;
       ay = 0;
-      cooldownUntil = now + 450;
+      lastWheel = 0;
+      wheelAxis = null;
+      wheelTriggered = false;
+      if (wheelEndTimer) {
+        clearTimeout(wheelEndTimer);
+        wheelEndTimer = null;
+      }
+    };
+
+    const normalizeWheelDelta = (value: number, mode: number) => {
+      if (mode === WheelEvent.DOM_DELTA_LINE) return value * 16;
+      if (mode === WheelEvent.DOM_DELTA_PAGE) return value * window.innerHeight;
+      return value;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      // A trackpad pinch is also delivered as ctrl+wheel; leave browser zoom
+      // alone instead of misreading it as an Orb swipe.
+      if (e.ctrlKey || !allowed() || isTyping(e.target)) {
+        resetWheelGesture();
+        return;
+      }
+
+      const now = Date.now();
+      if (lastWheel && now - lastWheel > WHEEL_END_MS) resetWheelGesture();
+      lastWheel = now;
+
+      if (wheelEndTimer) clearTimeout(wheelEndTimer);
+      wheelEndTimer = setTimeout(resetWheelGesture, WHEEL_END_MS);
+
+      ax += normalizeWheelDelta(e.deltaX, e.deltaMode);
+      ay += normalizeWheelDelta(e.deltaY, e.deltaMode);
+
+      if (!wheelAxis && Math.max(Math.abs(ax), Math.abs(ay)) >= AXIS_LOCK_THRESHOLD) {
+        wheelAxis = Math.abs(ax) > Math.abs(ay) ? "x" : "y";
+      }
+      if (!wheelAxis) return;
+
+      // Once the user's intent is clear, claim this gesture so horizontal
+      // swipes cannot turn into Chrome/Safari history navigation. Keep
+      // claiming its momentum tail, but fire the app action only once.
+      if (e.cancelable) e.preventDefault();
+      if (wheelTriggered) return;
+
+      const distance = wheelAxis === "x" ? Math.abs(ax) : Math.abs(ay);
+      if (distance < WHEEL_THRESHOLD) return;
+
+      // deltas follow finger direction: fingers up => deltaY > 0.
+      const dir: SwipeDirection =
+        wheelAxis === "x" ? (ax > 0 ? "left" : "right") : ay > 0 ? "up" : "down";
+      wheelTriggered = true;
       cbRef.current.onSwipe?.(dir);
     };
 
@@ -226,11 +266,12 @@ export function useOrbGestures(
       cbRef.current.onSwipe?.(dir);
     };
 
-    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
+      resetWheelGesture();
     };
   }, [desktopInput]);
 }
