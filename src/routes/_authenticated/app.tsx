@@ -43,7 +43,16 @@ import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
 
 export const Route = createFileRoute("/_authenticated/app")({
-  head: () => ({ meta: [{ title: "Orby" }] }),
+  head: () => ({
+    meta: [
+      { title: "Orby — Voice Document Workspace" },
+      { name: "description", content: "Navigate documents, chat, plan, and create with Orby." },
+      { property: "og:title", content: "Orby — Voice Document Workspace" },
+      { property: "og:description", content: "Navigate documents, chat, plan, and create with Orby." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: AppPage,
 });
 
@@ -808,7 +817,8 @@ function AppPage() {
     linkPickerOpen ||
     chatOpen ||
     planApprovalOpen ||
-    plansScreenOpen;
+    plansScreenOpen ||
+    voicePickerOpen;
 
   // Track recently-opened documents (most-recent first) in localStorage.
   useEffect(() => {
