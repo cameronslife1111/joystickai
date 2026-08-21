@@ -189,6 +189,10 @@ export function useOrbGestures(
     let ax = 0;
     let ay = 0;
     let fired = false;
+    let firedAt = 0;
+    let lastMagnitude = 0;
+    let firedAxis: "x" | "y" | null = null;
+    let firedSign = 0;
     let quietTimer: ReturnType<typeof setTimeout> | null = null;
     const WHEEL_THRESHOLD = 70;
     const WHEEL_QUIET_MS = 180;
@@ -197,6 +201,10 @@ export function useOrbGestures(
       ax = 0;
       ay = 0;
       fired = false;
+      firedAt = 0;
+      lastMagnitude = 0;
+      firedAxis = null;
+      firedSign = 0;
       if (quietTimer) {
         clearTimeout(quietTimer);
         quietTimer = null;
@@ -216,8 +224,29 @@ export function useOrbGestures(
         : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
           ? window.innerHeight
           : 1;
-      ax += e.deltaX * unit;
-      ay += e.deltaY * unit;
+      const dx = e.deltaX * unit;
+      const dy = e.deltaY * unit;
+      const axis: "x" | "y" = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      const primary = axis === "x" ? dx : dy;
+      const magnitude = Math.abs(primary);
+      const sign = Math.sign(primary);
+      const now = Date.now();
+
+      // macOS momentum can keep emitting tiny wheel events long after fingers
+      // lift. A renewed impulse (larger delta), axis change, or direction change
+      // starts a fresh gesture without waiting for that momentum tail to stop.
+      if (
+        fired &&
+        now - firedAt > 120 &&
+        (axis !== firedAxis || sign !== firedSign || magnitude > Math.max(18, lastMagnitude * 1.8))
+      ) {
+        ax = 0;
+        ay = 0;
+        fired = false;
+      }
+      ax += dx;
+      ay += dy;
+      lastMagnitude = magnitude;
       if (quietTimer) clearTimeout(quietTimer);
       quietTimer = setTimeout(resetWheel, WHEEL_QUIET_MS);
       if (fired) return;
@@ -226,6 +255,9 @@ export function useOrbGestures(
       const dir: SwipeDirection =
         Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? "left" : "right") : ay > 0 ? "up" : "down";
       fired = true;
+      firedAt = now;
+      firedAxis = Math.abs(ax) > Math.abs(ay) ? "x" : "y";
+      firedSign = Math.sign(firedAxis === "x" ? ax : ay);
       cbRef.current.onSwipe?.(dir);
     };
 
