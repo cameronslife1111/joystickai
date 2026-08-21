@@ -756,12 +756,9 @@ function AppPage() {
     speakText(clean);
   }, []);
 
-  // Cancel any in-flight speech and claim a fresh speech token. Call at the
-  // start of every user-driven action that might end in speak().
+  // Claim a fresh app token. The shared speech engine owns queue replacement;
+  // cancelling here as well caused WebKit to clear the following utterance.
   const claimSpeech = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
     return ++speechTokenRef.current;
   }, []);
 
@@ -1178,7 +1175,8 @@ function AppPage() {
       toast.error("Linked chat not found");
       return false;
     }
-    claimSpeech(); // stop sentence TTS so the chat can read its reply
+    claimSpeech();
+    cancelSpeech(); // no replacement follows, so explicitly stop sentence TTS
     setPendingChatThreadId(threadId);
     setChatStartInList(false);
     setChatOpen(true);
