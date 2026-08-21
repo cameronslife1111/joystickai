@@ -55,6 +55,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
+import { speakText, cancelSpeech } from "@/lib/speech";
+
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { useRealtimeVoice } from "@/lib/use-realtime-voice";
 import { buildRealtimeDocContext } from "@/lib/realtime.functions";
