@@ -148,7 +148,9 @@ export function selectVoice(voiceURI: string): boolean {
 export function subscribeToVoices(subscriber: (voices: VoiceOption[]) => void) {
   voiceSubscribers.add(subscriber);
   subscriber(getAvailableVoices());
-  return () => voiceSubscribers.delete(subscriber);
+  return () => {
+    voiceSubscribers.delete(subscriber);
+  };
 }
 
 /** Stop anything in flight and invalidate queued speech. */
