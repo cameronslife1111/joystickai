@@ -12,6 +12,8 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+import { installSpeechUnlock } from "@/lib/speech";
+
 // Side-effect: route backend requests through the same-origin proxy on the
 // client so the app loads on flaky/cellular networks. Must run before any
 // backend call is made.
