@@ -18,7 +18,16 @@ interface Options {
   moveCancelPx?: number;
   /** Change this value to force listeners to re-bind to the current ref.current. */
   rebindKey?: string | number | boolean | null;
+  /**
+   * Desktop input: trackpad two-finger swipes (wheel events) and arrow keys map
+   * onto the same four swipe callbacks. Returns false while a dialog/editor is
+   * open so desktop input can't fire behind an overlay.
+   */
+  desktopGuard?: () => boolean;
+  /** Set false to disable wheel/arrow-key swipes entirely. */
+  desktopInput?: boolean;
 }
+
 
 export function useOrbGestures(
   ref: React.RefObject<HTMLElement | null>,
