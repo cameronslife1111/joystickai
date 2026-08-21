@@ -737,36 +737,32 @@ function AppPage() {
   };
 
 
-  // TTS — token-gated, race-safe against rapid handler chains.
-  // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
-  // speechSynthesis.speak() when it's called synchronously after a user
-  // gesture (or after the one-time unlock in __root.tsx). Any delay or
-  // async hop here causes iOS to silently drop the utterance.
+  // TTS — token-gated, race-safe against rapid handler chains. The actual
+  // speechSynthesis handling (WebKit's cancel-eats-next-utterance bug, paused
+  // queue, empty voice list) lives in @/lib/tts.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (inCallRef.current) return; // on a call — only the conversation is audible
     if (recordingRef.current) return; // voice-edit mode — user is speaking, stay silent
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(clean);
-      u.rate = 1; u.pitch = 1;
-      window.speechSynthesis.speak(u);
-    } catch {}
+    speakText(clean, () =>
+      (token == null || token === speechTokenRef.current) &&
+      !mutedRef.current &&
+      !inCallRef.current &&
+      !recordingRef.current,
+    );
   }, []);
 
   // Cancel any in-flight speech and claim a fresh speech token. Call at the
   // start of every user-driven action that might end in speak().
   const claimSpeech = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+    cancelSpeech();
     return ++speechTokenRef.current;
   }, []);
+
 
   // Track "busy" UI state via a ref so the auto-repeat timer can check it at
   // fire time without re-subscribing every time a dialog toggles.
