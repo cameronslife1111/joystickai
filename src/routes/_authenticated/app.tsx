@@ -1451,10 +1451,33 @@ function AppPage() {
     {
       swipeThreshold: 38,
       moveCancelPx: 16,
+      // Desktop (MacBook trackpad two-finger swipe + arrow keys): only when no
+      // overlay is open, so keys/wheel can't fire behind a dialog.
+      desktopGuard: () =>
+        !editing &&
+        !menuOpen &&
+        !moveOpen &&
+        !searchOpen &&
+        !recentOpen &&
+        !composing &&
+        !chatOpen &&
+        !sendOpen &&
+        !favoritesOpen &&
+        !jumpOpen &&
+        !renameOpen &&
+        !newDocOpen &&
+        !deleteDocOpen &&
+        !pinPickerOpen &&
+        !linkPickerOpen &&
+        !planApprovalOpen &&
+        !plansScreenOpen &&
+        !exportChooserOpen &&
+        !recording,
       // The orb is unmounted while the editor is open, so exiting edit mode
       // creates a brand-new element — rebind listeners to it.
       rebindKey: `${docIconUrl ?? "orb"}|${editing ? "edit" : "read"}`,
     },
+
   );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
