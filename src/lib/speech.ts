@@ -48,7 +48,6 @@ const CHUNK_MAX = 170;
 
 function chunkText(text: string): string[] {
   if (text.length <= CHUNK_MAX) return [text];
-  // Split on sentence ends first, then on clause boundaries, then hard-wrap.
   const parts: string[] = [];
   let buf = "";
   const push = () => {
@@ -56,21 +55,22 @@ function chunkText(text: string): string[] {
     if (t) parts.push(t);
     buf = "";
   };
-  const pieces = text.split(/(?<=[.!?;:,])\s+|(?<=\s)(?=\S)/);
-  for (const p of pieces) {
-    if ((buf + p).length > CHUNK_MAX && buf.trim()) push();
-    buf += p;
-    if (buf.length >= CHUNK_MAX) {
-      // A single very long token — hard-wrap it.
-      while (buf.length > CHUNK_MAX) {
-        parts.push(buf.slice(0, CHUNK_MAX));
-        buf = buf.slice(CHUNK_MAX);
-      }
+  // Words, keeping sentence punctuation attached so prosody survives.
+  for (let word of text.split(" ")) {
+    while (word.length > CHUNK_MAX) {
+      push();
+      parts.push(word.slice(0, CHUNK_MAX));
+      word = word.slice(CHUNK_MAX);
     }
+    if (buf && (buf.length + 1 + word.length > CHUNK_MAX)) push();
+    buf = buf ? `${buf} ${word}` : word;
+    // Prefer breaking right after a sentence end once we're reasonably full.
+    if (buf.length > CHUNK_MAX * 0.6 && /[.!?]$/.test(buf)) push();
   }
   push();
   return parts.filter((p) => SPEAKABLE_RE.test(p));
 }
+
 
 /* -------------------------------- voices --------------------------------- */
 
