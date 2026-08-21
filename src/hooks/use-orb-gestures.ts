@@ -167,4 +167,72 @@ export function useOrbGestures(
       if (tapTimer) clearTimeout(tapTimer);
     };
   }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey, retry]);
+
+  // ---- Desktop: trackpad two-finger swipes + arrow keys ------------------
+  // Mac trackpads never produce a pointer drag for a swipe — they emit a burst
+  // of wheel events — so laptops otherwise have no way to trigger the gestures.
+  const desktopInput = opts.desktopInput ?? true;
+  const guardRef = useRef(opts.desktopGuard);
+  guardRef.current = opts.desktopGuard;
+
+  useEffect(() => {
+    if (!desktopInput || typeof window === "undefined") return;
+
+    const allowed = () => (guardRef.current ? guardRef.current() !== false : true);
+
+    const isTyping = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el || !el.closest) return false;
+      return !!el.closest("input, textarea, select, [contenteditable='true']");
+    };
+
+    let ax = 0;
+    let ay = 0;
+    let lastWheel = 0;
+    let cooldownUntil = 0;
+    const WHEEL_THRESHOLD = 70;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!allowed() || isTyping(e.target)) return;
+      const now = Date.now();
+      if (now < cooldownUntil) return;
+      if (now - lastWheel > 250) {
+        ax = 0;
+        ay = 0;
+      }
+      lastWheel = now;
+      ax += e.deltaX;
+      ay += e.deltaY;
+      if (Math.abs(ax) < WHEEL_THRESHOLD && Math.abs(ay) < WHEEL_THRESHOLD) return;
+      // deltas follow finger direction: fingers up => deltaY > 0.
+      const dir: SwipeDirection =
+        Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? "left" : "right") : ay > 0 ? "up" : "down";
+      ax = 0;
+      ay = 0;
+      cooldownUntil = now + 450;
+      cbRef.current.onSwipe?.(dir);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!allowed() || isTyping(e.target)) return;
+      let dir: SwipeDirection | null = null;
+      if (e.key === "ArrowUp") dir = "up";
+      else if (e.key === "ArrowDown") dir = "down";
+      else if (e.key === "ArrowLeft") dir = "left";
+      else if (e.key === "ArrowRight") dir = "right";
+      if (!dir) return;
+      e.preventDefault();
+      cbRef.current.onSwipe?.(dir);
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [desktopInput]);
+}
+
 }
