@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export type SwipeDirection = "up" | "down" | "left" | "right";
 
@@ -20,6 +20,20 @@ interface Options {
   rebindKey?: string | number | boolean | null;
 }
 
+/**
+ * Gesture layer for the orb.
+ *
+ * Design notes (why it looks like this):
+ * - The gesture *starts* on the orb, but move/end are tracked on `window`. The
+ *   orb is small; a trackpad or finger drag leaves it long before the swipe
+ *   threshold is reached, and relying on pointer capture alone proved fragile
+ *   across browsers.
+ * - Mouse and touch fallbacks exist for engines where the Pointer Event path
+ *   doesn't deliver (or is suppressed). They're ignored whenever a pointer
+ *   event was seen for the same interaction, so callbacks never double-fire.
+ * - The element is polled for a short while when it isn't mounted yet, without
+ *   triggering re-renders.
+ */
 export function useOrbGestures(
   ref: React.RefObject<HTMLElement | null>,
   cb: OrbGestureCallbacks,
@@ -33,129 +47,207 @@ export function useOrbGestures(
   const cbRef = useRef(cb);
   cbRef.current = cb;
 
-  // Safety net: if the element isn't mounted yet when the effect runs, retry on
-  // the next frame so listeners always end up attached to the live node. Capped
-  // so a deliberately-unmounted orb (editor open) can't re-render every frame.
-  const [retry, setRetry] = useState(0);
-  const retriesRef = useRef(0);
-
   useEffect(() => {
-    const el = ref.current;
-    if (!el) {
-      if (retriesRef.current >= 5) return;
-      retriesRef.current += 1;
-      const raf = requestAnimationFrame(() => setRetry((n) => n + 1));
-      return () => cancelAnimationFrame(raf);
-    }
-    retriesRef.current = 0;
+    let disposed = false;
+    let cleanup: (() => void) | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
+    const attach = (el: HTMLElement) => {
+      let startX = 0;
+      let startY = 0;
+      let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+      let isLongPressing = false;
+      let active = false;
+      let usingPointer = false;
+      let tapCount = 0;
+      let tapTimer: ReturnType<typeof setTimeout> | null = null;
 
+      try {
+        (el as HTMLElement & { draggable?: boolean }).draggable = false;
+      } catch {}
 
-    let startX = 0;
-    let startY = 0;
-    let startTime = 0;
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-    let isLongPressing = false;
-    let pointerActive = false;
-    let tapCount = 0;
-    let tapTimer: ReturnType<typeof setTimeout> | null = null;
-    let activePointerId: number | null = null;
-
-    const clearLongPress = () => {
-      if (longPressTimer) {
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-      }
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      if (pointerActive) return;
-      pointerActive = true;
-      activePointerId = e.pointerId;
-      el.setPointerCapture?.(e.pointerId);
-      startX = e.clientX;
-      startY = e.clientY;
-      startTime = Date.now();
-      isLongPressing = false;
-
-      longPressTimer = setTimeout(() => {
-        isLongPressing = true;
-        cbRef.current.onLongPressStart?.();
-      }, longPressMs);
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!pointerActive || e.pointerId !== activePointerId) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      if (!isLongPressing && Math.hypot(dx, dy) > moveCancelPx) {
-        clearLongPress();
-      }
-    };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (!pointerActive || e.pointerId !== activePointerId) return;
-      pointerActive = false;
-      activePointerId = null;
-      el.releasePointerCapture?.(e.pointerId);
-      clearLongPress();
-
-      if (isLongPressing) {
-        cbRef.current.onLongPressEnd?.();
-        isLongPressing = false;
-        return;
-      }
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      const dist = Math.hypot(dx, dy);
-
-      if (dist >= swipeThreshold) {
-        let dir: SwipeDirection;
-        if (Math.abs(dx) > Math.abs(dy)) {
-          dir = dx > 0 ? "right" : "left";
-        } else {
-          dir = dy > 0 ? "down" : "up";
+      const clearLongPress = () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
         }
-        cbRef.current.onSwipe?.(dir);
+      };
+
+      const begin = (x: number, y: number, pointer: boolean) => {
+        if (active) return;
+        active = true;
+        usingPointer = pointer;
+        startX = x;
+        startY = y;
+        isLongPressing = false;
+        longPressTimer = setTimeout(() => {
+          isLongPressing = true;
+          cbRef.current.onLongPressStart?.();
+        }, longPressMs);
+      };
+
+      const move = (x: number, y: number) => {
+        if (!active) return;
+        if (!isLongPressing && Math.hypot(x - startX, y - startY) > moveCancelPx) {
+          clearLongPress();
+        }
+      };
+
+      const finish = (x: number, y: number) => {
+        if (!active) return;
+        active = false;
+        clearLongPress();
+
+        if (isLongPressing) {
+          cbRef.current.onLongPressEnd?.();
+          isLongPressing = false;
+          return;
+        }
+
+        const dx = x - startX;
+        const dy = y - startY;
+        if (Math.hypot(dx, dy) >= swipeThreshold) {
+          const dir: SwipeDirection =
+            Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+          cbRef.current.onSwipe?.(dir);
+          return;
+        }
+
+        tapCount += 1;
+        if (tapTimer) clearTimeout(tapTimer);
+        tapTimer = setTimeout(() => {
+          const n = tapCount;
+          tapCount = 0;
+          tapTimer = null;
+          if (n === 1) cbRef.current.onTap?.();
+          else if (n === 2) cbRef.current.onDoubleTap?.();
+          else cbRef.current.onTripleTap?.();
+        }, doubleTapMs);
+      };
+
+      const abort = () => {
+        if (!active) return;
+        active = false;
+        clearLongPress();
+        if (isLongPressing) {
+          cbRef.current.onLongPressEnd?.();
+          isLongPressing = false;
+        }
+      };
+
+      /* ------------------------- pointer events ------------------------- */
+      let activePointerId: number | null = null;
+
+      const onPointerDown = (e: PointerEvent) => {
+        // Stop native drag / text selection from stealing the interaction.
+        e.preventDefault();
+        activePointerId = e.pointerId;
+        begin(e.clientX, e.clientY, true);
+      };
+      const onPointerMove = (e: PointerEvent) => {
+        if (!usingPointer || e.pointerId !== activePointerId) return;
+        move(e.clientX, e.clientY);
+      };
+      const onPointerUp = (e: PointerEvent) => {
+        if (!usingPointer || e.pointerId !== activePointerId) return;
+        activePointerId = null;
+        finish(e.clientX, e.clientY);
+      };
+      const onPointerCancel = (e: PointerEvent) => {
+        if (!usingPointer || e.pointerId !== activePointerId) return;
+        activePointerId = null;
+        abort();
+      };
+
+      /* -------------------------- mouse fallback ------------------------- */
+      const onMouseDown = (e: MouseEvent) => {
+        if (usingPointer || active) return;
+        e.preventDefault();
+        begin(e.clientX, e.clientY, false);
+      };
+      const onMouseMove = (e: MouseEvent) => {
+        if (usingPointer) return;
+        move(e.clientX, e.clientY);
+      };
+      const onMouseUp = (e: MouseEvent) => {
+        if (usingPointer) return;
+        finish(e.clientX, e.clientY);
+      };
+
+      /* -------------------------- touch fallback ------------------------- */
+      const onTouchStart = (e: TouchEvent) => {
+        if (usingPointer || active) return;
+        const t = e.touches[0];
+        if (!t) return;
+        begin(t.clientX, t.clientY, false);
+      };
+      const onTouchMove = (e: TouchEvent) => {
+        if (usingPointer) return;
+        const t = e.touches[0];
+        if (!t) return;
+        move(t.clientX, t.clientY);
+      };
+      const onTouchEnd = (e: TouchEvent) => {
+        if (usingPointer) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        finish(t.clientX, t.clientY);
+      };
+
+      const onDragStart = (e: Event) => e.preventDefault();
+      const onContextMenu = (e: Event) => e.preventDefault();
+
+      el.addEventListener("pointerdown", onPointerDown);
+      el.addEventListener("mousedown", onMouseDown);
+      el.addEventListener("touchstart", onTouchStart, { passive: true });
+      el.addEventListener("dragstart", onDragStart);
+      el.addEventListener("contextmenu", onContextMenu);
+
+      // End/move on window: the drag routinely travels outside the orb.
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerCancel);
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("touchmove", onTouchMove, { passive: true });
+      window.addEventListener("touchend", onTouchEnd);
+      window.addEventListener("touchcancel", abort);
+
+      return () => {
+        el.removeEventListener("pointerdown", onPointerDown);
+        el.removeEventListener("mousedown", onMouseDown);
+        el.removeEventListener("touchstart", onTouchStart);
+        el.removeEventListener("dragstart", onDragStart);
+        el.removeEventListener("contextmenu", onContextMenu);
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerCancel);
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        window.removeEventListener("touchmove", onTouchMove);
+        window.removeEventListener("touchend", onTouchEnd);
+        window.removeEventListener("touchcancel", abort);
+        clearLongPress();
+        if (tapTimer) clearTimeout(tapTimer);
+      };
+    };
+
+    // Wait (without re-rendering) for the orb node to exist.
+    const bind = () => {
+      if (disposed) return;
+      const el = ref.current;
+      if (!el) {
+        pollTimer = setTimeout(bind, 100);
         return;
       }
-
-      // Tap counting: single / double / triple
-      tapCount += 1;
-      if (tapTimer) clearTimeout(tapTimer);
-      tapTimer = setTimeout(() => {
-        const n = tapCount;
-        tapCount = 0;
-        tapTimer = null;
-        if (n === 1) cbRef.current.onTap?.();
-        else if (n === 2) cbRef.current.onDoubleTap?.();
-        else cbRef.current.onTripleTap?.();
-      }, doubleTapMs);
+      cleanup = attach(el);
     };
-
-    const onPointerCancel = () => {
-      pointerActive = false;
-      activePointerId = null;
-      clearLongPress();
-      if (isLongPressing) {
-        cbRef.current.onLongPressEnd?.();
-        isLongPressing = false;
-      }
-    };
-
-    el.addEventListener("pointerdown", onPointerDown);
-    el.addEventListener("pointermove", onPointerMove);
-    el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("pointercancel", onPointerCancel);
+    bind();
 
     return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
-      el.removeEventListener("pointermove", onPointerMove);
-      el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("pointercancel", onPointerCancel);
-      clearLongPress();
-      if (tapTimer) clearTimeout(tapTimer);
+      disposed = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      cleanup?.();
     };
-  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey, retry]);
+  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
 }
