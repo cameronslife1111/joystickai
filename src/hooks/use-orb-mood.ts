@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
+import { isSpeaking as speechIsSpeaking } from "@/lib/speech";
+
+
 const DECAY_MS = 5 * 60 * 1000; // 5 minutes to fully asleep
 const BOOST_AMOUNT = 0.18;
 const STORAGE_KEY = "orby_mood_state_v1";
