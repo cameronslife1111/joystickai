@@ -205,8 +205,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         finish(false);
       };
       u.onerror = () => finish(true);
-    } else {
-      u.onstart = u.onstart ?? null;
     }
     return u;
   };
