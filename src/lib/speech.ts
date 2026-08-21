@@ -8,14 +8,11 @@
 //     `speechSynthesis.speaking` stays true forever and every later utterance
 //     sits behind it, so the app goes completely silent with no error. The old
 //     zero-volume "unlock" primer did exactly this.
-//  2. Do NOT assign `utterance.voice` or `utterance.lang` unless we truly have
-//     to. Leaving them alone makes WebKit use the system voice — i.e. the voice
-//     the user picked in Settings > Accessibility > Spoken Content — which is
-//     what we want. Assigning a voice object from a getVoices() list that has
-//     since been refreshed makes WebKit drop the utterance silently.
-//  3. Long text is unreliable; speak in short chunks queued back to back.
-//  4. Verify. If nothing started shortly after speak(), the utterance was
-//     swallowed: clear the queue and speak once more.
+//  2. Resolve a fresh voice for each utterance. WebKit can replace the objects
+//     returned by getVoices(), so cached SpeechSynthesisVoice objects go stale.
+//  3. Long text is unreliable; speak one short chunk at a time.
+//  4. Never cancel and speak in the same tick. Current WebKit builds can let a
+//     queued cancel clear the utterance submitted immediately after it.
 
 type SpeakOpts = {
   rate?: number;
@@ -74,21 +71,28 @@ function chunkText(text: string): string[] {
 
 /* -------------------------------- voices --------------------------------- */
 
-let voicesWarmed = false;
-
-/**
- * Touch getVoices() once so WebKit populates its list. We deliberately do NOT
- * pick or assign a voice: the default (unset) voice is the one the user chose
- * in their device's spoken-content settings.
- */
-function warmVoices() {
-  if (voicesWarmed) return;
+function availableVoices(): SpeechSynthesisVoice[] {
   const s = synth();
-  if (!s) return;
+  if (!s) return [];
   try {
-    s.getVoices();
-    voicesWarmed = true;
-  } catch {}
+    return s.getVoices();
+  } catch {
+    return [];
+  }
+}
+
+/** Always choose from the current list; never retain a voice object. */
+function resolveVoice(): SpeechSynthesisVoice | null {
+  const voices = availableVoices();
+  if (voices.length === 0) return null;
+  const language = (typeof navigator !== "undefined" ? navigator.language : "en-US").toLowerCase();
+  const base = language.split("-")[0];
+  return voices.find((voice) => voice.default)
+    ?? voices.find((voice) => voice.localService && voice.lang.toLowerCase() === language)
+    ?? voices.find((voice) => voice.localService && voice.lang.toLowerCase().split("-")[0] === base)
+    ?? voices.find((voice) => voice.localService)
+    ?? voices[0]
+    ?? null;
 }
 
 /* -------------------------------- unlock --------------------------------- */
@@ -112,7 +116,7 @@ export function installSpeechUnlock() {
   if (!s) return;
   unlockArmed = true;
   const handler = () => {
-    warmVoices();
+    availableVoices();
     try {
       // A queue left in the paused state makes speak() a silent no-op.
       if (s.paused) s.resume();
@@ -128,6 +132,11 @@ export function installSpeechUnlock() {
 
 let generation = 0;
 let watchdogs: number[] = [];
+const liveUtterances = new Set<SpeechSynthesisUtterance>();
+
+function debugSpeech(event: string, detail?: unknown) {
+  if (import.meta.env.DEV) console.debug(`[speech] ${event}`, detail ?? "");
+}
 
 function clearWatchdogs() {
   for (const id of watchdogs) window.clearTimeout(id);
@@ -149,6 +158,7 @@ export function cancelSpeech() {
   try {
     s.cancel();
   } catch {}
+  liveUtterances.clear();
 }
 
 export function isSpeaking(): boolean {
@@ -178,6 +188,8 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   clearWatchdogs();
   let started = false;
   let done = false;
+  let retried = false;
+  let chunkIndex = 0;
 
   const finish = (err: boolean) => {
     if (done || myGen !== generation) return;
@@ -186,65 +198,99 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     else opts.onEnd?.();
   };
 
-  const build = (chunk: string, isFirst: boolean, isLast: boolean) => {
+  const build = (chunk: string, isLast: boolean) => {
     const u = new SpeechSynthesisUtterance(chunk);
     u.rate = opts.rate ?? 1;
     u.pitch = opts.pitch ?? 1;
     u.volume = 1;
-    // Intentionally no u.voice / u.lang — see rule 2 at the top of this file.
-    if (isFirst) {
-      u.onstart = () => {
-        started = true;
-        unlocked = true;
-      };
+    const voice = resolveVoice();
+    if (voice) {
+      u.voice = voice;
+      u.lang = voice.lang;
     }
-    if (isLast) {
-      u.onend = () => {
-        started = true;
-        unlocked = true;
-        finish(false);
-      };
-      u.onerror = () => finish(true);
-    }
+    u.onstart = () => {
+      started = true;
+      unlocked = true;
+      debugSpeech("start", { chunk: chunkIndex + 1, voice: voice?.name ?? "system default" });
+    };
+    u.onend = () => {
+      liveUtterances.delete(u);
+      started = true;
+      unlocked = true;
+      if (myGen !== generation || done) return;
+      if (isLast) finish(false);
+      else {
+        chunkIndex += 1;
+        speakChunk();
+      }
+    };
+    u.onerror = (event) => {
+      liveUtterances.delete(u);
+      debugSpeech("error", event.error);
+      finish(true);
+    };
     return u;
   };
 
-  const queueAll = () => {
-    chunks.forEach((c, i) => {
-      try {
-        s.speak(build(c, i === 0, i === chunks.length - 1));
-      } catch {}
-    });
+  const speakChunk = () => {
+    if (myGen !== generation || done) return;
+    const chunk = chunks[chunkIndex];
+    if (!chunk) return finish(false);
+    const utterance = build(chunk, chunkIndex === chunks.length - 1);
+    liveUtterances.add(utterance);
+    try {
+      s.speak(utterance);
+      debugSpeech("queued", { chunk: chunkIndex + 1, pending: s.pending, speaking: s.speaking });
+    } catch (error) {
+      liveUtterances.delete(utterance);
+      debugSpeech("throw", error);
+      finish(true);
+    }
   };
 
+  const startWhenIdle = (attempt = 0) => {
+    if (myGen !== generation || done) return;
+    try { if (s.paused) s.resume(); } catch {}
+    if ((s.speaking || s.pending) && attempt < 30) {
+      later(() => startWhenIdle(attempt + 1), 16);
+      return;
+    }
+    speakChunk();
+  };
+
+  // Preserve the direct user-gesture path when idle. When replacing active
+  // audio, cancel exactly once and wait for WebKit to observe an idle queue.
   try {
-    // cancel() also clears a wedged queue left over from an utterance that
-    // never fired onend — the usual reason for total silence.
-    s.cancel();
-    if (s.paused) s.resume();
-    queueAll();
-  } catch {
+    if (s.speaking || s.pending || s.paused) {
+      if (s.paused) s.resume();
+      s.cancel();
+      liveUtterances.clear();
+      startWhenIdle();
+    } else {
+      speakChunk();
+    }
+  } catch (error) {
+    debugSpeech("startup throw", error);
     return false;
   }
 
-  // Verification: if nothing ever started, the batch was swallowed. Clear and
-  // re-queue exactly once, then keep nudging a paused queue.
+  // If WebKit swallowed the first request, wait for a populated voice list and
+  // retry once. The retry also gets a newly resolved voice object.
   later(() => {
     if (myGen !== generation || started || done) return;
+    if (retried) return;
+    // Some WebKit voices begin producing audio before dispatching `start`.
+    // Never cancel an utterance the platform still reports as active.
+    if (s.speaking || s.pending) return;
+    retried = true;
+    debugSpeech("retry", { voices: availableVoices().length, pending: s.pending, speaking: s.speaking });
     try {
       if (s.paused) s.resume();
-      if (s.speaking) return;
-      s.cancel();
-      queueAll();
+      liveUtterances.clear();
+      chunkIndex = 0;
+      startWhenIdle();
     } catch {}
-  }, 260);
-
-  later(() => {
-    if (myGen !== generation || started || done) return;
-    try {
-      if (s.paused) s.resume();
-    } catch {}
-  }, 700);
+  }, 900);
 
   return true;
 }
