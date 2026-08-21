@@ -8,7 +8,16 @@ import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
-import { speakText, cancelSpeech, primeVoices } from "@/lib/tts";
+import {
+  speakText,
+  cancelSpeech,
+  primeVoices,
+  getAvailableVoices,
+  getSelectedVoiceURI,
+  selectVoice,
+  subscribeToVoices,
+  type VoiceOption,
+} from "@/lib/tts";
 import { splitIntoSentences } from "@/lib/sentences";
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -22,6 +31,7 @@ import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
@@ -176,6 +186,9 @@ function AppPage() {
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
   const [exportChooserOpen, setExportChooserOpen] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
   const [theme, setTheme] = useState<"dark" | "light">(() => {
@@ -766,6 +779,11 @@ function AppPage() {
   // first spoken sentence isn't dropped.
   useEffect(() => {
     primeVoices();
+    setSelectedVoiceURI(getSelectedVoiceURI());
+    return subscribeToVoices((voices) => {
+      setAvailableVoices(voices);
+      setSelectedVoiceURI(getSelectedVoiceURI());
+    });
   }, []);
 
 
@@ -1472,6 +1490,7 @@ function AppPage() {
         !planApprovalOpen &&
         !plansScreenOpen &&
         !exportChooserOpen &&
+        !voicePickerOpen &&
         !recording,
       // The orb is unmounted while the editor is open, so exiting edit mode
       // creates a brand-new element — rebind listeners to it.
@@ -2315,26 +2334,11 @@ function AppPage() {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
       fn: () => {
-        // CRITICAL iOS: close popup + speak synchronously inside this tap
-        // gesture. Any async hop here breaks the user-gesture context and
-        // iOS Safari silently drops the utterance.
-        const next = !muted;
         setMenuOpen(false);
-        if (next) {
-          // Muting: stop any in-flight speech immediately.
-          cancelSpeech();
-        } else {
-          // Unmuting: speak the currently displayed sentence right now,
-          // synchronously, from this exact tap. This is the iPhone-safe
-          // trigger for the Web Speech API.
-          const text = currentSentence?.content;
-          if (text) {
-            const clean = stripEmoji(text);
-            if (clean) speakText(clean);
-          }
-        }
-        // Persist preference (async, fire-and-forget — happens AFTER speak).
-        void saveMuted(next);
+        primeVoices();
+        setAvailableVoices(getAvailableVoices());
+        setSelectedVoiceURI(getSelectedVoiceURI());
+        setVoicePickerOpen(true);
       },
     },
     { e: "💬", t: "Chat", fn: () => {
@@ -2477,7 +2481,7 @@ function AppPage() {
       })();
     } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
+  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
 
 
 
@@ -3943,6 +3947,64 @@ function AppPage() {
               🗎 Current document (.pdf)
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={voicePickerOpen} onOpenChange={setVoicePickerOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Voice & sound</DialogTitle>
+            <DialogDescription>Choose an English voice available on this device.</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <label htmlFor="speech-enabled" className="text-sm font-medium">Sound</label>
+            <Switch
+              id="speech-enabled"
+              checked={!muted}
+              onCheckedChange={(enabled) => {
+                if (!enabled) cancelSpeech();
+                void saveMuted(!enabled);
+              }}
+            />
+          </div>
+          <div className="max-h-[48svh] space-y-2 overflow-y-auto pr-1">
+            {availableVoices.length === 0 ? (
+              <p className="py-5 text-center text-sm text-muted-foreground">No English voices are available yet.</p>
+            ) : availableVoices.map((item) => {
+              const selected = item.voiceURI === selectedVoiceURI;
+              return (
+                <Button
+                  key={`${item.voiceURI}-${item.lang}`}
+                  type="button"
+                  variant={selected ? "default" : "outline"}
+                  className="h-auto w-full justify-between gap-3 py-3 text-left"
+                  onClick={() => {
+                    if (!selectVoice(item.voiceURI)) return;
+                    setSelectedVoiceURI(item.voiceURI);
+                    if (muted) void saveMuted(false);
+                    speakText(`Hello, I'm Orby using ${item.name}.`);
+                  }}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{item.name}</span>
+                    <span className="block text-xs opacity-70">{item.lang}{item.localService ? " · On device" : ""}</span>
+                  </span>
+                  <span aria-hidden>{selected ? "✓" : "▶"}</span>
+                </Button>
+              );
+            })}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              primeVoices();
+              setAvailableVoices(getAvailableVoices());
+              setSelectedVoiceURI(getSelectedVoiceURI());
+            }}
+          >
+            Refresh voices
+          </Button>
         </DialogContent>
       </Dialog>
 

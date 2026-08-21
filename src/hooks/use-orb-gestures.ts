@@ -188,28 +188,44 @@ export function useOrbGestures(
 
     let ax = 0;
     let ay = 0;
-    let lastWheel = 0;
-    let cooldownUntil = 0;
+    let fired = false;
+    let quietTimer: ReturnType<typeof setTimeout> | null = null;
     const WHEEL_THRESHOLD = 70;
+    const WHEEL_QUIET_MS = 180;
+
+    const resetWheel = () => {
+      ax = 0;
+      ay = 0;
+      fired = false;
+      if (quietTimer) {
+        clearTimeout(quietTimer);
+        quietTimer = null;
+      }
+    };
 
     const onWheel = (e: WheelEvent) => {
-      if (!allowed() || isTyping(e.target)) return;
-      const now = Date.now();
-      if (now < cooldownUntil) return;
-      if (now - lastWheel > 250) {
-        ax = 0;
-        ay = 0;
+      const orb = ref.current;
+      if (!orb || !orb.contains(e.target as Node)) return;
+      if (!allowed() || isTyping(e.target)) {
+        resetWheel();
+        return;
       }
-      lastWheel = now;
-      ax += e.deltaX;
-      ay += e.deltaY;
+      e.preventDefault();
+      const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? window.innerHeight
+          : 1;
+      ax += e.deltaX * unit;
+      ay += e.deltaY * unit;
+      if (quietTimer) clearTimeout(quietTimer);
+      quietTimer = setTimeout(resetWheel, WHEEL_QUIET_MS);
+      if (fired) return;
       if (Math.abs(ax) < WHEEL_THRESHOLD && Math.abs(ay) < WHEEL_THRESHOLD) return;
       // deltas follow finger direction: fingers up => deltaY > 0.
       const dir: SwipeDirection =
         Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? "left" : "right") : ay > 0 ? "up" : "down";
-      ax = 0;
-      ay = 0;
-      cooldownUntil = now + 450;
+      fired = true;
       cbRef.current.onSwipe?.(dir);
     };
 
@@ -226,11 +242,12 @@ export function useOrbGestures(
       cbRef.current.onSwipe?.(dir);
     };
 
-    window.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
+      resetWheel();
     };
-  }, [desktopInput]);
+  }, [desktopInput, ref, opts.rebindKey]);
 }

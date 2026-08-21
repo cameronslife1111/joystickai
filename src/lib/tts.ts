@@ -12,11 +12,22 @@
 
 type Guard = () => boolean;
 
+export type VoiceOption = {
+  voiceURI: string;
+  name: string;
+  lang: string;
+  localService: boolean;
+  default: boolean;
+};
+
 let seq = 0;
 let voice: SpeechSynthesisVoice | null = null;
 let voicesReady = false;
 let listenerBound = false;
+let lastCancelAt = 0;
 const waiting: (() => void)[] = [];
+const voiceSubscribers = new Set<(voices: VoiceOption[]) => void>();
+const VOICE_STORAGE_KEY = "orby_tts_voice";
 
 function synth(): SpeechSynthesis | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -25,6 +36,13 @@ function synth(): SpeechSynthesis | null {
 
 function pickVoice(list: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
   if (!list.length) return null;
+  const saved = readSavedVoice();
+  if (saved) {
+    const exact = list.find((v) => v.voiceURI === saved.voiceURI);
+    if (exact) return exact;
+    const fallback = list.find((v) => v.name === saved.name && v.lang === saved.lang);
+    if (fallback) return fallback;
+  }
   const en = list.filter((v) => v.lang?.toLowerCase().startsWith("en"));
   const pool = en.length ? en : list;
   return pool.find((v) => v.localService && v.default)
@@ -34,6 +52,35 @@ function pickVoice(list: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
     ?? null;
 }
 
+function readSavedVoice(): { voiceURI: string; name: string; lang: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(VOICE_STORAGE_KEY) ?? "null");
+    if (!parsed || typeof parsed.voiceURI !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function publicVoices(list: SpeechSynthesisVoice[]): VoiceOption[] {
+  return list
+    .filter((v) => v.lang?.toLowerCase().startsWith("en"))
+    .map((v) => ({
+      voiceURI: v.voiceURI,
+      name: v.name,
+      lang: v.lang,
+      localService: v.localService,
+      default: v.default,
+    }))
+    .sort((a, b) => Number(b.localService) - Number(a.localService) || a.name.localeCompare(b.name));
+}
+
+function notifyVoiceSubscribers(list: SpeechSynthesisVoice[]) {
+  const available = publicVoices(list);
+  voiceSubscribers.forEach((subscriber) => subscriber(available));
+}
+
 function resolveVoice(): boolean {
   const s = synth();
   if (!s) return false;
@@ -41,6 +88,7 @@ function resolveVoice(): boolean {
   if (!list.length) return false;
   voice = pickVoice(list);
   voicesReady = true;
+  notifyVoiceSubscribers(list);
   return true;
 }
 
@@ -65,6 +113,42 @@ function bindVoiceListener() {
 /** Warm the voice list early (safe to call on mount). */
 export function primeVoices() {
   bindVoiceListener();
+  resolveVoice();
+}
+
+export function getAvailableVoices(): VoiceOption[] {
+  bindVoiceListener();
+  const s = synth();
+  if (!s) return [];
+  resolveVoice();
+  return publicVoices(s.getVoices());
+}
+
+export function getSelectedVoiceURI(): string | null {
+  return voice?.voiceURI ?? readSavedVoice()?.voiceURI ?? null;
+}
+
+export function selectVoice(voiceURI: string): boolean {
+  const s = synth();
+  if (!s) return false;
+  const selected = s.getVoices().find((item) => item.voiceURI === voiceURI);
+  if (!selected) return false;
+  voice = selected;
+  voicesReady = true;
+  try {
+    window.localStorage.setItem(VOICE_STORAGE_KEY, JSON.stringify({
+      voiceURI: selected.voiceURI,
+      name: selected.name,
+      lang: selected.lang,
+    }));
+  } catch {}
+  return true;
+}
+
+export function subscribeToVoices(subscriber: (voices: VoiceOption[]) => void) {
+  voiceSubscribers.add(subscriber);
+  subscriber(getAvailableVoices());
+  return () => voiceSubscribers.delete(subscriber);
 }
 
 /** Stop anything in flight and invalidate queued speech. */
@@ -73,7 +157,10 @@ export function cancelSpeech() {
   const s = synth();
   if (!s) return;
   try {
-    if (s.speaking || s.pending) s.cancel();
+    if (s.speaking || s.pending) {
+      lastCancelAt = Date.now();
+      s.cancel();
+    }
   } catch {}
 }
 
@@ -122,7 +209,7 @@ export function speakText(
     }
     // WebKit sometimes drops the utterance outright — re-issue once.
     window.setTimeout(() => {
-      if (!alive()) return;
+      if (!alive() || ended) return;
       if (s.speaking || s.pending) return;
       try {
         s.resume();
@@ -134,9 +221,14 @@ export function speakText(
   const start = () => {
     if (s.speaking || s.pending) {
       try {
+        lastCancelAt = Date.now();
         s.cancel();
       } catch {}
-      window.setTimeout(run, 70);
+    }
+    const elapsed = Date.now() - lastCancelAt;
+    const delay = Math.max(0, 90 - elapsed);
+    if (delay > 0) {
+      window.setTimeout(run, delay);
     } else {
       run();
     }
