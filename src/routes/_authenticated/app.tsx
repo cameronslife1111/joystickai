@@ -751,12 +751,7 @@ function AppPage() {
     if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    try {
-      cancelSpeech();
-      const u = new SpeechSynthesisUtterance(clean);
-      u.rate = 1; u.pitch = 1;
-      window.speechSynthesis.speak(u);
-    } catch {}
+    speakText(clean);
   }, []);
 
   // Cancel any in-flight speech and claim a fresh speech token. Call at the
@@ -2314,13 +2309,7 @@ function AppPage() {
           const text = currentSentence?.content;
           if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
-              cancelSpeech();
-              const clean = stripEmoji(text);
-              if (clean) {
-                const u = new SpeechSynthesisUtterance(clean);
-                u.rate = 1; u.pitch = 1;
-                window.speechSynthesis.speak(u);
-              }
+              speakText(text);
             } catch {}
           }
         }
@@ -3291,13 +3280,7 @@ function AppPage() {
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) {
-                  cancelSpeech();
-                  const u = new SpeechSynthesisUtterance(clean);
-                  u.rate = 1; u.pitch = 1;
-                  window.speechSynthesis.speak(u);
-                }
+                speakText(text);
               }
             } catch {}
           }
@@ -3376,13 +3359,7 @@ function AppPage() {
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) {
-                  cancelSpeech();
-                  const u = new SpeechSynthesisUtterance(clean);
-                  u.rate = 1; u.pitch = 1;
-                  window.speechSynthesis.speak(u);
-                }
+                speakText(text);
               }
             } catch {}
           }
