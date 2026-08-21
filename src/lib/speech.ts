@@ -1,15 +1,21 @@
 // Single speech engine for the whole app.
 //
-// Why this exists: newer WebKit builds (iOS 26/27, macOS 26+) are much stricter
-// and much more fragile about the Web Speech API than they used to be:
-//  - an utterance queued in the same tick as cancel() is frequently dropped,
-//  - the queue can be left in a paused state, so speak() silently does nothing,
-//  - a zero-volume "unlock" utterance no longer reliably counts as the
-//    gesture-blessed first utterance,
-//  - an utterance with no resolvable voice/lang can be dropped without error.
+// Hard-won rules this file encodes (newer WebKit — iOS 26/27, macOS 26+ — is
+// far less forgiving than older Safari):
 //
-// So every speak goes through here: resume the queue, cancel politely, speak,
-// then verify it actually started and retry once if it didn't.
+//  1. NEVER queue an utterance whose text has nothing speakable in it (a space,
+//     a nbsp, punctuation only). On recent WebKit that utterance never ends:
+//     `speechSynthesis.speaking` stays true forever and every later utterance
+//     sits behind it, so the app goes completely silent with no error. The old
+//     zero-volume "unlock" primer did exactly this.
+//  2. Do NOT assign `utterance.voice` or `utterance.lang` unless we truly have
+//     to. Leaving them alone makes WebKit use the system voice — i.e. the voice
+//     the user picked in Settings > Accessibility > Spoken Content — which is
+//     what we want. Assigning a voice object from a getVoices() list that has
+//     since been refreshed makes WebKit drop the utterance silently.
+//  3. Long text is unreliable; speak in short chunks queued back to back.
+//  4. Verify. If nothing started shortly after speak(), the utterance was
+//     swallowed: clear the queue and speak once more.
 
 type SpeakOpts = {
   rate?: number;
@@ -19,6 +25,9 @@ type SpeakOpts = {
 };
 
 const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D]/gu;
+
+/** Anything that a synthesizer can actually pronounce. */
+const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
 
 export function cleanForSpeech(s: string): string {
   return s.replace(EMOJI_RE, "").replace(/\s+/g, " ").trim();
@@ -33,51 +42,56 @@ function synth(): SpeechSynthesis | null {
   }
 }
 
-/* ------------------------------- voices -------------------------------- */
+/* -------------------------------- chunking ------------------------------- */
 
-let cachedVoice: SpeechSynthesisVoice | null = null;
-let voicesBound = false;
+const CHUNK_MAX = 170;
 
-function pickVoice(): SpeechSynthesisVoice | null {
-  const s = synth();
-  if (!s) return null;
-  let voices: SpeechSynthesisVoice[] = [];
-  try {
-    voices = s.getVoices() ?? [];
-  } catch {
-    return null;
-  }
-  if (voices.length === 0) return null;
-  const lang = (navigator.language || "en-US").toLowerCase();
-  const base = lang.split("-")[0];
-  const score = (v: SpeechSynthesisVoice) => {
-    let n = 0;
-    const vl = (v.lang || "").toLowerCase();
-    if (vl === lang) n += 4;
-    else if (vl.startsWith(base)) n += 3;
-    if (v.default) n += 2;
-    if (v.localService) n += 1;
-    return n;
+function chunkText(text: string): string[] {
+  if (text.length <= CHUNK_MAX) return [text];
+  // Split on sentence ends first, then on clause boundaries, then hard-wrap.
+  const parts: string[] = [];
+  let buf = "";
+  const push = () => {
+    const t = buf.trim();
+    if (t) parts.push(t);
+    buf = "";
   };
-  return [...voices].sort((a, b) => score(b) - score(a))[0] ?? null;
-}
-
-function ensureVoice(): SpeechSynthesisVoice | null {
-  const s = synth();
-  if (!s) return null;
-  if (!voicesBound) {
-    voicesBound = true;
-    try {
-      s.addEventListener?.("voiceschanged", () => {
-        cachedVoice = pickVoice();
-      });
-    } catch {}
+  const pieces = text.split(/(?<=[.!?;:,])\s+|(?<=\s)(?=\S)/);
+  for (const p of pieces) {
+    if ((buf + p).length > CHUNK_MAX && buf.trim()) push();
+    buf += p;
+    if (buf.length >= CHUNK_MAX) {
+      // A single very long token — hard-wrap it.
+      while (buf.length > CHUNK_MAX) {
+        parts.push(buf.slice(0, CHUNK_MAX));
+        buf = buf.slice(CHUNK_MAX);
+      }
+    }
   }
-  if (!cachedVoice) cachedVoice = pickVoice();
-  return cachedVoice;
+  push();
+  return parts.filter((p) => SPEAKABLE_RE.test(p));
 }
 
-/* ------------------------------- unlock -------------------------------- */
+/* -------------------------------- voices --------------------------------- */
+
+let voicesWarmed = false;
+
+/**
+ * Touch getVoices() once so WebKit populates its list. We deliberately do NOT
+ * pick or assign a voice: the default (unset) voice is the one the user chose
+ * in their device's spoken-content settings.
+ */
+function warmVoices() {
+  if (voicesWarmed) return;
+  const s = synth();
+  if (!s) return;
+  try {
+    s.getVoices();
+    voicesWarmed = true;
+  } catch {}
+}
+
+/* -------------------------------- unlock --------------------------------- */
 
 let unlocked = false;
 let unlockArmed = false;
@@ -87,39 +101,10 @@ export function speechUnlocked() {
   return unlocked;
 }
 
-function tryUnlock() {
-  const s = synth();
-  if (!s || unlocked) return;
-  try {
-    s.resume();
-    const u = new SpeechSynthesisUtterance("\u00a0");
-    // Audible-but-inaudible: a real (non-zero) volume is what newer WebKit
-    // accepts as a genuine gesture-blessed utterance.
-    u.volume = 0.01;
-    u.rate = 2;
-    const v = ensureVoice();
-    if (v) {
-      u.voice = v;
-      u.lang = v.lang;
-    }
-    u.onstart = () => {
-      unlocked = true;
-    };
-    u.onend = () => {
-      unlocked = true;
-    };
-    s.speak(u);
-    // Some builds never fire onstart for the primer; treat a queued+speaking
-    // engine as unlocked too.
-    window.setTimeout(() => {
-      if (s.speaking || s.pending) unlocked = true;
-    }, 120);
-  } catch {}
-}
-
 /**
- * Arm the gesture-unlock. Stays armed (re-firing on every gesture) until the
- * engine confirms speech actually ran, instead of giving up after one attempt.
+ * Arm gesture handling. All this does is warm the voice list and make sure the
+ * queue isn't left paused — no primer utterance, because an unspeakable primer
+ * is what wedges the queue on modern WebKit.
  */
 export function installSpeechUnlock() {
   if (unlockArmed) return;
@@ -127,35 +112,39 @@ export function installSpeechUnlock() {
   if (!s) return;
   unlockArmed = true;
   const handler = () => {
-    // Prime voices early — getVoices() is often empty on first paint.
-    ensureVoice();
-    if (unlocked) {
-      window.removeEventListener("pointerdown", handler, true);
-      window.removeEventListener("touchstart", handler, true);
-      window.removeEventListener("mousedown", handler, true);
-      window.removeEventListener("click", handler, true);
-      window.removeEventListener("keydown", handler, true);
-      return;
-    }
-    tryUnlock();
+    warmVoices();
+    try {
+      // A queue left in the paused state makes speak() a silent no-op.
+      if (s.paused) s.resume();
+    } catch {}
   };
   window.addEventListener("pointerdown", handler, true);
   window.addEventListener("touchstart", handler, true);
   window.addEventListener("mousedown", handler, true);
-  window.addEventListener("click", handler, true);
   window.addEventListener("keydown", handler, true);
 }
 
-/* -------------------------------- speak -------------------------------- */
+/* --------------------------------- speak --------------------------------- */
 
 let generation = 0;
+let watchdogs: number[] = [];
+
+function clearWatchdogs() {
+  for (const id of watchdogs) window.clearTimeout(id);
+  watchdogs = [];
+}
+
+function later(fn: () => void, ms: number) {
+  watchdogs.push(window.setTimeout(fn, ms));
+}
 
 export function cancelSpeech() {
   const s = synth();
   if (!s) return;
   generation += 1;
+  clearWatchdogs();
   try {
-    s.resume();
+    if (s.paused) s.resume();
   } catch {}
   try {
     s.cancel();
@@ -173,75 +162,91 @@ export function isSpeaking(): boolean {
 }
 
 /**
- * Speak `text`, cancelling anything already in flight. Returns false when the
- * platform has no speech support or the text is empty after cleaning.
+ * Speak `text`, replacing anything already in flight. Returns false when the
+ * platform has no speech support or the text has nothing speakable in it.
  */
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   const s = synth();
   if (!s) return false;
   const clean = cleanForSpeech(text ?? "");
-  if (!clean) return false;
+  if (!clean || !SPEAKABLE_RE.test(clean)) return false;
+
+  const chunks = chunkText(clean);
+  if (chunks.length === 0) return false;
 
   const myGen = ++generation;
+  clearWatchdogs();
   let started = false;
-  let finished = false;
+  let done = false;
 
-  const build = () => {
-    const u = new SpeechSynthesisUtterance(clean);
+  const finish = (err: boolean) => {
+    if (done || myGen !== generation) return;
+    done = true;
+    if (err) opts.onError?.();
+    else opts.onEnd?.();
+  };
+
+  const build = (chunk: string, isFirst: boolean, isLast: boolean) => {
+    const u = new SpeechSynthesisUtterance(chunk);
     u.rate = opts.rate ?? 1;
     u.pitch = opts.pitch ?? 1;
     u.volume = 1;
-    const v = ensureVoice();
-    if (v) {
-      u.voice = v;
-      u.lang = v.lang;
-    } else {
-      u.lang = navigator.language || "en-US";
+    // Intentionally no u.voice / u.lang — see rule 2 at the top of this file.
+    if (isFirst) {
+      u.onstart = () => {
+        started = true;
+        unlocked = true;
+      };
     }
-    u.onstart = () => {
-      started = true;
-      unlocked = true;
-    };
-    u.onend = () => {
-      finished = true;
-      unlocked = true;
-      if (myGen === generation) opts.onEnd?.();
-    };
-    u.onerror = () => {
-      finished = true;
-      if (myGen === generation) opts.onError?.();
-    };
+    if (isLast) {
+      u.onend = () => {
+        started = true;
+        unlocked = true;
+        finish(false);
+      };
+      u.onerror = () => finish(true);
+    } else {
+      u.onstart = u.onstart ?? null;
+    }
     return u;
   };
 
+  const queueAll = () => {
+    chunks.forEach((c, i) => {
+      try {
+        s.speak(build(c, i === 0, i === chunks.length - 1));
+      } catch {}
+    });
+  };
+
   try {
-    // Clearing the queue and queueing in the same tick is exactly what newer
-    // WebKit drops, so cancel first and always verify below.
+    // cancel() also clears a wedged queue left over from an utterance that
+    // never fired onend — the usual reason for total silence.
     s.cancel();
-    s.resume();
-    s.speak(build());
+    if (s.paused) s.resume();
+    queueAll();
   } catch {
     return false;
   }
 
-  // Verification pass: if nothing ever started, the utterance was swallowed —
-  // resume the queue and try once more.
-  window.setTimeout(() => {
-    if (myGen !== generation || finished || started) return;
+  // Verification: if nothing ever started, the batch was swallowed. Clear and
+  // re-queue exactly once, then keep nudging a paused queue.
+  later(() => {
+    if (myGen !== generation || started || done) return;
     try {
+      if (s.paused) s.resume();
       if (s.speaking) return;
-      s.resume();
-      if (s.speaking || s.pending) return;
-      s.speak(build());
-      // Final nudge: some builds queue but stay paused.
-      window.setTimeout(() => {
-        if (myGen !== generation || finished || started) return;
-        try {
-          s.resume();
-        } catch {}
-      }, 180);
+      s.cancel();
+      queueAll();
     } catch {}
-  }, 220);
+  }, 260);
+
+  later(() => {
+    if (myGen !== generation || started || done) return;
+    try {
+      if (s.paused) s.resume();
+    } catch {}
+  }, 700);
 
   return true;
 }
