@@ -908,7 +908,8 @@ function AppPage() {
       if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
-    await setIndex(next);
+    // Keep speech in the pointer-up activation turn for strict WebKit builds.
+    void setIndex(next);
     speak(sentences[next].content, token);
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
@@ -928,7 +929,8 @@ function AppPage() {
       return;
     }
     const prev = currentIdx - 1;
-    await setIndex(prev);
+    // Keep speech in the pointer-up activation turn for strict WebKit builds.
+    void setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content, token);
   }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 

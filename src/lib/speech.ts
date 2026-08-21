@@ -279,11 +279,13 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   later(() => {
     if (myGen !== generation || started || done) return;
     if (retried) return;
+    // Some WebKit voices begin producing audio before dispatching `start`.
+    // Never cancel an utterance the platform still reports as active.
+    if (s.speaking || s.pending) return;
     retried = true;
     debugSpeech("retry", { voices: availableVoices().length, pending: s.pending, speaking: s.speaking });
     try {
       if (s.paused) s.resume();
-      if (s.speaking || s.pending) s.cancel();
       liveUtterances.clear();
       chunkIndex = 0;
       startWhenIdle();
