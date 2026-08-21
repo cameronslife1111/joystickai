@@ -762,6 +762,14 @@ function AppPage() {
     return ++speechTokenRef.current;
   }, []);
 
+  // Desktop Safari can start with an empty voice list; warm it early so the
+  // first spoken sentence isn't dropped.
+  useEffect(() => {
+    primeVoices();
+  }, []);
+
+
+
 
   // Track "busy" UI state via a ref so the auto-repeat timer can check it at
   // fire time without re-subscribing every time a dialog toggles.
