@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
+import { isSpeaking as speechIsSpeaking } from "@/lib/speech";
+
+
 const DECAY_MS = 5 * 60 * 1000; // 5 minutes to fully asleep
 const BOOST_AMOUNT = 0.18;
 const STORAGE_KEY = "orby_mood_state_v1";
@@ -151,7 +154,7 @@ export function useOrbMood(options?: { interactive?: boolean }) {
     let lastOpen = 0;
     const id = window.setInterval(() => {
       if (document.hidden) return;
-      const isSpeaking = !!window.speechSynthesis.speaking && moodRef.current > 0.02;
+      const isSpeaking = speechIsSpeaking() && moodRef.current > 0.02;
       setTalking((prev) => (prev !== isSpeaking ? isSpeaking : prev));
       if (isSpeaking) {
         let next: number;

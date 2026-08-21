@@ -9,6 +9,8 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
+import { speakText, cancelSpeech } from "@/lib/speech";
+
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
@@ -543,7 +545,7 @@ function AppPage() {
       ...(prev ?? {}), muted: next,
     }));
     if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     await supabase.from("user_preferences").upsert(
       { user_id: u.user.id, muted: next, favorites: favorites as any },
@@ -751,19 +753,14 @@ function AppPage() {
     if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(clean);
-      u.rate = 1; u.pitch = 1;
-      window.speechSynthesis.speak(u);
-    } catch {}
+    speakText(clean);
   }, []);
 
   // Cancel any in-flight speech and claim a fresh speech token. Call at the
   // start of every user-driven action that might end in speak().
   const claimSpeech = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     return ++speechTokenRef.current;
   }, []);
@@ -920,7 +917,7 @@ function AppPage() {
 
   const openNewIdea = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     setComposeText("");
     setComposing(true);
@@ -1329,7 +1326,7 @@ function AppPage() {
     if (editing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
@@ -1401,7 +1398,7 @@ function AppPage() {
     if (micStartingRef.current) return;
     // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     micStartingRef.current = true;
     void (async () => {
@@ -1896,7 +1893,7 @@ function AppPage() {
   const openSendSentence = useCallback(() => {
     if (!currentSentence) return;
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      cancelSpeech();
     }
     setMoveOpen(false);
     setComposing(false);
@@ -2305,7 +2302,7 @@ function AppPage() {
         if (next) {
           // Muting: stop any in-flight speech immediately.
           if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            try { window.speechSynthesis.cancel(); } catch {}
+            try { cancelSpeech(); } catch {}
           }
         } else {
           // Unmuting: speak the currently displayed sentence right now,
@@ -2314,13 +2311,7 @@ function AppPage() {
           const text = currentSentence?.content;
           if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
-              window.speechSynthesis.cancel();
-              const clean = stripEmoji(text);
-              if (clean) {
-                const u = new SpeechSynthesisUtterance(clean);
-                u.rate = 1; u.pitch = 1;
-                window.speechSynthesis.speak(u);
-              }
+              speakText(text);
             } catch {}
           }
         }
@@ -3291,13 +3282,7 @@ function AppPage() {
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) {
-                  window.speechSynthesis.cancel();
-                  const u = new SpeechSynthesisUtterance(clean);
-                  u.rate = 1; u.pitch = 1;
-                  window.speechSynthesis.speak(u);
-                }
+                speakText(text);
               }
             } catch {}
           }
@@ -3376,13 +3361,7 @@ function AppPage() {
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) {
-                  window.speechSynthesis.cancel();
-                  const u = new SpeechSynthesisUtterance(clean);
-                  u.rate = 1; u.pitch = 1;
-                  window.speechSynthesis.speak(u);
-                }
+                speakText(text);
               }
             } catch {}
           }
