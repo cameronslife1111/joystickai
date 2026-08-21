@@ -77,7 +77,11 @@ export function cancelSpeech() {
   } catch {}
 }
 
-export function speakText(text: string, isCurrent: Guard = () => true) {
+export function speakText(
+  text: string,
+  isCurrent: Guard = () => true,
+  opts: { onEnd?: () => void } = {},
+) {
   const s = synth();
   if (!s || !text) return;
   bindVoiceListener();
@@ -85,8 +89,17 @@ export function speakText(text: string, isCurrent: Guard = () => true) {
   const mySeq = ++seq;
   const alive = () => mySeq === seq && isCurrent();
 
+  let ended = false;
+  const finish = () => {
+    if (ended) return;
+    ended = true;
+    opts.onEnd?.();
+  };
+
   const utter = () => {
     const u = new SpeechSynthesisUtterance(text);
+    u.onend = finish;
+    u.onerror = finish;
     if (voice) {
       u.voice = voice;
       if (voice.lang) u.lang = voice.lang;
@@ -104,6 +117,7 @@ export function speakText(text: string, isCurrent: Guard = () => true) {
     try {
       s.speak(utter());
     } catch {
+      finish();
       return;
     }
     // WebKit sometimes drops the utterance outright — re-issue once.
