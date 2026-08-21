@@ -232,15 +232,22 @@ export function useOrbGestures(
       };
     };
 
-    // Wait (without re-rendering) for the orb node to exist.
+    // Wait (without re-rendering) for the orb node to exist, and re-bind if the
+    // orb is ever replaced by a different element (e.g. leaving the editor).
+    let boundEl: HTMLElement | null = null;
     const bind = () => {
       if (disposed) return;
       const el = ref.current;
-      if (!el) {
-        pollTimer = setTimeout(bind, 100);
-        return;
+      if (el && el !== boundEl) {
+        cleanup?.();
+        boundEl = el;
+        cleanup = attach(el);
+      } else if (!el && boundEl) {
+        cleanup?.();
+        cleanup = null;
+        boundEl = null;
       }
-      cleanup = attach(el);
+      pollTimer = setTimeout(bind, 250);
     };
     bind();
 
@@ -249,5 +256,6 @@ export function useOrbGestures(
       if (pollTimer) clearTimeout(pollTimer);
       cleanup?.();
     };
+
   }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
 }
