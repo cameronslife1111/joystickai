@@ -270,7 +270,6 @@ export function cancelSpeech() {
   generation += 1;
   audibleSpeaking = false;
   clearTimers();
-  stopRouteAnchor();
   if (!isIosWebKit()) {
     try {
       if (s.paused) s.resume();
@@ -279,29 +278,23 @@ export function cancelSpeech() {
   try {
     s.cancel();
   } catch {}
-  // Keep cancelled utterances alive briefly. Some WebKit versions dispatch the
-  // cancellation event asynchronously and can otherwise lose the JS wrapper.
-  const cancelled = [...liveUtterances];
-  window.setTimeout(() => {
-    for (const utterance of cancelled) liveUtterances.delete(utterance);
-  }, 500);
+  liveUtterances.clear();
 }
 
 export function isSpeaking(): boolean {
   return audibleSpeaking;
 }
 
-/** Give iOS WebKit the duration of the swipe to settle a cancelled queue. */
+/**
+ * Called at gesture start. It only makes sure the iPhone playback route is live
+ * — it must NOT cancel speech or tear down the microphone, because doing that
+ * work on every pointerdown is what delayed (and sometimes swallowed) the
+ * sentence that the gesture goes on to request.
+ */
 export function prepareSpeechGesture() {
   if (!isIosWebKit()) return;
-  void releaseMic();
   requestIosPlaybackSession();
   startRouteAnchor();
-  const s = synth();
-  if (!s) return;
-  try {
-    if (s.speaking || s.pending || s.paused) cancelSpeech();
-  } catch {}
 }
 
 /**
