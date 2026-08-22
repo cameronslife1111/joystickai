@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cancelSpeech, cleanForSpeech, speakText } from "../src/lib/speech";
+import { cancelSpeech, cleanForSpeech, installSpeechUnlock, speakText } from "../src/lib/speech";
 
 class FakeUtterance {
   text: string;
@@ -9,11 +9,20 @@ class FakeUtterance {
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
+  voice?: FakeVoice;
+  lang?: string;
 
   constructor(text: string) {
     this.text = text;
   }
 }
+
+type FakeVoice = {
+  name: string;
+  lang: string;
+  default: boolean;
+  localService: boolean;
+};
 
 class FakeSynth {
   speaking = false;
@@ -21,6 +30,8 @@ class FakeSynth {
   paused = false;
   cancelCalls = 0;
   utterances: FakeUtterance[] = [];
+  voices: FakeVoice[] = [];
+  listeners = new Map<string, Set<() => void>>();
 
   speak(utterance: FakeUtterance) {
     this.utterances.push(utterance);
@@ -37,7 +48,21 @@ class FakeSynth {
   }
 
   getVoices() {
-    return [];
+    return this.voices;
+  }
+
+  addEventListener(name: string, callback: () => void) {
+    const callbacks = this.listeners.get(name) ?? new Set<() => void>();
+    callbacks.add(callback);
+    this.listeners.set(name, callbacks);
+  }
+
+  removeEventListener(name: string, callback: () => void) {
+    this.listeners.get(name)?.delete(callback);
+  }
+
+  dispatch(name: string) {
+    for (const callback of this.listeners.get(name) ?? []) callback();
   }
 }
 
@@ -47,6 +72,7 @@ function installBrowser(speechSynthesis: FakeSynth) {
       speechSynthesis,
       setTimeout,
       clearTimeout,
+      addEventListener: () => {},
     }),
     SpeechSynthesisUtterance: FakeUtterance,
   });
@@ -64,14 +90,26 @@ describe("sentence speech", () => {
     expect(engine.utterances.map((item) => item.text)).toEqual(["Read this sentence."]);
   });
 
-  test("leaves voice and language unset so the system default is used", () => {
+  test("selects a fresh device default voice", () => {
     const engine = new FakeSynth();
+    const fallback = { name: "Local English", lang: "en-US", default: false, localService: true };
+    const preferred = { name: "Device Default", lang: "en-US", default: true, localService: true };
+    engine.voices = [fallback, preferred];
     installBrowser(engine);
     speakText("Use my default voice.");
 
-    const utterance = engine.utterances[0] as FakeUtterance & { voice?: unknown; lang?: string };
-    expect(utterance.voice).toBeUndefined();
-    expect(utterance.lang).toBeUndefined();
+    const utterance = engine.utterances[0];
+    expect(utterance.voice).toBe(preferred);
+    expect(utterance.lang).toBe("en-US");
+  });
+
+  test("uses the browser default path when voices are initially unavailable", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("Use the implicit default voice.");
+
+    expect(engine.utterances[0]?.voice).toBeUndefined();
+    expect(engine.utterances[0]?.lang).toBeUndefined();
   });
 
   test("cancels active speech and submits the replacement after settling", async () => {
@@ -102,10 +140,18 @@ describe("sentence speech", () => {
     installBrowser(engine);
 
     speakText("Retry this sentence.");
-    await Bun.sleep(550);
+    await Bun.sleep(950);
     expect(engine.utterances).toHaveLength(2);
-    await Bun.sleep(550);
+    await Bun.sleep(950);
     expect(engine.utterances).toHaveLength(2);
+  });
+
+  test("the unlock path never queues a silent primer", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    installSpeechUnlock();
+
+    expect(engine.utterances).toHaveLength(0);
   });
 
   test("rejects emoji-only content", () => {
