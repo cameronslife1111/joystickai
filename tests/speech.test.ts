@@ -197,6 +197,28 @@ describe("sentence speech", () => {
     expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
   });
 
+  test("iPhone replaces active speech in the same tick as the swipe", () => {
+    const engine = new FakeSynth();
+    engine.speaking = true;
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
+
+    speakText("Newest sentence.");
+
+    expect(engine.cancelCalls).toBe(1);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
+  });
+
+  test("speaks a long sentence as a single utterance", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
+    const long = `${"word ".repeat(60)}end.`.trim();
+
+    speakText(long);
+
+    expect(engine.utterances).toHaveLength(1);
+    expect(engine.utterances[0]?.text).toBe(long);
+  });
+
   test("coalesces rapid replacement requests to the newest sentence", async () => {
     const engine = new FakeSynth();
     engine.speaking = true;
@@ -213,7 +235,7 @@ describe("sentence speech", () => {
     installBrowser(engine);
 
     speakText("Retry this sentence.");
-    await Bun.sleep(950);
+    await Bun.sleep(400);
     expect(engine.utterances).toHaveLength(2);
     await Bun.sleep(950);
     expect(engine.utterances).toHaveLength(2);
@@ -227,14 +249,15 @@ describe("sentence speech", () => {
     expect(engine.utterances).toHaveLength(0);
   });
 
-  test("settles active iPhone speech at gesture start", () => {
+  test("gesture start only opens the route, it never cancels speech", () => {
     const engine = new FakeSynth();
     engine.speaking = true;
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit");
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
 
     prepareSpeechGesture();
 
-    expect(engine.cancelCalls).toBe(1);
+    expect(engine.cancelCalls).toBe(0);
+    expect(FakeAudio.instances.at(-1)?.playCalls).toBe(1);
   });
 
   test("promotes the iPhone audio session and never resumes a stale queue", () => {
@@ -251,7 +274,7 @@ describe("sentence speech", () => {
     expect(FakeAudio.instances.at(-1)?.playCalls).toBeGreaterThan(0);
   });
 
-  test("keeps the iPhone route anchor active until speech finishes", () => {
+  test("keeps one iPhone route anchor running across sentences", () => {
     const engine = new FakeSynth();
     installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
 
@@ -259,9 +282,15 @@ describe("sentence speech", () => {
     speakText("Keep this on the speaker.");
     const anchor = FakeAudio.instances.at(-1);
     expect(anchor?.paused).toBe(false);
+    expect(anchor?.playCalls).toBe(1);
 
     engine.utterances[0]?.onend?.();
-    expect(anchor?.paused).toBe(true);
+    expect(anchor?.paused).toBe(false);
+
+    prepareSpeechGesture();
+    speakText("And this one too.");
+    expect(anchor?.playCalls).toBe(1);
+    expect(anchor?.paused).toBe(false);
   });
 
   test("retries an errored implicit iPhone voice with a local voice", async () => {
@@ -284,7 +313,7 @@ describe("sentence speech", () => {
 
     expect(isSpeaking()).toBe(false);
     engine.utterances[0]?.onstart?.();
-    expect(isSpeaking()).toBe(false);
+    expect(isSpeaking()).toBe(true);
     engine.utterances[0]?.onboundary?.();
     expect(isSpeaking()).toBe(true);
     engine.utterances[0]?.onend?.();
