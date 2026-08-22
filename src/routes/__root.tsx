@@ -12,7 +12,6 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
-import { installSpeechUnlock } from "@/lib/speech";
 
 // Side-effect: route backend requests through the same-origin proxy on the
 // client so the app loads on flaky/cellular networks. Must run before any
@@ -121,13 +120,6 @@ function RootComponent() {
     });
     return () => subscription.unsubscribe();
   }, [router, queryClient]);
-
-  // WebKit: bless speechSynthesis on user gestures. The engine keeps the
-  // listeners armed until it has confirmed speech actually ran.
-  useEffect(() => {
-    installSpeechUnlock();
-  }, []);
-
 
   return (
     <QueryClientProvider client={queryClient}>

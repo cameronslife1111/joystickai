@@ -1,39 +1,25 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cancelSpeech, cleanForSpeech, installSpeechUnlock, isSpeaking, prepareSpeechGesture, speakText } from "../src/lib/speech";
+import { cancelSpeech, cleanForSpeech, isSpeaking, speakText } from "../src/lib/speech";
 
 class FakeUtterance {
   text: string;
   rate = 1;
   pitch = 1;
-  volume = 1;
+  voice?: unknown;
+  lang?: string;
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
-  onerror: ((event: { error: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
   onboundary: (() => void) | null = null;
-  voice?: FakeVoice;
-  lang?: string;
 
   constructor(text: string) {
     this.text = text;
   }
 }
 
-type FakeVoice = {
-  name: string;
-  lang: string;
-  default: boolean;
-  localService: boolean;
-};
-
 class FakeSynth {
-  speaking = false;
-  pending = false;
-  paused = false;
   cancelCalls = 0;
-  resumeCalls = 0;
   utterances: FakeUtterance[] = [];
-  voices: FakeVoice[] = [];
-  listeners = new Map<string, Set<() => void>>();
 
   speak(utterance: FakeUtterance) {
     this.utterances.push(utterance);
@@ -41,177 +27,41 @@ class FakeSynth {
 
   cancel() {
     this.cancelCalls += 1;
-    this.speaking = false;
-    this.pending = false;
-  }
-
-  resume() {
-    this.resumeCalls += 1;
-    this.paused = false;
-  }
-
-  getVoices() {
-    return this.voices;
-  }
-
-  addEventListener(name: string, callback: () => void) {
-    const callbacks = this.listeners.get(name) ?? new Set<() => void>();
-    callbacks.add(callback);
-    this.listeners.set(name, callbacks);
-  }
-
-  removeEventListener(name: string, callback: () => void) {
-    this.listeners.get(name)?.delete(callback);
-  }
-
-  dispatch(name: string) {
-    for (const callback of this.listeners.get(name) ?? []) callback();
   }
 }
 
-class FakeAudio {
-  static instances: FakeAudio[] = [];
-  src = "";
-  loop = false;
-  preload = "";
-  volume = 1;
-  muted = false;
-  ended = false;
-  paused = true;
-  currentTime = 0;
-  playCalls = 0;
-  pauseCalls = 0;
-
-  constructor() {
-    FakeAudio.instances.push(this);
-  }
-
-  setAttribute() {}
-  play() {
-    this.playCalls += 1;
-    this.paused = false;
-    return Promise.resolve();
-  }
-  pause() {
-    this.pauseCalls += 1;
-    this.paused = true;
-  }
-}
-
-function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop", audioSession?: { type: string; state?: string }) {
+function installBrowser(speechSynthesis: FakeSynth) {
   Object.assign(globalThis, {
-    window: Object.assign(globalThis, {
-      speechSynthesis,
-      setTimeout,
-      clearTimeout,
-      addEventListener: () => {},
-    }),
-    document: {
-      visibilityState: "visible",
-      addEventListener: () => {},
-      createElement: (tag: string) => tag === "audio" ? new FakeAudio() : {},
-    },
+    window: Object.assign(globalThis, { speechSynthesis }),
     SpeechSynthesisUtterance: FakeUtterance,
-    Blob,
-  });
-  Object.defineProperty(globalThis, "URL", {
-    configurable: true,
-    value: { createObjectURL: () => "blob:route-anchor" },
-  });
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { userAgent, language: "en-US", maxTouchPoints: userAgent.includes("iPhone") ? 5 : 0, audioSession },
   });
 }
 
 afterEach(() => cancelSpeech());
 
-describe("sentence speech", () => {
-  test("submits an idle first swipe immediately without cancelling", () => {
+describe("native browser sentence speech", () => {
+  test("cancels the browser queue and speaks one native utterance immediately", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
 
     expect(speakText("Read this sentence.")).toBe(true);
-    expect(engine.cancelCalls).toBe(0);
+    expect(engine.cancelCalls).toBe(1);
     expect(engine.utterances.map((item) => item.text)).toEqual(["Read this sentence."]);
   });
 
-  test("selects a fresh device default voice", () => {
+  test("uses the browser default voice without selecting a voice or language", () => {
     const engine = new FakeSynth();
-    const fallback = { name: "Local English", lang: "en-US", default: false, localService: true };
-    const preferred = { name: "Device Default", lang: "en-US", default: true, localService: true };
-    engine.voices = [fallback, preferred];
     installBrowser(engine);
-    speakText("Use my default voice.");
-
-    const utterance = engine.utterances[0];
-    expect(utterance.voice).toBe(preferred);
-    expect(utterance.lang).toBe("en-US");
-  });
-
-  test("lets iPhone use its implicit system voice first", () => {
-    const engine = new FakeSynth();
-    const remoteDefault = { name: "Enhanced Default", lang: "en-US", default: true, localService: false };
-    const local = { name: "Local English", lang: "en-US", default: false, localService: true };
-    engine.voices = [remoteDefault, local];
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit");
-
-    speakText("Use an available iPhone voice.");
+    speakText("Use the browser voice.");
 
     expect(engine.utterances[0]?.voice).toBeUndefined();
     expect(engine.utterances[0]?.lang).toBeUndefined();
   });
 
-  test("uses the browser default path when voices are initially unavailable", () => {
+  test("keeps long text in one utterance", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
-    speakText("Use the implicit default voice.");
-
-    expect(engine.utterances[0]?.voice).toBeUndefined();
-    expect(engine.utterances[0]?.lang).toBeUndefined();
-  });
-
-  test("uses a newly available local voice on a later utterance", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    speakText("First sentence.");
-
-    const localVoice = { name: "Local English", lang: "en-US", default: false, localService: true };
-    engine.voices = [localVoice];
-    engine.utterances[0]?.onend?.();
-    speakText("Second sentence.");
-
-    expect(engine.utterances[1]?.voice).toBe(localVoice);
-    expect(engine.utterances[1]?.lang).toBe("en-US");
-  });
-
-  test("cancels active speech and submits the replacement after settling", async () => {
-    const engine = new FakeSynth();
-    engine.speaking = true;
-    installBrowser(engine);
-
-    speakText("Newest sentence.");
-    expect(engine.cancelCalls).toBe(1);
-    expect(engine.utterances).toHaveLength(0);
-    await Bun.sleep(35);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
-  });
-
-  test("iPhone replaces active speech in the same tick as the swipe", () => {
-    const engine = new FakeSynth();
-    engine.speaking = true;
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-
-    speakText("Newest sentence.");
-
-    expect(engine.cancelCalls).toBe(1);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
-  });
-
-  test("speaks a long sentence as a single utterance", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-    const long = `${"word ".repeat(60)}end.`.trim();
+    const long = `${"word ".repeat(300)}end.`.trim();
 
     speakText(long);
 
@@ -219,165 +69,62 @@ describe("sentence speech", () => {
     expect(engine.utterances[0]?.text).toBe(long);
   });
 
-  test("coalesces rapid replacement requests to the newest sentence", async () => {
+  test("immediately replaces the previous utterance", () => {
     const engine = new FakeSynth();
-    engine.speaking = true;
     installBrowser(engine);
-
     speakText("Older sentence.");
-    speakText("Newest sentence.");
-    await Bun.sleep(35);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
-  });
-
-  test("retries once when the browser silently drops an idle utterance", async () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-
-    speakText("Retry this sentence.");
-    await Bun.sleep(400);
-    expect(engine.utterances).toHaveLength(2);
-    await Bun.sleep(950);
-    expect(engine.utterances).toHaveLength(2);
-  });
-
-  test("the unlock path never queues a silent primer", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    installSpeechUnlock();
-
-    expect(engine.utterances).toHaveLength(0);
-  });
-
-  test("gesture start never cancels speech and never plays media", () => {
-    const engine = new FakeSynth();
-    engine.speaking = true;
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-
-    prepareSpeechGesture();
-
-    expect(engine.cancelCalls).toBe(0);
-    expect(FakeAudio.instances).toHaveLength(0);
-  });
-
-  test("keeps the iPhone audio session mixable so other audio keeps playing", () => {
-    const engine = new FakeSynth();
-    engine.paused = true;
-    const audioSession = { type: "play-and-record", state: "active" };
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
-
-    prepareSpeechGesture();
-    speakText("Talk over the music.");
-
-    expect(audioSession.type).toBe("ambient");
-    expect(engine.resumeCalls).toBe(0);
-  });
-
-  test("reclaims a leftover recording route before speaking on iPhone", () => {
-    const engine = new FakeSynth();
-    const audioSession = { type: "play-and-record", state: "active" };
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
-
-    // No gesture prep: speech itself must fix the route so output can reach
-    // the speaker instead of staying on the earpiece/AirPods.
-    speakText("Speaker please.");
-
-    expect(audioSession.type).toBe("ambient");
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Speaker please."]);
-  });
-
-  test("re-asserts the mixable category when the utterance actually starts", () => {
-    const engine = new FakeSynth();
-    const audioSession = { type: "auto", state: "active" };
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
-
-    speakText("Hold the route.");
-    // Simulate a late microphone teardown flipping the category back.
-    audioSession.type = "play-and-record";
-    engine.utterances[0]?.onstart?.();
-
-    expect(audioSession.type).toBe("ambient");
-  });
-
-  test("never creates an audio element while speaking on iPhone", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-
-    installSpeechUnlock();
-    prepareSpeechGesture();
-    speakText("First sentence.");
-    engine.utterances[0]?.onend?.();
-    prepareSpeechGesture();
-    speakText("Second sentence.");
-
-    expect(FakeAudio.instances).toHaveLength(0);
-  });
-
-
-  test("retries an errored implicit iPhone voice with a local voice", async () => {
-    const engine = new FakeSynth();
-    const local = { name: "Local English", lang: "en-US", default: false, localService: true };
-    engine.voices = [local];
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-
-    speakText("Retry locally.");
-    expect(engine.utterances[0]?.voice).toBeUndefined();
-    engine.utterances[0]?.onerror?.({ error: "synthesis-failed" });
-    await Bun.sleep(35);
-    expect(engine.utterances[1]?.voice).toBe(local);
-  });
-
-  test("reports speech only after the device confirms playback", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    speakText("Confirm audible speech.");
-
-    expect(isSpeaking()).toBe(false);
-    engine.utterances[0]?.onstart?.();
-    expect(isSpeaking()).toBe(true);
-    engine.utterances[0]?.onboundary?.();
-    expect(isSpeaking()).toBe(true);
-    engine.utterances[0]?.onend?.();
-    expect(isSpeaking()).toBe(false);
-  });
-
-  test("rejects emoji-only content", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    expect(cleanForSpeech("🐝  hello  🟢")).toBe("hello");
-    expect(speakText("🐝🟢")).toBe(false);
-    expect(engine.utterances).toHaveLength(0);
-  });
-
-  test("iPhone hits a stubborn engine again so no tail is left playing", () => {
-    const engine = new FakeSynth();
-    engine.speaking = true;
-    let ignoreFirst = true;
-    engine.cancel = function () {
-      this.cancelCalls += 1;
-      if (ignoreFirst) { ignoreFirst = false; return; }
-      this.speaking = false;
-      this.pending = false;
-    };
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
+    const stale = engine.utterances[0];
 
     speakText("Newest sentence.");
 
     expect(engine.cancelCalls).toBe(2);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
+    expect(stale?.onstart).toBeNull();
+    expect(stale?.onend).toBeNull();
   });
 
-  test("a replaced utterance can no longer report state", () => {
+  test("tracks native start and end callbacks", () => {
     const engine = new FakeSynth();
-    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
-    speakText("Older sentence.");
-    const stale = engine.utterances[0]!;
-    engine.speaking = true;
+    installBrowser(engine);
+    let ended = false;
+    speakText("Track this sentence.", { onEnd: () => { ended = true; } });
 
-    speakText("Newest sentence.");
-    expect(stale.onend).toBeNull();
-    expect(stale.onstart).toBeNull();
-    engine.utterances[1]?.onstart?.();
+    expect(isSpeaking()).toBe(false);
+    engine.utterances[0]?.onstart?.();
     expect(isSpeaking()).toBe(true);
+    engine.utterances[0]?.onend?.();
+    expect(isSpeaking()).toBe(false);
+    expect(ended).toBe(true);
+  });
+
+  test("reports a native utterance error without retrying", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    let failed = false;
+    speakText("Do not retry this.", { onError: () => { failed = true; } });
+
+    engine.utterances[0]?.onerror?.();
+
+    expect(failed).toBe(true);
+    expect(engine.utterances).toHaveLength(1);
+    expect(isSpeaking()).toBe(false);
+  });
+
+  test("applies rate and pitch without changing the output path", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("Configured speech.", { rate: 1.25, pitch: 0.9 });
+
+    expect(engine.utterances[0]?.rate).toBe(1.25);
+    expect(engine.utterances[0]?.pitch).toBe(0.9);
+  });
+
+  test("removes emoji and rejects emoji-only content", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+
+    expect(cleanForSpeech("🐝  hello  🟢")).toBe("hello");
+    expect(speakText("🐝🟢")).toBe(false);
+    expect(engine.utterances).toHaveLength(0);
   });
 });

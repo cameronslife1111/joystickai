@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { prepareRouteForSpeech, releaseMic, startPcmRecorder } from "../src/lib/audio-recorder";
+import { releaseMic, startPcmRecorder } from "../src/lib/audio-recorder";
 
 class FakeTrack {
   readyState = "live";
@@ -47,7 +47,7 @@ afterEach(async () => {
   await releaseMic();
 });
 
-describe("audio recorder routing", () => {
+describe("audio recorder lifecycle", () => {
   test("stops a microphone stream that resolves after release", async () => {
     const pending = deferred<MediaStream>();
     const stream = new FakeStream();
@@ -56,11 +56,7 @@ describe("audio recorder routing", () => {
     });
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
-      value: {
-        userAgent: "Mozilla/5.0 (iPhone) AppleWebKit",
-        mediaDevices: { getUserMedia: () => pending.promise },
-        audioSession: { type: "play-and-record" },
-      },
+      value: { mediaDevices: { getUserMedia: () => pending.promise } },
     });
 
     const starting = startPcmRecorder();
@@ -70,55 +66,24 @@ describe("audio recorder routing", () => {
 
     await expect(starting).rejects.toMatchObject({ name: "AbortError" });
     expect(stream.track.stopCalls).toBe(1);
-    expect(navigator.audioSession.type).toBe("ambient");
   });
 
-  test("prepareRouteForSpeech releases a warm mic left over after cancel", async () => {
+  test("release closes a warm microphone stream", async () => {
     const stream = new FakeStream();
     Object.assign(globalThis, {
       window: Object.assign(globalThis, { AudioContext: FakeContext }),
     });
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
-      value: {
-        userAgent: "Mozilla/5.0 (iPhone) AppleWebKit",
-        mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
-        audioSession: { type: "play-and-record" },
-      },
+      value: { mediaDevices: { getUserMedia: () => Promise.resolve(stream) } },
     });
 
     const recorder = await startPcmRecorder();
-    recorder.cancel(); // detaches but keeps the stream warm
+    recorder.cancel();
     expect(stream.track.stopCalls).toBe(0);
 
-    prepareRouteForSpeech();
+    await releaseMic();
 
     expect(stream.track.stopCalls).toBe(1);
-    expect(navigator.audioSession.type).toBe("ambient");
-  });
-
-  test("prepareRouteForSpeech never kills a genuinely active recording", async () => {
-    const stream = new FakeStream();
-    Object.assign(globalThis, {
-      window: Object.assign(globalThis, { AudioContext: FakeContext }),
-    });
-    Object.defineProperty(globalThis, "navigator", {
-      configurable: true,
-      value: {
-        userAgent: "Mozilla/5.0 (iPhone) AppleWebKit",
-        mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
-        audioSession: { type: "play-and-record" },
-      },
-    });
-
-    const recorder = await startPcmRecorder();
-    prepareRouteForSpeech();
-
-    // The live mic survives; only the category is asserted.
-    expect(stream.track.stopCalls).toBe(0);
-    expect(navigator.audioSession.type).toBe("ambient");
-
-    await recorder.stop();
-    await releaseMic();
   });
 });

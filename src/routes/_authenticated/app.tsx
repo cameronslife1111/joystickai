@@ -9,7 +9,7 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, prepareSpeechGesture } from "@/lib/speech";
+import { speakText, cancelSpeech } from "@/lib/speech";
 
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -739,11 +739,8 @@ function AppPage() {
   };
 
 
-  // TTS — token-gated, race-safe against rapid handler chains.
-  // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
-  // speechSynthesis.speak() when it's called synchronously after a user
-  // gesture (or after the one-time unlock in __root.tsx). Any delay or
-  // async hop here causes iOS to silently drop the utterance.
+  // TTS — token-gated, race-safe against rapid handler chains. Keep the native
+  // speech call synchronous with the action that selected the sentence.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (inCallRef.current) return; // on a call — only the conversation is audible
@@ -1434,7 +1431,6 @@ function AppPage() {
   useOrbGestures(
     orbRef,
     {
-      onGestureStart: prepareSpeechGesture,
       onTap: onDoubleTap,
       onDoubleTap,
       onLongPressStart,
