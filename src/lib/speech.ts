@@ -454,14 +454,27 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   }
 
   try {
-    if (isIosWebKit()) requestIosPlaybackSession();
-    else if (s.paused) s.resume();
-    if (s.speaking || s.pending) {
+    if (isIosWebKit()) {
+      // iPhone: cancel and speak in the SAME tick as the swipe. This keeps the
+      // user-activation window intact and is what makes the replacement feel
+      // instant instead of waiting for the old queue to drain. If the engine
+      // silently drops it, the short watchdog above re-submits.
+      requestIosPlaybackSession();
+      startRouteAnchor();
+      if (s.speaking || s.pending) {
+        try {
+          s.cancel();
+        } catch {}
+      }
+      submit();
+    } else if (s.speaking || s.pending) {
+      if (s.paused) s.resume();
       s.cancel();
-      // Never cancel and speak in the same turn. WebKit can apply the pending
-      // cancel to the newly submitted utterance and silently discard it.
+      // Desktop engines can apply a pending cancel to a same-tick utterance,
+      // so let the queue settle for a frame first.
       later(() => submitWhenIdle(), 16);
     } else {
+      if (s.paused) s.resume();
       submit();
     }
 
