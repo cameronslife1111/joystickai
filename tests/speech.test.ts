@@ -74,6 +74,10 @@ function installBrowser(speechSynthesis: FakeSynth) {
       clearTimeout,
       addEventListener: () => {},
     }),
+    document: {
+      visibilityState: "visible",
+      addEventListener: () => {},
+    },
     SpeechSynthesisUtterance: FakeUtterance,
   });
 }
@@ -110,6 +114,20 @@ describe("sentence speech", () => {
 
     expect(engine.utterances[0]?.voice).toBeUndefined();
     expect(engine.utterances[0]?.lang).toBeUndefined();
+  });
+
+  test("uses a newly available local voice on a later utterance", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("First sentence.");
+
+    const localVoice = { name: "Local English", lang: "en-US", default: false, localService: true };
+    engine.voices = [localVoice];
+    engine.utterances[0]?.onend?.();
+    speakText("Second sentence.");
+
+    expect(engine.utterances[1]?.voice).toBe(localVoice);
+    expect(engine.utterances[1]?.lang).toBe("en-US");
   });
 
   test("cancels active speech and submits the replacement after settling", async () => {

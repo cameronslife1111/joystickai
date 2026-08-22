@@ -315,7 +315,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       s.cancel();
       // Never cancel and speak in the same turn. WebKit can apply the pending
       // cancel to the newly submitted utterance and silently discard it.
-      submitWhenIdle();
+      later(() => submitWhenIdle(), 16);
     } else {
       submit();
     }
