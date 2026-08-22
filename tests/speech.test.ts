@@ -249,7 +249,7 @@ describe("sentence speech", () => {
     expect(engine.utterances).toHaveLength(0);
   });
 
-  test("gesture start only opens the route, it never cancels speech", () => {
+  test("gesture start never cancels speech and never plays media", () => {
     const engine = new FakeSynth();
     engine.speaking = true;
     installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
@@ -257,41 +257,36 @@ describe("sentence speech", () => {
     prepareSpeechGesture();
 
     expect(engine.cancelCalls).toBe(0);
-    expect(FakeAudio.instances.at(-1)?.playCalls).toBe(1);
+    expect(FakeAudio.instances).toHaveLength(0);
   });
 
-  test("promotes the iPhone audio session and never resumes a stale queue", () => {
+  test("keeps the iPhone audio session mixable so other audio keeps playing", () => {
     const engine = new FakeSynth();
     engine.paused = true;
     const audioSession = { type: "play-and-record", state: "active" };
     installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
 
     prepareSpeechGesture();
-    speakText("Route this through the speaker.");
+    speakText("Talk over the music.");
 
-    expect(audioSession.type).toBe("playback");
+    expect(audioSession.type).toBe("ambient");
     expect(engine.resumeCalls).toBe(0);
-    expect(FakeAudio.instances.at(-1)?.playCalls).toBeGreaterThan(0);
   });
 
-  test("keeps one iPhone route anchor running across sentences", () => {
+  test("never creates an audio element while speaking on iPhone", () => {
     const engine = new FakeSynth();
     installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
 
+    installSpeechUnlock();
     prepareSpeechGesture();
-    speakText("Keep this on the speaker.");
-    const anchor = FakeAudio.instances.at(-1);
-    expect(anchor?.paused).toBe(false);
-    expect(anchor?.playCalls).toBe(1);
-
+    speakText("First sentence.");
     engine.utterances[0]?.onend?.();
-    expect(anchor?.paused).toBe(false);
-
     prepareSpeechGesture();
-    speakText("And this one too.");
-    expect(anchor?.playCalls).toBe(1);
-    expect(anchor?.paused).toBe(false);
+    speakText("Second sentence.");
+
+    expect(FakeAudio.instances).toHaveLength(0);
   });
+
 
   test("retries an errored implicit iPhone voice with a local voice", async () => {
     const engine = new FakeSynth();

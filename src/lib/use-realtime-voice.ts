@@ -5,7 +5,7 @@ import {
   composeRealtimeInstructions,
   createRealtimeSession,
 } from "@/lib/realtime.functions";
-import { requestIosPlaybackSession } from "@/lib/audio-session";
+import { requestIosMixableSession } from "@/lib/audio-session";
 
 export type CallState = "idle" | "connecting" | "live";
 
@@ -66,7 +66,7 @@ export function useRealtimeVoice({
       audioRef.current.remove();
       audioRef.current = null;
     }
-    requestIosPlaybackSession();
+    requestIosMixableSession();
     setSpeaking(false);
     setState("idle");
   }, []);
