@@ -1,5 +1,3 @@
-import { requestIosMixableSession } from "@/lib/audio-session";
-
 // Record microphone input as PCM via the Web Audio API and encode a complete
 // 16 kHz mono WAV Blob on stop. Deliberately avoids MediaRecorder timeslice —
 // only WAV is guaranteed decodable everywhere (iOS Safari records fragmented
@@ -76,7 +74,6 @@ let micGeneration = 0;
 // live recording, but it MUST reclaim the audio route from a mic that is only
 // being kept warm or is still closing — otherwise iOS keeps the session in
 // play-and-record and speech routes to the earpiece/AirPods only.
-let activeRecorders = 0;
 
 function warmIsLive() {
   if (!warm) return false;
@@ -102,32 +99,10 @@ export function releaseMic(): Promise<void> {
     } catch {}
     releasing.stream.getTracks().forEach((t) => t.stop());
     closing = releasing.ctx.close().catch(() => {}).then(() => {
-      // Closing a recording context can make WebKit restore the previous audio
-      // category after speech has already begun. Restore a mixable category once
-      // teardown has genuinely completed.
-      requestIosMixableSession();
       closing = null;
     });
   }
-  requestIosMixableSession();
   return closing ?? Promise.resolve();
-}
-
-/**
- * Called by the speech engine immediately before it submits an utterance.
- * Speech must never inherit the recording route: while iOS is in
- * play-and-record, output goes to the earpiece or AirPods only and other apps'
- * audio stays interrupted. If the mic is merely warm or still closing (no
- * active recording), stop its tracks synchronously and reassert the mixable
- * category. A genuinely active recording is left untouched. Everything here is
- * synchronous property assignment and track stops — zero added swipe latency.
- */
-export function prepareRouteForSpeech(): void {
-  if (activeRecorders === 0 && (warm || closing)) {
-    void releaseMic();
-  } else {
-    requestIosMixableSession();
-  }
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {
@@ -137,7 +112,6 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     if (requestGeneration !== micGeneration) {
       stream.getTracks().forEach((track) => track.stop());
-      requestIosMixableSession();
       throw new DOMException("Microphone request was superseded", "AbortError");
     }
     const AudioCtx =
@@ -192,15 +166,9 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     processor.onaudioprocess = null;
   };
 
-  activeRecorders += 1;
-  const releaseActive = () => {
-    activeRecorders = Math.max(0, activeRecorders - 1);
-  };
-
   return {
     ready,
     async stop() {
-      if (!stopped && !cancelled) releaseActive();
       stopped = true;
       const srcRate = ctx.sampleRate;
       detach();
@@ -215,7 +183,6 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
       return encodeWav(down, TARGET_RATE);
     },
     cancel() {
-      if (!stopped && !cancelled) releaseActive();
       cancelled = true;
       detach();
     },

@@ -9,7 +9,7 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, prepareSpeechGesture } from "@/lib/speech";
+import { speakText, cancelSpeech } from "@/lib/speech";
 
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -1434,7 +1434,6 @@ function AppPage() {
   useOrbGestures(
     orbRef,
     {
-      onGestureStart: prepareSpeechGesture,
       onTap: onDoubleTap,
       onDoubleTap,
       onLongPressStart,
