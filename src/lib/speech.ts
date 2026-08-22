@@ -1,7 +1,7 @@
 // Shared browser speech engine. Keep this deliberately close to the Web Speech
 // API so speech stays on-device and uses a voice exposed by the browser.
 
-import { iosAudioSessionState, requestIosPlaybackSession } from "@/lib/audio-session";
+import { iosAudioSessionState, requestIosMixableSession } from "@/lib/audio-session";
 
 type SpeakOpts = {
   rate?: number;
