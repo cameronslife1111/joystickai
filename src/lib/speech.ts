@@ -2,7 +2,6 @@
 // API so speech stays on-device and uses a voice exposed by the browser.
 
 import { iosAudioSessionState, requestIosPlaybackSession } from "@/lib/audio-session";
-import { releaseMic } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
   rate?: number;
