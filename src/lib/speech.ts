@@ -27,6 +27,19 @@ function synth(): SpeechSynthesis | null {
   }
 }
 
+/**
+ * iPhone/iPad — every browser there (Chrome, Edge, Firefox included) runs on
+ * WebKit and shares its user-activation rules for speech.
+ */
+function isWebKitMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const iOS = /iPad|iPhone|iPod/.test(ua);
+  const iPadOS = ua.includes("Macintosh") && (navigator.maxTouchPoints ?? 0) > 1;
+  return iOS || iPadOS;
+}
+
+
 /* -------------------------------- unlock --------------------------------- */
 
 let unlocked = false;
