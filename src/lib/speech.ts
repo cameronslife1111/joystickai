@@ -326,7 +326,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     if (finished || myGen !== generation) return;
     finished = true;
     audibleSpeaking = false;
-    stopRouteAnchor();
     removeVoicesListener?.();
     removeVoicesListener = null;
     if (failed) opts.onError?.();
