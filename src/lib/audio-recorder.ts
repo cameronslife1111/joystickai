@@ -192,9 +192,15 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     processor.onaudioprocess = null;
   };
 
+  activeRecorders += 1;
+  const releaseActive = () => {
+    activeRecorders = Math.max(0, activeRecorders - 1);
+  };
+
   return {
     ready,
     async stop() {
+      if (!stopped && !cancelled) releaseActive();
       stopped = true;
       const srcRate = ctx.sampleRate;
       detach();
@@ -209,6 +215,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
       return encodeWav(down, TARGET_RATE);
     },
     cancel() {
+      if (!stopped && !cancelled) releaseActive();
       cancelled = true;
       detach();
     },
