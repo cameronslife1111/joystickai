@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { releaseMic, startPcmRecorder } from "../src/lib/audio-recorder";
+import { prepareRouteForSpeech, releaseMic, startPcmRecorder } from "../src/lib/audio-recorder";
 
 class FakeTrack {
   readyState = "live";

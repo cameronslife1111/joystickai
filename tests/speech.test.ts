@@ -273,6 +273,32 @@ describe("sentence speech", () => {
     expect(engine.resumeCalls).toBe(0);
   });
 
+  test("reclaims a leftover recording route before speaking on iPhone", () => {
+    const engine = new FakeSynth();
+    const audioSession = { type: "play-and-record", state: "active" };
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
+
+    // No gesture prep: speech itself must fix the route so output can reach
+    // the speaker instead of staying on the earpiece/AirPods.
+    speakText("Speaker please.");
+
+    expect(audioSession.type).toBe("ambient");
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Speaker please."]);
+  });
+
+  test("re-asserts the mixable category when the utterance actually starts", () => {
+    const engine = new FakeSynth();
+    const audioSession = { type: "auto", state: "active" };
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
+
+    speakText("Hold the route.");
+    // Simulate a late microphone teardown flipping the category back.
+    audioSession.type = "play-and-record";
+    engine.utterances[0]?.onstart?.();
+
+    expect(audioSession.type).toBe("ambient");
+  });
+
   test("never creates an audio element while speaking on iPhone", () => {
     const engine = new FakeSynth();
     installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
