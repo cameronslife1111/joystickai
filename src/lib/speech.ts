@@ -108,7 +108,10 @@ function stopRouteAnchor() {
 
 /* -------------------------------- chunking ------------------------------- */
 
-const CHUNK_MAX = 170;
+// A normal sentence is spoken as ONE utterance. Chunking only exists as a
+// guard for pathologically long text; every chunk hand-off adds an audible gap
+// and gives cancellation another object to unwind.
+const CHUNK_MAX = 600;
 
 function chunkText(text: string): string[] {
   if (text.length <= CHUNK_MAX) return [text];
