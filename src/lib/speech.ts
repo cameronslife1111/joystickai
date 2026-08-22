@@ -203,13 +203,10 @@ export function installSpeechUnlock() {
     // an utterance permanently "speaking", blocking every real sentence.
     availableVoices();
     if (isIosWebKit()) {
+      // The route anchor stays alive for the whole foreground session; starting
+      // and stopping it per sentence is what made swipes feel laggy.
       requestIosPlaybackSession();
       startRouteAnchor();
-      // A generic tap only establishes the route. A real speech request keeps
-      // it alive; otherwise release it after the gesture has settled.
-      later(() => {
-        if (!audibleSpeaking && !s.speaking && !s.pending) stopRouteAnchor();
-      }, 250);
     }
     else {
       try {
@@ -221,9 +218,15 @@ export function installSpeechUnlock() {
   const onVisibilityChange = () => {
     if (document.visibilityState === "hidden") {
       cancelSpeech();
+      stopRouteAnchor();
       return;
     }
     handler();
+  };
+
+  const onPageHide = () => {
+    cancelSpeech();
+    stopRouteAnchor();
   };
 
   window.addEventListener("pointerdown", handler, true);
