@@ -72,6 +72,11 @@ let warm: { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSour
   null;
 let closing: Promise<void> | null = null;
 let micGeneration = 0;
+// Recordings that are genuinely capturing right now. Speech must never kill a
+// live recording, but it MUST reclaim the audio route from a mic that is only
+// being kept warm or is still closing — otherwise iOS keeps the session in
+// play-and-record and speech routes to the earpiece/AirPods only.
+let activeRecorders = 0;
 
 function warmIsLive() {
   if (!warm) return false;
@@ -106,6 +111,23 @@ export function releaseMic(): Promise<void> {
   }
   requestIosMixableSession();
   return closing ?? Promise.resolve();
+}
+
+/**
+ * Called by the speech engine immediately before it submits an utterance.
+ * Speech must never inherit the recording route: while iOS is in
+ * play-and-record, output goes to the earpiece or AirPods only and other apps'
+ * audio stays interrupted. If the mic is merely warm or still closing (no
+ * active recording), stop its tracks synchronously and reassert the mixable
+ * category. A genuinely active recording is left untouched. Everything here is
+ * synchronous property assignment and track stops — zero added swipe latency.
+ */
+export function prepareRouteForSpeech(): void {
+  if (activeRecorders === 0 && (warm || closing)) {
+    void releaseMic();
+  } else {
+    requestIosMixableSession();
+  }
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {
@@ -170,9 +192,15 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     processor.onaudioprocess = null;
   };
 
+  activeRecorders += 1;
+  const releaseActive = () => {
+    activeRecorders = Math.max(0, activeRecorders - 1);
+  };
+
   return {
     ready,
     async stop() {
+      if (!stopped && !cancelled) releaseActive();
       stopped = true;
       const srcRate = ctx.sampleRate;
       detach();
@@ -187,6 +215,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
       return encodeWav(down, TARGET_RATE);
     },
     cancel() {
+      if (!stopped && !cancelled) releaseActive();
       cancelled = true;
       detach();
     },
