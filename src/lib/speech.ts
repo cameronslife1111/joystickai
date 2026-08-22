@@ -93,7 +93,10 @@ export function cancelSpeech() {
   } catch {}
   // Keep cancelled utterances alive briefly. Some WebKit versions dispatch the
   // cancellation event asynchronously and can otherwise lose the JS wrapper.
-  window.setTimeout(() => liveUtterances.clear(), 500);
+  const cancelled = [...liveUtterances];
+  window.setTimeout(() => {
+    for (const utterance of cancelled) liveUtterances.delete(utterance);
+  }, 500);
 }
 
 export function isSpeaking(): boolean {
@@ -189,11 +192,18 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     if (s.paused) s.resume();
     if (s.speaking || s.pending) {
       s.cancel();
-      pendingTimer = window.setTimeout(() => {
+      let checks = 0;
+      const submitWhenIdle = () => {
         pendingTimer = null;
         if (myGen !== generation) return;
+        if ((s.speaking || s.pending) && checks < 12) {
+          checks += 1;
+          pendingTimer = window.setTimeout(submitWhenIdle, 25);
+          return;
+        }
         submit();
-      }, 40);
+      };
+      pendingTimer = window.setTimeout(submitWhenIdle, 25);
     } else {
       submit();
     }
