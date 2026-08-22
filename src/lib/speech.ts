@@ -265,6 +265,23 @@ function clearTimers() {
   pendingTimers.clear();
 }
 
+/**
+ * Silence outgoing utterances before a stop so their callbacks can never touch
+ * the replacement sentence's state.
+ */
+function detachLiveUtterances() {
+  for (const utterance of liveUtterances) {
+    try {
+      utterance.onstart = null;
+      utterance.onboundary = null;
+      utterance.onend = null;
+      utterance.onerror = null;
+      utterance.volume = 0;
+    } catch {}
+  }
+  liveUtterances.clear();
+}
+
 export function cancelSpeech() {
   const s = synth();
   if (!s) return;
@@ -276,11 +293,12 @@ export function cancelSpeech() {
       if (s.paused) s.resume();
     } catch {}
   }
+  detachLiveUtterances();
   try {
     s.cancel();
   } catch {}
-  liveUtterances.clear();
 }
+
 
 export function isSpeaking(): boolean {
   return audibleSpeaking;
