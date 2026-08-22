@@ -70,10 +70,6 @@ let warm: { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSour
   null;
 let closing: Promise<void> | null = null;
 let micGeneration = 0;
-// Recordings that are genuinely capturing right now. Speech must never kill a
-// live recording, but it MUST reclaim the audio route from a mic that is only
-// being kept warm or is still closing — otherwise iOS keeps the session in
-// play-and-record and speech routes to the earpiece/AirPods only.
 
 function warmIsLive() {
   if (!warm) return false;
@@ -87,9 +83,7 @@ function warmIsLive() {
 
 /** Fully release the microphone (call when leaving the screen). */
 export function releaseMic(): Promise<void> {
-  // Invalidates getUserMedia requests that have not resolved yet. Without this,
-  // a late permission result can restore a live recording route after a swipe
-  // has already switched iOS back to speaker playback.
+  // Invalidate a getUserMedia request that has not resolved yet.
   micGeneration += 1;
   if (warm) {
     const releasing = warm;
