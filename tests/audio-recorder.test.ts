@@ -70,6 +70,6 @@ describe("audio recorder routing", () => {
 
     await expect(starting).rejects.toMatchObject({ name: "AbortError" });
     expect(stream.track.stopCalls).toBe(1);
-    expect(navigator.audioSession.type).toBe("playback");
+    expect(navigator.audioSession.type).toBe("ambient");
   });
 });
