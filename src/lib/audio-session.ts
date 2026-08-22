@@ -12,16 +12,21 @@ function iosAudioSession(): AudioSessionLike | null {
   return (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession ?? null;
 }
 
-/** Restore normal speaker/media routing after iOS has owned the mic. */
-export function requestIosPlaybackSession(): boolean {
+/**
+ * Return to a MIXABLE audio category so speech synthesis layers on top of
+ * whatever the user is already listening to. "playback" is exclusive on iOS and
+ * pauses other apps' audio, so it must never be requested here.
+ */
+export function requestIosMixableSession(): boolean {
   const session = iosAudioSession();
   if (!session) return false;
-  try {
-    session.type = "playback";
-    return true;
-  } catch {
-    return false;
+  for (const type of ["ambient", "auto"]) {
+    try {
+      session.type = type;
+      if (session.type === type) return true;
+    } catch {}
   }
+  return false;
 }
 
 export function iosAudioSessionState() {
