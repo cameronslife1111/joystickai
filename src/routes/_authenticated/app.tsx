@@ -9,7 +9,7 @@ import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, prepareSpeech } from "@/lib/speech";
+import { speakText, cancelSpeech } from "@/lib/speech";
 
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -1434,9 +1434,6 @@ function AppPage() {
   useOrbGestures(
     orbRef,
     {
-      // Stop the previous sentence at pointer-down. The swipe result can then
-      // speak immediately at pointer-up using the browser's native voice.
-      onGestureStart: prepareSpeech,
       onTap: onDoubleTap,
       onDoubleTap,
       onLongPressStart,

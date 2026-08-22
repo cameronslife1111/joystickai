@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 export type SwipeDirection = "up" | "down" | "left" | "right";
 
 interface OrbGestureCallbacks {
-  onGestureStart?: () => void;
   onTap?: () => void;
   onDoubleTap?: () => void;
   onTripleTap?: () => void;
@@ -76,7 +75,6 @@ export function useOrbGestures(
 
       const begin = (x: number, y: number, pointer: boolean) => {
         if (active) return;
-        cbRef.current.onGestureStart?.();
         active = true;
         usingPointer = pointer;
         startX = x;
