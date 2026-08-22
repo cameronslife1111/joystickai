@@ -355,6 +355,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.onstart = () => {
       started = true;
       unlocked = true;
+      audibleSpeaking = true;
       debugSpeech("start", {
         chunk: chunkIndex + 1,
         voice: voice ? (voice.localService ? "local" : "remote") : "system-default",
