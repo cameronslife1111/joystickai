@@ -461,14 +461,22 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       // user-activation window intact and is what makes the replacement feel
       // instant instead of waiting for the old queue to drain. If the engine
       // silently drops it, the short watchdog above re-submits.
-      requestIosPlaybackSession();
       startRouteAnchor();
       if (s.speaking || s.pending) {
+        detachLiveUtterances();
         try {
           s.cancel();
         } catch {}
+        // A stop that WebKit did not honour leaves an audible tail; hit it
+        // again before the replacement goes in.
+        if (s.speaking || s.pending) {
+          try {
+            s.cancel();
+          } catch {}
+        }
       }
       submit();
+
     } else if (s.speaking || s.pending) {
       if (s.paused) s.resume();
       s.cancel();
