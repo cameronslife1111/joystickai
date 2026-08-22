@@ -70,6 +70,8 @@ function downsampleTo16k(input: Float32Array, srcRate: number): Float32Array {
 // has already seen the red glow and started talking.
 let warm: { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSourceNode } | null =
   null;
+let closing: Promise<void> | null = null;
+let micGeneration = 0;
 
 function warmIsLive() {
   if (!warm) return false;
@@ -82,29 +84,49 @@ function warmIsLive() {
 }
 
 /** Fully release the microphone (call when leaving the screen). */
-export function releaseMic() {
+export function releaseMic(): Promise<void> {
+  // Invalidates getUserMedia requests that have not resolved yet. Without this,
+  // a late permission result can restore a live recording route after a swipe
+  // has already switched iOS back to speaker playback.
+  micGeneration += 1;
   if (warm) {
-    try {
-      warm.source.disconnect();
-    } catch {}
-    warm.stream.getTracks().forEach((t) => t.stop());
-    void warm.ctx.close().catch(() => {});
+    const releasing = warm;
     warm = null;
+    try {
+      releasing.source.disconnect();
+    } catch {}
+    releasing.stream.getTracks().forEach((t) => t.stop());
+    closing = releasing.ctx.close().catch(() => {}).then(() => {
+      // Closing a recording context can make WebKit restore the previous audio
+      // category after speech has already begun. Reassert speaker playback once
+      // teardown has genuinely completed.
+      requestIosPlaybackSession();
+      closing = null;
+    });
   }
   requestIosPlaybackSession();
+  return closing ?? Promise.resolve();
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {
   if (!warmIsLive()) {
-    releaseMic();
+    await releaseMic();
+    const requestGeneration = ++micGeneration;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (requestGeneration !== micGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      requestIosPlaybackSession();
+      throw new DOMException("Microphone request was superseded", "AbortError");
+    }
     const AudioCtx =
       (window as any).AudioContext || (window as any).webkitAudioContext;
     const ctx: AudioContext = new AudioCtx();
     const source = ctx.createMediaStreamSource(stream);
     warm = { stream, ctx, source };
   }
-  const { ctx, source } = warm!;
+  const active = warm;
+  if (!active) throw new DOMException("Microphone is unavailable", "NotReadableError");
+  const { ctx, source } = active;
   if (ctx.state === "suspended") {
     try {
       await ctx.resume();
