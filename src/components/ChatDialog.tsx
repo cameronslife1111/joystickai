@@ -53,9 +53,10 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { speakText, cancelSpeech } from "@/lib/tts";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { splitIntoSentences } from "@/lib/sentences";
+import { speakText, cancelSpeech } from "@/lib/speech";
+
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { useRealtimeVoice } from "@/lib/use-realtime-voice";
 import { buildRealtimeDocContext } from "@/lib/realtime.functions";
@@ -166,9 +167,7 @@ const stripEmoji = (s: string) =>
 
 // Speak a short phrase with no message-bubble binding (cues, plan announcements).
 function speakPlain(text: string) {
-  const clean = stripEmoji(text);
-  if (!clean) return;
-  speakText(clean);
+  speakText(text);
 }
 
 // Pick a cute spoken cue from a plan's summary + step descriptions.
@@ -302,7 +301,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     try {
       window.localStorage.setItem("orby_chat_autospeak", next ? "1" : "0");
     } catch {}
-    if (!next) {
+    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
       cancelSpeech();
       setSpeakingId(null);
     }
@@ -595,7 +594,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   // Browser text-to-speech would fight the live voice — silence it while live.
   useEffect(() => {
-    if (voice.live) {
+    if (voice.live && typeof window !== "undefined" && "speechSynthesis" in window) {
       cancelSpeech();
       setSpeakingId(null);
     }
@@ -620,7 +619,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [messages, isActiveBusy, open]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open && typeof window !== "undefined" && "speechSynthesis" in window) {
       cancelSpeech();
       setSpeakingId(null);
     }
@@ -629,12 +628,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   // Speak a message's text and mark it as the actively-spoken message so the
   // per-message Play/Stop button reflects state (and can stop it).
   const speakMessage = (id: string, text: string) => {
-    const clean = stripEmoji(text);
-    if (!clean) return;
+    const clear = () => setSpeakingId((cur) => (cur === id ? null : cur));
     setSpeakingId(id);
-    speakText(clean, () => true, {
-      onEnd: () => setSpeakingId((cur) => (cur === id ? null : cur)),
-    });
+    const ok = speakText(text, { onEnd: clear, onError: clear });
+    if (!ok) clear();
   };
 
   // When a thread is opened (e.g. via a sentence's linked chat) and "Read

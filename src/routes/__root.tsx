@@ -12,6 +12,8 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+import { installSpeechUnlock } from "@/lib/speech";
+
 // Side-effect: route backend requests through the same-origin proxy on the
 // client so the app loads on flaky/cellular networks. Must run before any
 // backend call is made.
@@ -120,32 +122,12 @@ function RootComponent() {
     return () => subscription.unsubscribe();
   }, [router, queryClient]);
 
-  // iOS Safari: unlock speechSynthesis on first user gesture so subsequent
-  // speak() calls (even from async handlers) actually produce audio.
+  // WebKit: bless speechSynthesis on user gestures. The engine keeps the
+  // listeners armed until it has confirmed speech actually ran.
   useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    let unlocked = false;
-    const unlock = () => {
-      if (unlocked) return;
-      unlocked = true;
-      try {
-        const u = new SpeechSynthesisUtterance(" ");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-      } catch {}
-      window.removeEventListener("pointerdown", unlock, true);
-      window.removeEventListener("touchstart", unlock, true);
-      window.removeEventListener("click", unlock, true);
-    };
-    window.addEventListener("pointerdown", unlock, true);
-    window.addEventListener("touchstart", unlock, true);
-    window.addEventListener("click", unlock, true);
-    return () => {
-      window.removeEventListener("pointerdown", unlock, true);
-      window.removeEventListener("touchstart", unlock, true);
-      window.removeEventListener("click", unlock, true);
-    };
+    installSpeechUnlock();
   }, []);
+
 
   return (
     <QueryClientProvider client={queryClient}>

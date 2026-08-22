@@ -8,8 +8,9 @@ import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { Orb } from "@/components/Orb";
 import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
-import { speakText, cancelSpeech, primeVoices } from "@/lib/tts";
 import { splitIntoSentences } from "@/lib/sentences";
+import { speakText, cancelSpeech } from "@/lib/speech";
+
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
@@ -543,7 +544,9 @@ function AppPage() {
     qc.setQueryData(["user_preferences"], (prev: any) => ({
       ...(prev ?? {}), muted: next,
     }));
-    if (next) cancelSpeech();
+    if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
+      cancelSpeech();
+    }
     await supabase.from("user_preferences").upsert(
       { user_id: u.user.id, muted: next, favorites: favorites as any },
       { onConflict: "user_id" },
@@ -736,40 +739,28 @@ function AppPage() {
   };
 
 
-  // TTS — token-gated, race-safe against rapid handler chains. The actual
-  // speechSynthesis handling (WebKit's cancel-eats-next-utterance bug, paused
-  // queue, empty voice list) lives in @/lib/tts.
+  // TTS — token-gated, race-safe against rapid handler chains.
+  // NOTE: we do NOT wrap speak() in setTimeout — iOS Safari only honors
+  // speechSynthesis.speak() when it's called synchronously after a user
+  // gesture (or after the one-time unlock in __root.tsx). Any delay or
+  // async hop here causes iOS to silently drop the utterance.
   const speak = useCallback((text: string, token?: number) => {
     if (mutedRef.current) return; // sound off — never invoke speechSynthesis
     if (inCallRef.current) return; // on a call — only the conversation is audible
     if (recordingRef.current) return; // voice-edit mode — user is speaking, stay silent
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
     if (!clean) return;
-    speakText(clean, () =>
-      (token == null || token === speechTokenRef.current) &&
-      !mutedRef.current &&
-      !inCallRef.current &&
-      !recordingRef.current,
-    );
+    speakText(clean);
   }, []);
 
-  // Cancel any in-flight speech and claim a fresh speech token. Call at the
-  // start of every user-driven action that might end in speak().
+  // Claim a fresh app token. The shared speech engine owns queue replacement;
+  // cancelling here as well caused WebKit to clear the following utterance.
   const claimSpeech = useCallback(() => {
-    cancelSpeech();
     return ++speechTokenRef.current;
   }, []);
-
-  // Desktop Safari can start with an empty voice list; warm it early so the
-  // first spoken sentence isn't dropped.
-  useEffect(() => {
-    primeVoices();
-  }, []);
-
-
-
 
   // Track "busy" UI state via a ref so the auto-repeat timer can check it at
   // fire time without re-subscribing every time a dialog toggles.
@@ -917,12 +908,15 @@ function AppPage() {
       if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
       return;
     }
-    await setIndex(next);
+    // Keep speech in the pointer-up activation turn for strict WebKit builds.
+    void setIndex(next);
     speak(sentences[next].content, token);
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
   const openNewIdea = useCallback(() => {
-    cancelSpeech();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      cancelSpeech();
+    }
     setComposeText("");
     setComposing(true);
   }, []);
@@ -935,7 +929,8 @@ function AppPage() {
       return;
     }
     const prev = currentIdx - 1;
-    await setIndex(prev);
+    // Keep speech in the pointer-up activation turn for strict WebKit builds.
+    void setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content, token);
   }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
 
@@ -1182,7 +1177,8 @@ function AppPage() {
       toast.error("Linked chat not found");
       return false;
     }
-    claimSpeech(); // stop sentence TTS so the chat can read its reply
+    claimSpeech();
+    cancelSpeech(); // no replacement follows, so explicitly stop sentence TTS
     setPendingChatThreadId(threadId);
     setChatStartInList(false);
     setChatOpen(true);
@@ -1329,7 +1325,9 @@ function AppPage() {
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
-    cancelSpeech();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      cancelSpeech();
+    }
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
@@ -1399,7 +1397,9 @@ function AppPage() {
     }
     if (micStartingRef.current) return;
     // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
-    cancelSpeech();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      cancelSpeech();
+    }
     micStartingRef.current = true;
     void (async () => {
       try {
@@ -1451,33 +1451,10 @@ function AppPage() {
     {
       swipeThreshold: 38,
       moveCancelPx: 16,
-      // Desktop (MacBook trackpad two-finger swipe + arrow keys): only when no
-      // overlay is open, so keys/wheel can't fire behind a dialog.
-      desktopGuard: () =>
-        !editing &&
-        !menuOpen &&
-        !moveOpen &&
-        !searchOpen &&
-        !recentOpen &&
-        !composing &&
-        !chatOpen &&
-        !sendOpen &&
-        !favoritesOpen &&
-        !jumpOpen &&
-        !renameOpen &&
-        !newDocOpen &&
-        !deleteDocOpen &&
-        !pinPickerOpen &&
-        !linkPickerOpen &&
-        !planApprovalOpen &&
-        !plansScreenOpen &&
-        !exportChooserOpen &&
-        !recording,
       // The orb is unmounted while the editor is open, so exiting edit mode
       // creates a brand-new element — rebind listeners to it.
       rebindKey: `${docIconUrl ?? "orb"}|${editing ? "edit" : "read"}`,
     },
-
   );
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
@@ -1915,7 +1892,9 @@ function AppPage() {
   // sentence using the same "Send to which list?" flow as New idea.
   const openSendSentence = useCallback(() => {
     if (!currentSentence) return;
-    cancelSpeech();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      cancelSpeech();
+    }
     setMoveOpen(false);
     setComposing(false);
     setComposeText(currentSentence.content);
@@ -2322,15 +2301,18 @@ function AppPage() {
         setMenuOpen(false);
         if (next) {
           // Muting: stop any in-flight speech immediately.
-          cancelSpeech();
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            try { cancelSpeech(); } catch {}
+          }
         } else {
           // Unmuting: speak the currently displayed sentence right now,
           // synchronously, from this exact tap. This is the iPhone-safe
           // trigger for the Web Speech API.
           const text = currentSentence?.content;
-          if (text) {
-            const clean = stripEmoji(text);
-            if (clean) speakText(clean);
+          if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
+            try {
+              speakText(text);
+            } catch {}
           }
         }
         // Persist preference (async, fire-and-forget — happens AFTER speak).
@@ -3294,14 +3276,13 @@ function AppPage() {
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
           // iOS-safe: speak synchronously inside the tap gesture if unmuted.
-          if (!muted) {
+          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) speakText(clean);
+                speakText(text);
               }
             } catch {}
           }
@@ -3374,14 +3355,13 @@ function AppPage() {
           .filter((d): d is Doc => !!d);
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
-          if (!muted) {
+          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;
               const text = cached?.[Math.max(0, Math.min(idx, (cached?.length ?? 1) - 1))]?.content;
               if (text) {
-                const clean = stripEmoji(text);
-                if (clean) speakText(clean);
+                speakText(text);
               }
             } catch {}
           }
