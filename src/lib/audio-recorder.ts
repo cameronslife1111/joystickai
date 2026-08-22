@@ -1,4 +1,4 @@
-import { requestIosPlaybackSession } from "@/lib/audio-session";
+import { requestIosMixableSession } from "@/lib/audio-session";
 
 // Record microphone input as PCM via the Web Audio API and encode a complete
 // 16 kHz mono WAV Blob on stop. Deliberately avoids MediaRecorder timeslice —
@@ -98,13 +98,13 @@ export function releaseMic(): Promise<void> {
     releasing.stream.getTracks().forEach((t) => t.stop());
     closing = releasing.ctx.close().catch(() => {}).then(() => {
       // Closing a recording context can make WebKit restore the previous audio
-      // category after speech has already begun. Reassert speaker playback once
+      // category after speech has already begun. Restore a mixable category once
       // teardown has genuinely completed.
-      requestIosPlaybackSession();
+      requestIosMixableSession();
       closing = null;
     });
   }
-  requestIosPlaybackSession();
+  requestIosMixableSession();
   return closing ?? Promise.resolve();
 }
 
@@ -115,7 +115,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     if (requestGeneration !== micGeneration) {
       stream.getTracks().forEach((track) => track.stop());
-      requestIosPlaybackSession();
+      requestIosMixableSession();
       throw new DOMException("Microphone request was superseded", "AbortError");
     }
     const AudioCtx =
