@@ -299,8 +299,11 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.rate = opts.rate ?? 1;
     utterance.pitch = opts.pitch ?? 1;
     utterance.volume = 1;
-    // No audio-session or route work here: the route is already open from the
-    // gesture start, and re-asserting it per utterance delayed the swipe.
+    // Reclaim the audio route right before talking: a leftover warm/closing mic
+    // would keep iOS in play-and-record, routing speech to the earpiece/AirPods
+    // only and holding other apps' audio interrupted. This is synchronous (a
+    // property assignment plus track stops), so the swipe stays instant.
+    if (isIosWebKit()) prepareRouteForSpeech();
     // Let iOS choose its valid system voice first. An explicit local voice is
     // only a recovery path; stale/download-only voice objects can be silent.
     const voice = isIosWebKit() && !useExplicitIosVoice ? null : resolveVoice();
@@ -313,6 +316,9 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       started = true;
       unlocked = true;
       audibleSpeaking = true;
+      // A late microphone teardown completing right as speech begins can flip
+      // the category back — assert mixable one more time on the real start.
+      keepAudioMixable();
       debugSpeech("start", {
         chunk: chunkIndex + 1,
         voice: voice ? (voice.localService ? "local" : "remote") : "system-default",
