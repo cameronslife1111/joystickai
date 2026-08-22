@@ -238,21 +238,28 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     if (s.paused) s.resume();
     if (s.speaking || s.pending) {
       s.cancel();
-      let checks = 0;
-      const submitWhenIdle = () => {
-        pendingTimer = null;
-        if (myGen !== generation) return;
-        if ((s.speaking || s.pending) && checks < 12) {
-          checks += 1;
-          pendingTimer = window.setTimeout(submitWhenIdle, 25);
-          return;
-        }
+      if (isWebKitMobile()) {
+        // iOS (all browsers) only honors speak() while the user gesture is
+        // still live, so we must not defer submission to a timer.
         submit();
-      };
-      pendingTimer = window.setTimeout(submitWhenIdle, 25);
+      } else {
+        let checks = 0;
+        const submitWhenIdle = () => {
+          pendingTimer = null;
+          if (myGen !== generation) return;
+          if ((s.speaking || s.pending) && checks < 12) {
+            checks += 1;
+            pendingTimer = window.setTimeout(submitWhenIdle, 25);
+            return;
+          }
+          submit();
+        };
+        pendingTimer = window.setTimeout(submitWhenIdle, 25);
+      }
     } else {
       submit();
     }
+
   } catch (error) {
     debugSpeech("replace failed", error);
     opts.onError?.();
