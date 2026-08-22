@@ -415,7 +415,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       // user-activation window intact and is what makes the replacement feel
       // instant instead of waiting for the old queue to drain. If the engine
       // silently drops it, the short watchdog above re-submits.
-      startRouteAnchor();
       if (s.speaking || s.pending) {
         detachLiveUtterances();
         try {
