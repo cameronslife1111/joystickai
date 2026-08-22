@@ -344,11 +344,12 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.rate = opts.rate ?? 1;
     utterance.pitch = opts.pitch ?? 1;
     utterance.volume = 1;
-    if (isIosWebKit()) startRouteAnchor();
-    requestIosPlaybackSession();
+    // No audio-session or route work here: the route is already open from the
+    // gesture start, and re-asserting it per utterance delayed the swipe.
     // Let iOS choose its valid system voice first. An explicit local voice is
     // only a recovery path; stale/download-only voice objects can be silent.
     const voice = isIosWebKit() && !useExplicitIosVoice ? null : resolveVoice();
+
     if (voice) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
