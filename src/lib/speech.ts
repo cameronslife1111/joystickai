@@ -35,77 +35,18 @@ function isIosWebKit(): boolean {
     || (userAgent.includes("Macintosh") && navigator.maxTouchPoints > 1);
 }
 
-/* -------------------------- iOS route anchor ---------------------------- */
-
-let routeAnchor: HTMLAudioElement | null = null;
-let routeAnchorUrl: string | null = null;
+/* --------------------------- iOS audio category --------------------------- */
 
 /**
- * A looping, unmuted silent WAV keeps WebKit's media playback route alive
- * while AVSpeechSynthesizer speaks. It does not contain or replace speech.
+ * We deliberately play NO media of our own. Speech goes through the browser's
+ * speech synthesizer only, and the audio category stays mixable, so music from
+ * other apps keeps playing while Orby talks.
  */
-function getRouteAnchor(): HTMLAudioElement | null {
-  if (!isIosWebKit() || typeof document === "undefined") return null;
-  if (routeAnchor) return routeAnchor;
-  try {
-    const sampleRate = 8000;
-    const samples = sampleRate;
-    const bytes = new Uint8Array(44 + samples * 2);
-    const view = new DataView(bytes.buffer);
-    const write = (offset: number, value: string) => {
-      for (let i = 0; i < value.length; i += 1) bytes[offset + i] = value.charCodeAt(i);
-    };
-    write(0, "RIFF");
-    view.setUint32(4, 36 + samples * 2, true);
-    write(8, "WAVE");
-    write(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    write(36, "data");
-    view.setUint32(40, samples * 2, true);
-    routeAnchorUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-    const audio = document.createElement("audio");
-    audio.src = routeAnchorUrl;
-    audio.loop = true;
-    audio.preload = "auto";
-    audio.volume = 0.01;
-    audio.muted = false;
-    audio.setAttribute("playsinline", "");
-    routeAnchor = audio;
-    return audio;
-  } catch {
-    return null;
-  }
-}
-
-function startRouteAnchor() {
+function keepAudioMixable() {
   if (!isIosWebKit()) return;
-  requestIosPlaybackSession();
-  const audio = getRouteAnchor();
-  if (!audio) return;
-  try {
-    // Already routing: leave it alone. Re-playing per sentence caused churn.
-    if (!audio.paused && !audio.ended) return;
-    if (audio.ended) audio.currentTime = 0;
-    const playing = audio.play();
-    playing?.catch((error) => debugSpeech("route anchor blocked", String(error)));
-  } catch (error) {
-    debugSpeech("route anchor failed", String(error));
-  }
+  requestIosMixableSession();
 }
 
-function stopRouteAnchor() {
-  if (!routeAnchor) return;
-  try {
-    routeAnchor.pause();
-    routeAnchor.currentTime = 0;
-  } catch {}
-}
 
 /* -------------------------------- chunking ------------------------------- */
 
