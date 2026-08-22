@@ -99,7 +99,6 @@ class FakeAudio {
 }
 
 function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop", audioSession?: { type: string; state?: string }) {
-  FakeAudio.instances = [];
   Object.assign(globalThis, {
     window: Object.assign(globalThis, {
       speechSynthesis,
