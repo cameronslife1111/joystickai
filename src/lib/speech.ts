@@ -424,7 +424,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       } catch {}
       debugSpeech("retry", "utterance did not start");
       submit();
-    }, 900);
+    }, 350);
   };
 
   const submitWhenIdle = (attempt = 0) => {
