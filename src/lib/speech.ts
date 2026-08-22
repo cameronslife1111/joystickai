@@ -2,6 +2,7 @@
 // API so speech stays on-device and uses a voice exposed by the browser.
 
 import { iosAudioSessionState, requestIosMixableSession } from "@/lib/audio-session";
+import { prepareRouteForSpeech } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
   rate?: number;
