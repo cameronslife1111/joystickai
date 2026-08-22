@@ -145,10 +145,8 @@ export function installSpeechUnlock() {
     // an utterance permanently "speaking", blocking every real sentence.
     availableVoices();
     if (isIosWebKit()) {
-      // The route anchor stays alive for the whole foreground session; starting
-      // and stopping it per sentence is what made swipes feel laggy.
-      requestIosPlaybackSession();
-      startRouteAnchor();
+      // Keep the category mixable so other apps' audio is never interrupted.
+      keepAudioMixable();
     }
     else {
       try {
@@ -160,7 +158,6 @@ export function installSpeechUnlock() {
   const onVisibilityChange = () => {
     if (document.visibilityState === "hidden") {
       cancelSpeech();
-      stopRouteAnchor();
       return;
     }
     handler();
@@ -168,8 +165,8 @@ export function installSpeechUnlock() {
 
   const onPageHide = () => {
     cancelSpeech();
-    stopRouteAnchor();
   };
+
 
   window.addEventListener("pointerdown", handler, true);
   window.addEventListener("touchstart", handler, true);
