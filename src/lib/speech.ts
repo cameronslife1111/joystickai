@@ -2,7 +2,6 @@
 // API so speech stays on-device and uses a voice exposed by the browser.
 
 import { iosAudioSessionState, requestIosPlaybackSession } from "@/lib/audio-session";
-import { releaseMic } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
   rate?: number;
@@ -90,6 +89,8 @@ function startRouteAnchor() {
   const audio = getRouteAnchor();
   if (!audio) return;
   try {
+    // Already routing: leave it alone. Re-playing per sentence caused churn.
+    if (!audio.paused && !audio.ended) return;
     if (audio.ended) audio.currentTime = 0;
     const playing = audio.play();
     playing?.catch((error) => debugSpeech("route anchor blocked", String(error)));
@@ -203,13 +204,10 @@ export function installSpeechUnlock() {
     // an utterance permanently "speaking", blocking every real sentence.
     availableVoices();
     if (isIosWebKit()) {
+      // The route anchor stays alive for the whole foreground session; starting
+      // and stopping it per sentence is what made swipes feel laggy.
       requestIosPlaybackSession();
       startRouteAnchor();
-      // A generic tap only establishes the route. A real speech request keeps
-      // it alive; otherwise release it after the gesture has settled.
-      later(() => {
-        if (!audibleSpeaking && !s.speaking && !s.pending) stopRouteAnchor();
-      }, 250);
     }
     else {
       try {
@@ -221,9 +219,15 @@ export function installSpeechUnlock() {
   const onVisibilityChange = () => {
     if (document.visibilityState === "hidden") {
       cancelSpeech();
+      stopRouteAnchor();
       return;
     }
     handler();
+  };
+
+  const onPageHide = () => {
+    cancelSpeech();
+    stopRouteAnchor();
   };
 
   window.addEventListener("pointerdown", handler, true);
@@ -233,7 +237,7 @@ export function installSpeechUnlock() {
   window.addEventListener("focus", handler);
   window.addEventListener("pageshow", handler);
   document.addEventListener("visibilitychange", onVisibilityChange);
-  window.addEventListener("pagehide", cancelSpeech);
+  window.addEventListener("pagehide", onPageHide);
 }
 
 
@@ -267,7 +271,6 @@ export function cancelSpeech() {
   generation += 1;
   audibleSpeaking = false;
   clearTimers();
-  stopRouteAnchor();
   if (!isIosWebKit()) {
     try {
       if (s.paused) s.resume();
@@ -276,29 +279,23 @@ export function cancelSpeech() {
   try {
     s.cancel();
   } catch {}
-  // Keep cancelled utterances alive briefly. Some WebKit versions dispatch the
-  // cancellation event asynchronously and can otherwise lose the JS wrapper.
-  const cancelled = [...liveUtterances];
-  window.setTimeout(() => {
-    for (const utterance of cancelled) liveUtterances.delete(utterance);
-  }, 500);
+  liveUtterances.clear();
 }
 
 export function isSpeaking(): boolean {
   return audibleSpeaking;
 }
 
-/** Give iOS WebKit the duration of the swipe to settle a cancelled queue. */
+/**
+ * Called at gesture start. It only makes sure the iPhone playback route is live
+ * — it must NOT cancel speech or tear down the microphone, because doing that
+ * work on every pointerdown is what delayed (and sometimes swallowed) the
+ * sentence that the gesture goes on to request.
+ */
 export function prepareSpeechGesture() {
   if (!isIosWebKit()) return;
-  void releaseMic();
   requestIosPlaybackSession();
   startRouteAnchor();
-  const s = synth();
-  if (!s) return;
-  try {
-    if (s.speaking || s.pending || s.paused) cancelSpeech();
-  } catch {}
 }
 
 /**
@@ -330,7 +327,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     if (finished || myGen !== generation) return;
     finished = true;
     audibleSpeaking = false;
-    stopRouteAnchor();
     removeVoicesListener?.();
     removeVoicesListener = null;
     if (failed) opts.onError?.();
@@ -360,6 +356,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.onstart = () => {
       started = true;
       unlocked = true;
+      audibleSpeaking = true;
       debugSpeech("start", {
         chunk: chunkIndex + 1,
         voice: voice ? (voice.localService ? "local" : "remote") : "system-default",
@@ -428,7 +425,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       } catch {}
       debugSpeech("retry", "utterance did not start");
       submit();
-    }, 900);
+    }, 350);
   };
 
   const submitWhenIdle = (attempt = 0) => {
@@ -458,14 +455,27 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   }
 
   try {
-    if (isIosWebKit()) requestIosPlaybackSession();
-    else if (s.paused) s.resume();
-    if (s.speaking || s.pending) {
+    if (isIosWebKit()) {
+      // iPhone: cancel and speak in the SAME tick as the swipe. This keeps the
+      // user-activation window intact and is what makes the replacement feel
+      // instant instead of waiting for the old queue to drain. If the engine
+      // silently drops it, the short watchdog above re-submits.
+      requestIosPlaybackSession();
+      startRouteAnchor();
+      if (s.speaking || s.pending) {
+        try {
+          s.cancel();
+        } catch {}
+      }
+      submit();
+    } else if (s.speaking || s.pending) {
+      if (s.paused) s.resume();
       s.cancel();
-      // Never cancel and speak in the same turn. WebKit can apply the pending
-      // cancel to the newly submitted utterance and silently discard it.
+      // Desktop engines can apply a pending cancel to a same-tick utterance,
+      // so let the queue settle for a frame first.
       later(() => submitWhenIdle(), 16);
     } else {
+      if (s.paused) s.resume();
       submit();
     }
 
