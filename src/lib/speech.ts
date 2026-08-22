@@ -243,15 +243,13 @@ export function isSpeaking(): boolean {
 }
 
 /**
- * Called at gesture start. It only makes sure the iPhone playback route is live
- * — it must NOT cancel speech or tear down the microphone, because doing that
- * work on every pointerdown is what delayed (and sometimes swallowed) the
- * sentence that the gesture goes on to request.
+ * Called at gesture start. It only keeps the iOS audio category mixable so
+ * speech never interrupts music. It must NOT cancel speech, play any media, or
+ * tear down the microphone.
  */
 export function prepareSpeechGesture() {
   if (!isIosWebKit()) return;
-  requestIosPlaybackSession();
-  startRouteAnchor();
+  keepAudioMixable();
 }
 
 /**
