@@ -27,6 +27,19 @@ function synth(): SpeechSynthesis | null {
   }
 }
 
+/**
+ * iPhone/iPad — every browser there (Chrome, Edge, Firefox included) runs on
+ * WebKit and shares its user-activation rules for speech.
+ */
+function isWebKitMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const iOS = /iPad|iPhone|iPod/.test(ua);
+  const iPadOS = ua.includes("Macintosh") && (navigator.maxTouchPoints ?? 0) > 1;
+  return iOS || iPadOS;
+}
+
+
 /* -------------------------------- unlock --------------------------------- */
 
 let unlocked = false;
@@ -38,13 +51,21 @@ export function speechUnlocked() {
 }
 
 /**
- * Keep a paused browser queue resumable after any real user interaction.
+ * iOS (Safari *and* Chrome/Edge on iOS, which all use WebKit) will silently
+ * drop every utterance until speechSynthesis.speak() has been called once
+ * synchronously inside a real user gesture. Resuming the queue is not enough —
+ * an actual utterance must be submitted. So on the first gesture we submit a
+ * near-silent real utterance, and we keep the listeners armed until the engine
+ * confirms it ran.
  */
 export function installSpeechUnlock() {
   if (unlockArmed) return;
   const s = synth();
   if (!s) return;
   unlockArmed = true;
+
+  const primeUtterances = new Set<SpeechSynthesisUtterance>();
+
   const handler = () => {
     // Chrome can populate its voices asynchronously. Warming the list here is
     // harmless when it is already ready and avoids a cold first utterance.
@@ -54,11 +75,48 @@ export function installSpeechUnlock() {
     try {
       if (s.paused) s.resume();
     } catch {}
+    if (unlocked) {
+      removeListeners();
+      return;
+    }
+    // Don't disturb real speech that is already in flight.
+    if (s.speaking || s.pending) {
+      unlocked = true;
+      removeListeners();
+      return;
+    }
+    try {
+      const prime = new SpeechSynthesisUtterance("\u00a0");
+      prime.volume = 0.01;
+      prime.rate = 2;
+      const done = () => {
+        primeUtterances.delete(prime);
+        unlocked = true;
+        removeListeners();
+        debugSpeech("unlocked");
+      };
+      prime.onstart = done;
+      prime.onend = done;
+      prime.onerror = () => {
+        primeUtterances.delete(prime);
+      };
+      primeUtterances.add(prime);
+      s.speak(prime);
+    } catch {}
   };
+
   const resetWhenHidden = () => {
     if (document.visibilityState !== "hidden") return;
     cancelSpeech();
   };
+
+  const removeListeners = () => {
+    window.removeEventListener("pointerdown", handler, true);
+    window.removeEventListener("touchstart", handler, true);
+    window.removeEventListener("mousedown", handler, true);
+    window.removeEventListener("keydown", handler, true);
+  };
+
   window.addEventListener("pointerdown", handler, true);
   window.addEventListener("touchstart", handler, true);
   window.addEventListener("mousedown", handler, true);
@@ -66,6 +124,7 @@ export function installSpeechUnlock() {
   document.addEventListener("visibilitychange", resetWhenHidden);
   window.addEventListener("pagehide", cancelSpeech);
 }
+
 
 /* --------------------------------- speak --------------------------------- */
 
@@ -192,21 +251,28 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     if (s.paused) s.resume();
     if (s.speaking || s.pending) {
       s.cancel();
-      let checks = 0;
-      const submitWhenIdle = () => {
-        pendingTimer = null;
-        if (myGen !== generation) return;
-        if ((s.speaking || s.pending) && checks < 12) {
-          checks += 1;
-          pendingTimer = window.setTimeout(submitWhenIdle, 25);
-          return;
-        }
+      if (isWebKitMobile()) {
+        // iOS (all browsers) only honors speak() while the user gesture is
+        // still live, so we must not defer submission to a timer.
         submit();
-      };
-      pendingTimer = window.setTimeout(submitWhenIdle, 25);
+      } else {
+        let checks = 0;
+        const submitWhenIdle = () => {
+          pendingTimer = null;
+          if (myGen !== generation) return;
+          if ((s.speaking || s.pending) && checks < 12) {
+            checks += 1;
+            pendingTimer = window.setTimeout(submitWhenIdle, 25);
+            return;
+          }
+          submit();
+        };
+        pendingTimer = window.setTimeout(submitWhenIdle, 25);
+      }
     } else {
       submit();
     }
+
   } catch (error) {
     debugSpeech("replace failed", error);
     opts.onError?.();
