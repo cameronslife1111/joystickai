@@ -90,6 +90,8 @@ function startRouteAnchor() {
   const audio = getRouteAnchor();
   if (!audio) return;
   try {
+    // Already routing: leave it alone. Re-playing per sentence caused churn.
+    if (!audio.paused && !audio.ended) return;
     if (audio.ended) audio.currentTime = 0;
     const playing = audio.play();
     playing?.catch((error) => debugSpeech("route anchor blocked", String(error)));
