@@ -1,3 +1,5 @@
+import { requestIosPlaybackSession } from "@/lib/audio-session";
+
 // Record microphone input as PCM via the Web Audio API and encode a complete
 // 16 kHz mono WAV Blob on stop. Deliberately avoids MediaRecorder timeslice —
 // only WAV is guaranteed decodable everywhere (iOS Safari records fragmented
@@ -81,13 +83,15 @@ function warmIsLive() {
 
 /** Fully release the microphone (call when leaving the screen). */
 export function releaseMic() {
-  if (!warm) return;
-  try {
-    warm.source.disconnect();
-  } catch {}
-  warm.stream.getTracks().forEach((t) => t.stop());
-  void warm.ctx.close().catch(() => {});
-  warm = null;
+  if (warm) {
+    try {
+      warm.source.disconnect();
+    } catch {}
+    warm.stream.getTracks().forEach((t) => t.stop());
+    void warm.ctx.close().catch(() => {});
+    warm = null;
+  }
+  requestIosPlaybackSession();
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {

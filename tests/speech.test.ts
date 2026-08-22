@@ -9,6 +9,7 @@ class FakeUtterance {
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
+  onboundary: (() => void) | null = null;
   voice?: FakeVoice;
   lang?: string;
 
@@ -29,6 +30,7 @@ class FakeSynth {
   pending = false;
   paused = false;
   cancelCalls = 0;
+  resumeCalls = 0;
   utterances: FakeUtterance[] = [];
   voices: FakeVoice[] = [];
   listeners = new Map<string, Set<() => void>>();
@@ -44,6 +46,7 @@ class FakeSynth {
   }
 
   resume() {
+    this.resumeCalls += 1;
     this.paused = false;
   }
 
@@ -66,7 +69,7 @@ class FakeSynth {
   }
 }
 
-function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop") {
+function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop", audioSession?: { type: string; state?: string }) {
   Object.assign(globalThis, {
     window: Object.assign(globalThis, {
       speechSynthesis,
@@ -82,7 +85,7 @@ function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop") {
   });
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
-    value: { userAgent, language: "en-US", maxTouchPoints: userAgent.includes("iPhone") ? 5 : 0 },
+    value: { userAgent, language: "en-US", maxTouchPoints: userAgent.includes("iPhone") ? 5 : 0, audioSession },
   });
 }
 
@@ -109,6 +112,18 @@ describe("sentence speech", () => {
     const utterance = engine.utterances[0];
     expect(utterance.voice).toBe(preferred);
     expect(utterance.lang).toBe("en-US");
+  });
+
+  test("prefers a matching local voice over an iPhone default voice", () => {
+    const engine = new FakeSynth();
+    const remoteDefault = { name: "Enhanced Default", lang: "en-US", default: true, localService: false };
+    const local = { name: "Local English", lang: "en-US", default: false, localService: true };
+    engine.voices = [remoteDefault, local];
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit");
+
+    speakText("Use an available iPhone voice.");
+
+    expect(engine.utterances[0]?.voice).toBe(local);
   });
 
   test("uses the browser default path when voices are initially unavailable", () => {
@@ -186,6 +201,19 @@ describe("sentence speech", () => {
     expect(engine.cancelCalls).toBe(1);
   });
 
+  test("promotes the iPhone audio session and never resumes a stale queue", () => {
+    const engine = new FakeSynth();
+    engine.paused = true;
+    const audioSession = { type: "play-and-record", state: "active" };
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", audioSession);
+
+    prepareSpeechGesture();
+    speakText("Route this through the speaker.");
+
+    expect(audioSession.type).toBe("playback");
+    expect(engine.resumeCalls).toBe(0);
+  });
+
   test("reports speech only after the device confirms playback", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
@@ -193,6 +221,8 @@ describe("sentence speech", () => {
 
     expect(isSpeaking()).toBe(false);
     engine.utterances[0]?.onstart?.();
+    expect(isSpeaking()).toBe(false);
+    engine.utterances[0]?.onboundary?.();
     expect(isSpeaking()).toBe(true);
     engine.utterances[0]?.onend?.();
     expect(isSpeaking()).toBe(false);

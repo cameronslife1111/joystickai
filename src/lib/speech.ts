@@ -1,6 +1,9 @@
 // Shared browser speech engine. Keep this deliberately close to the Web Speech
 // API so speech stays on-device and uses a voice exposed by the browser.
 
+import { iosAudioSessionState, requestIosPlaybackSession } from "@/lib/audio-session";
+import { releaseMic } from "@/lib/audio-recorder";
+
 type SpeakOpts = {
   rate?: number;
   pitch?: number;
@@ -79,9 +82,19 @@ function resolveVoice(): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
   const language = (typeof navigator === "undefined" ? "en-US" : navigator.language || "en-US").toLowerCase();
   const baseLanguage = language.split("-")[0];
+  const localExact = voices.find((voice) => voice.localService && voice.lang.toLowerCase() === language);
+  const localBase = voices.find((voice) => voice.localService && voice.lang.toLowerCase().split("-")[0] === baseLanguage);
+  if (isIosWebKit()) {
+    return localExact
+      ?? localBase
+      ?? voices.find((voice) => voice.localService)
+      ?? voices.find((voice) => voice.default)
+      ?? voices[0]
+      ?? null;
+  }
   return voices.find((voice) => voice.default)
-    ?? voices.find((voice) => voice.localService && voice.lang.toLowerCase() === language)
-    ?? voices.find((voice) => voice.localService && voice.lang.toLowerCase().split("-")[0] === baseLanguage)
+    ?? localExact
+    ?? localBase
     ?? voices.find((voice) => voice.localService)
     ?? voices[0]
     ?? null;
@@ -116,9 +129,12 @@ export function installSpeechUnlock() {
     // Never enqueue a silent/whitespace primer. Recent WebKit can leave such
     // an utterance permanently "speaking", blocking every real sentence.
     availableVoices();
-    try {
-      if (s.paused) s.resume();
-    } catch {}
+    if (isIosWebKit()) requestIosPlaybackSession();
+    else {
+      try {
+        if (s.paused) s.resume();
+      } catch {}
+    }
   };
 
   const onVisibilityChange = () => {
@@ -170,9 +186,11 @@ export function cancelSpeech() {
   generation += 1;
   audibleSpeaking = false;
   clearTimers();
-  try {
-    if (s.paused) s.resume();
-  } catch {}
+  if (!isIosWebKit()) {
+    try {
+      if (s.paused) s.resume();
+    } catch {}
+  }
   try {
     s.cancel();
   } catch {}
@@ -191,6 +209,8 @@ export function isSpeaking(): boolean {
 /** Give iOS WebKit the duration of the swipe to settle a cancelled queue. */
 export function prepareSpeechGesture() {
   if (!isIosWebKit()) return;
+  releaseMic();
+  requestIosPlaybackSession();
   const s = synth();
   if (!s) return;
   try {
@@ -219,6 +239,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   let started = false;
   let finished = false;
   let retried = false;
+  let implicitVoiceRetry = false;
   let chunkIndex = 0;
   let removeVoicesListener: (() => void) | null = null;
 
@@ -232,7 +253,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     else opts.onEnd?.();
   };
 
-  const submit = () => {
+  const submit = (useImplicitVoice = false) => {
     if (myGen !== generation || finished) return;
     const chunk = chunks[chunkIndex];
     if (!chunk) {
@@ -243,7 +264,8 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.rate = opts.rate ?? 1;
     utterance.pitch = opts.pitch ?? 1;
     utterance.volume = 1;
-    const voice = resolveVoice();
+    requestIosPlaybackSession();
+    const voice = useImplicitVoice ? null : resolveVoice();
     if (voice) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
@@ -251,8 +273,15 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.onstart = () => {
       started = true;
       unlocked = true;
+      debugSpeech("start", {
+        chunk: chunkIndex + 1,
+        voice: voice ? (voice.localService ? "local" : "remote") : "system-default",
+        audioSession: iosAudioSessionState(),
+      });
+    };
+    utterance.onboundary = () => {
       audibleSpeaking = true;
-      debugSpeech("start", { chunk: chunkIndex + 1, voice: voice?.name ?? "system default" });
+      debugSpeech("boundary", { chunk: chunkIndex + 1 });
     };
     utterance.onend = () => {
       liveUtterances.delete(utterance);
@@ -270,12 +299,18 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       audibleSpeaking = false;
       debugSpeech("error", event.error);
       if (event.error === "canceled" || event.error === "interrupted") return;
+      if (isIosWebKit() && voice && !implicitVoiceRetry && myGen === generation) {
+        implicitVoiceRetry = true;
+        started = false;
+        later(() => submit(true), 0);
+        return;
+      }
       finish(true);
     };
 
     liveUtterances.add(utterance);
     try {
-      if (s.paused) s.resume();
+      if (!isIosWebKit() && s.paused) s.resume();
       s.speak(utterance);
       debugSpeech("queued", { chunk: chunkIndex + 1, pending: s.pending, speaking: s.speaking });
     } catch (error) {
@@ -307,9 +342,11 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   const submitWhenIdle = (attempt = 0) => {
     if (myGen !== generation || finished) return;
-    try {
-      if (s.paused) s.resume();
-    } catch {}
+    if (!isIosWebKit()) {
+      try {
+        if (s.paused) s.resume();
+      } catch {}
+    }
     if ((s.speaking || s.pending) && attempt < 30) {
       later(() => submitWhenIdle(attempt + 1), 16);
       return;
@@ -330,7 +367,8 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   }
 
   try {
-    if (s.paused) s.resume();
+    if (isIosWebKit()) requestIosPlaybackSession();
+    else if (s.paused) s.resume();
     if (s.speaking || s.pending) {
       s.cancel();
       // Never cancel and speak in the same turn. WebKit can apply the pending
