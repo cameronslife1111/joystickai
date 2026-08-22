@@ -265,6 +265,23 @@ function clearTimers() {
   pendingTimers.clear();
 }
 
+/**
+ * Silence outgoing utterances before a stop so their callbacks can never touch
+ * the replacement sentence's state.
+ */
+function detachLiveUtterances() {
+  for (const utterance of liveUtterances) {
+    try {
+      utterance.onstart = null;
+      utterance.onboundary = null;
+      utterance.onend = null;
+      utterance.onerror = null;
+      utterance.volume = 0;
+    } catch {}
+  }
+  liveUtterances.clear();
+}
+
 export function cancelSpeech() {
   const s = synth();
   if (!s) return;
@@ -276,11 +293,12 @@ export function cancelSpeech() {
       if (s.paused) s.resume();
     } catch {}
   }
+  detachLiveUtterances();
   try {
     s.cancel();
   } catch {}
-  liveUtterances.clear();
 }
+
 
 export function isSpeaking(): boolean {
   return audibleSpeaking;
@@ -344,11 +362,12 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.rate = opts.rate ?? 1;
     utterance.pitch = opts.pitch ?? 1;
     utterance.volume = 1;
-    if (isIosWebKit()) startRouteAnchor();
-    requestIosPlaybackSession();
+    // No audio-session or route work here: the route is already open from the
+    // gesture start, and re-asserting it per utterance delayed the swipe.
     // Let iOS choose its valid system voice first. An explicit local voice is
     // only a recovery path; stale/download-only voice objects can be silent.
     const voice = isIosWebKit() && !useExplicitIosVoice ? null : resolveVoice();
+
     if (voice) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
@@ -460,14 +479,22 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       // user-activation window intact and is what makes the replacement feel
       // instant instead of waiting for the old queue to drain. If the engine
       // silently drops it, the short watchdog above re-submits.
-      requestIosPlaybackSession();
       startRouteAnchor();
       if (s.speaking || s.pending) {
+        detachLiveUtterances();
         try {
           s.cancel();
         } catch {}
+        // A stop that WebKit did not honour leaves an audible tail; hit it
+        // again before the replacement goes in.
+        if (s.speaking || s.pending) {
+          try {
+            s.cancel();
+          } catch {}
+        }
       }
       submit();
+
     } else if (s.speaking || s.pending) {
       if (s.paused) s.resume();
       s.cancel();

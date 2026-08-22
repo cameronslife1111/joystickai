@@ -327,4 +327,36 @@ describe("sentence speech", () => {
     expect(speakText("🐝🟢")).toBe(false);
     expect(engine.utterances).toHaveLength(0);
   });
+
+  test("iPhone hits a stubborn engine again so no tail is left playing", () => {
+    const engine = new FakeSynth();
+    engine.speaking = true;
+    let ignoreFirst = true;
+    engine.cancel = function () {
+      this.cancelCalls += 1;
+      if (ignoreFirst) { ignoreFirst = false; return; }
+      this.speaking = false;
+      this.pending = false;
+    };
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
+
+    speakText("Newest sentence.");
+
+    expect(engine.cancelCalls).toBe(2);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
+  });
+
+  test("a replaced utterance can no longer report state", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit", { type: "auto" });
+    speakText("Older sentence.");
+    const stale = engine.utterances[0]!;
+    engine.speaking = true;
+
+    speakText("Newest sentence.");
+    expect(stale.onend).toBeNull();
+    expect(stale.onstart).toBeNull();
+    engine.utterances[1]?.onstart?.();
+    expect(isSpeaking()).toBe(true);
+  });
 });
