@@ -262,12 +262,13 @@ async function fetchAudio(text: string): Promise<string> {
 }
 
 function playAudio(text: string, myGen: number, opts: SpeakOpts) {
+  debugSpeech("audio requested", { chars: text.length, cached: audioCache.has(text) });
   const el = getAudioEl();
   if (!el) {
+    debugSpeech("audio element unavailable");
     opts.onError?.();
     return;
   }
-  debugSpeech("audio requested", { chars: text.length, cached: audioCache.has(text) });
 
   const start = (base64: string) => {
     if (myGen !== generation) return;
