@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cancelSpeech, cleanForSpeech, installSpeechUnlock, speakText } from "../src/lib/speech";
+import { cancelSpeech, cleanForSpeech, installSpeechUnlock, isSpeaking, prepareSpeechGesture, speakText } from "../src/lib/speech";
 
 class FakeUtterance {
   text: string;
@@ -66,7 +66,7 @@ class FakeSynth {
   }
 }
 
-function installBrowser(speechSynthesis: FakeSynth) {
+function installBrowser(speechSynthesis: FakeSynth, userAgent = "Desktop") {
   Object.assign(globalThis, {
     window: Object.assign(globalThis, {
       speechSynthesis,
@@ -79,6 +79,10 @@ function installBrowser(speechSynthesis: FakeSynth) {
       addEventListener: () => {},
     },
     SpeechSynthesisUtterance: FakeUtterance,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { userAgent, language: "en-US", maxTouchPoints: userAgent.includes("iPhone") ? 5 : 0 },
   });
 }
 
@@ -170,6 +174,28 @@ describe("sentence speech", () => {
     installSpeechUnlock();
 
     expect(engine.utterances).toHaveLength(0);
+  });
+
+  test("settles active iPhone speech at gesture start", () => {
+    const engine = new FakeSynth();
+    engine.speaking = true;
+    installBrowser(engine, "Mozilla/5.0 (iPhone) AppleWebKit");
+
+    prepareSpeechGesture();
+
+    expect(engine.cancelCalls).toBe(1);
+  });
+
+  test("reports speech only after the device confirms playback", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("Confirm audible speech.");
+
+    expect(isSpeaking()).toBe(false);
+    engine.utterances[0]?.onstart?.();
+    expect(isSpeaking()).toBe(true);
+    engine.utterances[0]?.onend?.();
+    expect(isSpeaking()).toBe(false);
   });
 
   test("rejects emoji-only content", () => {

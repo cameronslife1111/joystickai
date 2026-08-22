@@ -26,6 +26,13 @@ function synth(): SpeechSynthesis | null {
   }
 }
 
+function isIosWebKit(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const userAgent = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(userAgent)
+    || (userAgent.includes("Macintosh") && navigator.maxTouchPoints > 1);
+}
+
 /* -------------------------------- chunking ------------------------------- */
 
 const CHUNK_MAX = 170;
@@ -138,6 +145,7 @@ export function installSpeechUnlock() {
 let generation = 0;
 const liveUtterances = new Set<SpeechSynthesisUtterance>();
 const pendingTimers = new Set<number>();
+let audibleSpeaking = false;
 
 function debugSpeech(event: string, detail?: unknown) {
   if (import.meta.env.DEV) console.debug(`[speech] ${event}`, detail ?? "");
@@ -160,6 +168,7 @@ export function cancelSpeech() {
   const s = synth();
   if (!s) return;
   generation += 1;
+  audibleSpeaking = false;
   clearTimers();
   try {
     if (s.paused) s.resume();
@@ -176,13 +185,17 @@ export function cancelSpeech() {
 }
 
 export function isSpeaking(): boolean {
+  return audibleSpeaking;
+}
+
+/** Give iOS WebKit the duration of the swipe to settle a cancelled queue. */
+export function prepareSpeechGesture() {
+  if (!isIosWebKit()) return;
   const s = synth();
-  if (!s) return false;
+  if (!s) return;
   try {
-    return !!s.speaking;
-  } catch {
-    return false;
-  }
+    if (s.speaking || s.pending || s.paused) cancelSpeech();
+  } catch {}
 }
 
 /**
@@ -212,6 +225,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   const finish = (failed: boolean) => {
     if (finished || myGen !== generation) return;
     finished = true;
+    audibleSpeaking = false;
     removeVoicesListener?.();
     removeVoicesListener = null;
     if (failed) opts.onError?.();
@@ -237,6 +251,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     utterance.onstart = () => {
       started = true;
       unlocked = true;
+      audibleSpeaking = true;
       debugSpeech("start", { chunk: chunkIndex + 1, voice: voice?.name ?? "system default" });
     };
     utterance.onend = () => {
@@ -252,6 +267,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     };
     utterance.onerror = (event) => {
       liveUtterances.delete(utterance);
+      audibleSpeaking = false;
       debugSpeech("error", event.error);
       if (event.error === "canceled" || event.error === "interrupted") return;
       finish(true);
@@ -276,6 +292,10 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     later(() => {
       if (myGen !== generation || started || finished || retried) return;
       if (s.speaking || s.pending) return;
+      if (isIosWebKit()) {
+        finish(true);
+        return;
+      }
       retried = true;
       try {
         s.getVoices();
