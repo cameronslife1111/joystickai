@@ -236,7 +236,7 @@ export function installSpeechUnlock() {
   window.addEventListener("focus", handler);
   window.addEventListener("pageshow", handler);
   document.addEventListener("visibilitychange", onVisibilityChange);
-  window.addEventListener("pagehide", cancelSpeech);
+  window.addEventListener("pagehide", onPageHide);
 }
 
 
