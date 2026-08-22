@@ -88,12 +88,25 @@ export function useOrbGestures(
         }, longPressMs);
       };
 
+      // Swipes fire the instant the threshold is crossed, mid-drag. Waiting for
+      // the finger to leave the glass added a fixed delay to every phone swipe
+      // before speech could be cancelled and replaced.
       const move = (x: number, y: number) => {
         if (!active) return;
-        if (!isLongPressing && Math.hypot(x - startX, y - startY) > moveCancelPx) {
-          clearLongPress();
-        }
+        const dx = x - startX;
+        const dy = y - startY;
+        const distance = Math.hypot(dx, dy);
+        if (!isLongPressing && distance > moveCancelPx) clearLongPress();
+        if (isLongPressing || distance < swipeThreshold) return;
+        // Consume the interaction so the later lift fires neither a tap nor a
+        // second swipe.
+        active = false;
+        clearLongPress();
+        const dir: SwipeDirection =
+          Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+        cbRef.current.onSwipe?.(dir);
       };
+
 
       const finish = (x: number, y: number) => {
         if (!active) return;
