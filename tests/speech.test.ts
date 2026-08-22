@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cancelSpeech, cleanForSpeech, speakText } from "../src/lib/speech";
+import {
+  cancelSpeech,
+  cleanForSpeech,
+  isWebKitMobile,
+  speakText,
+  speechDiagnostics,
+} from "../src/lib/speech";
 
 class FakeUtterance {
   text: string;
@@ -41,13 +47,14 @@ class FakeSynth {
   }
 }
 
-function installBrowser(speechSynthesis: FakeSynth) {
+function installBrowser(speechSynthesis: FakeSynth, userAgent = "Mozilla/5.0 (Macintosh) Chrome") {
   Object.assign(globalThis, {
     window: Object.assign(globalThis, {
       speechSynthesis,
       setTimeout,
       clearTimeout,
     }),
+    navigator: { userAgent, maxTouchPoints: 0 },
     SpeechSynthesisUtterance: FakeUtterance,
   });
 }
@@ -55,10 +62,11 @@ function installBrowser(speechSynthesis: FakeSynth) {
 afterEach(() => cancelSpeech());
 
 describe("sentence speech", () => {
-  test("submits an idle first swipe immediately without cancelling", () => {
+  test("desktop keeps the free built-in voice", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
 
+    expect(isWebKitMobile()).toBe(false);
     expect(speakText("Read this sentence.")).toBe(true);
     expect(engine.cancelCalls).toBe(0);
     expect(engine.utterances.map((item) => item.text)).toEqual(["Read this sentence."]);
@@ -74,38 +82,36 @@ describe("sentence speech", () => {
     expect(utterance.lang).toBeUndefined();
   });
 
-  test("cancels active speech and submits the replacement after settling", async () => {
+  test("replacing active speech cancels once and speaks the newest sentence", () => {
     const engine = new FakeSynth();
     engine.speaking = true;
     installBrowser(engine);
 
     speakText("Newest sentence.");
     expect(engine.cancelCalls).toBe(1);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
+  });
+
+  test("iPhone skips the built-in engine and uses audio playback", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine, "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) CriOS/140");
+
+    expect(isWebKitMobile()).toBe(true);
+    expect(speakText("Speak on my phone.")).toBe(true);
     expect(engine.utterances).toHaveLength(0);
-    await Bun.sleep(35);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
+    expect(speechDiagnostics().some((entry) => entry.event === "audio requested")).toBe(true);
   });
 
-  test("coalesces rapid replacement requests to the newest sentence", async () => {
-    const engine = new FakeSynth();
-    engine.speaking = true;
-    installBrowser(engine);
-
-    speakText("Older sentence.");
-    speakText("Newest sentence.");
-    await Bun.sleep(35);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Newest sentence."]);
-  });
-
-  test("retries once when the browser silently drops an idle utterance", async () => {
+  test("a silently dropped desktop utterance falls back to audio playback", async () => {
     const engine = new FakeSynth();
     installBrowser(engine);
 
-    speakText("Retry this sentence.");
-    await Bun.sleep(550);
-    expect(engine.utterances).toHaveLength(2);
-    await Bun.sleep(550);
-    expect(engine.utterances).toHaveLength(2);
+    speakText("This will be dropped.");
+    expect(engine.utterances).toHaveLength(1);
+    await Bun.sleep(1000);
+    const events = speechDiagnostics().map((entry) => entry.event);
+    expect(events).toContain("synth silent drop");
+    expect(events).toContain("audio requested");
   });
 
   test("rejects emoji-only content", () => {

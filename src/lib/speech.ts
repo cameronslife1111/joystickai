@@ -1,6 +1,14 @@
-// Shared browser speech engine. Keep this deliberately close to the Web Speech
-// API: the browser owns voice selection, so Safari can use the device's current
-// default voice and other browsers can use their own default voice.
+// Speech for the app.
+//
+// Two paths:
+//   1. The browser's built-in speech engine (free, instant, local voice). Used
+//      on desktop browsers, where it works.
+//   2. Real audio playback of generated speech through one shared <audio>
+//      element that is unlocked by the user's first tap. iPhone/iPad browsers
+//      are allowed to silently refuse speechSynthesis, but they DO honor
+//      programmatic play() on an element the user already started once — so
+//      this is the primary path there, and the automatic fallback everywhere
+//      else.
 
 type SpeakOpts = {
   rate?: number;
@@ -11,7 +19,7 @@ type SpeakOpts = {
 
 const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D]/gu;
 
-/** Anything that a synthesizer can actually pronounce. */
+/** Anything a synthesizer can actually pronounce. */
 const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
 
 export function cleanForSpeech(s: string): string {
@@ -29,9 +37,9 @@ function synth(): SpeechSynthesis | null {
 
 /**
  * iPhone/iPad — every browser there (Chrome, Edge, Firefox included) runs on
- * WebKit and shares its user-activation rules for speech.
+ * WebKit and shares its restrictions.
  */
-function isWebKitMobile(): boolean {
+export function isWebKitMobile(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   const iOS = /iPad|iPhone|iPod/.test(ua);
@@ -39,50 +47,113 @@ function isWebKitMobile(): boolean {
   return iOS || iPadOS;
 }
 
+/* ------------------------------ diagnostics ------------------------------ */
+
+type Diag = { at: number; event: string; detail?: unknown };
+const diagnostics: Diag[] = [];
+
+function debugSpeech(event: string, detail?: unknown) {
+  diagnostics.push({ at: Date.now(), event, detail });
+  if (diagnostics.length > 40) diagnostics.splice(0, diagnostics.length - 40);
+  if (typeof import.meta !== "undefined" && import.meta.env?.DEV) {
+    console.debug(`[speech] ${event}`, detail ?? "");
+  }
+}
+
+/** Last few speech events, so a silent device can be diagnosed. */
+export function speechDiagnostics(): Diag[] {
+  return [...diagnostics];
+}
+
+if (typeof window !== "undefined") {
+  (window as unknown as { orbySpeechLog?: () => Diag[] }).orbySpeechLog = speechDiagnostics;
+}
 
 /* -------------------------------- unlock --------------------------------- */
 
 let unlocked = false;
 let unlockArmed = false;
 
-/** True once the engine has confirmed at least one utterance actually ran. */
+// 0.05s of silence, WAV. Playing this from a real tap blesses the element.
+const SILENCE =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+
+let audioEl: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+
+function getAudioEl(): HTMLAudioElement | null {
+  if (typeof window === "undefined" || typeof Audio === "undefined") return null;
+  if (audioEl) return audioEl;
+  try {
+    const el = new Audio();
+    el.preload = "auto";
+    (el as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+    el.setAttribute("playsinline", "");
+    audioEl = el;
+    return el;
+  } catch {
+    return null;
+  }
+}
+
+/** True once at least one speech path has been blessed by a user gesture. */
 export function speechUnlocked() {
-  return unlocked;
+  return unlocked || audioUnlocked;
+}
+
+export function audioPathReady() {
+  return audioUnlocked;
 }
 
 /**
- * iOS (Safari *and* Chrome/Edge on iOS, which all use WebKit) will silently
- * drop every utterance until speechSynthesis.speak() has been called once
- * synchronously inside a real user gesture. Resuming the queue is not enough —
- * an actual utterance must be submitted. So on the first gesture we submit a
- * near-silent real utterance, and we keep the listeners armed until the engine
- * confirms it ran.
+ * Bless both playback paths on the user's first interaction: submit a
+ * near-silent utterance to the built-in engine, and start (then immediately
+ * stop) the shared audio element. Both mechanisms require a real gesture, and
+ * both stay blessed afterwards.
  */
 export function installSpeechUnlock() {
-  if (unlockArmed) return;
-  const s = synth();
-  if (!s) return;
+  if (unlockArmed || typeof window === "undefined") return;
   unlockArmed = true;
 
   const primeUtterances = new Set<SpeechSynthesisUtterance>();
 
-  const handler = () => {
-    // Chrome can populate its voices asynchronously. Warming the list here is
-    // harmless when it is already ready and avoids a cold first utterance.
+  const primeAudio = () => {
+    if (audioUnlocked) return;
+    const el = getAudioEl();
+    if (!el) return;
+    try {
+      el.muted = true;
+      el.src = SILENCE;
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          audioUnlocked = true;
+          el.muted = false;
+          debugSpeech("audio unlocked");
+        }).catch((error) => {
+          el.muted = false;
+          debugSpeech("audio unlock blocked", String(error));
+        });
+      } else {
+        audioUnlocked = true;
+        el.muted = false;
+      }
+    } catch (error) {
+      debugSpeech("audio unlock threw", String(error));
+    }
+  };
+
+  const primeSynth = () => {
+    const s = synth();
+    if (!s || unlocked) return;
     try {
       s.getVoices();
     } catch {}
     try {
       if (s.paused) s.resume();
     } catch {}
-    if (unlocked) {
-      removeListeners();
-      return;
-    }
-    // Don't disturb real speech that is already in flight.
     if (s.speaking || s.pending) {
       unlocked = true;
-      removeListeners();
       return;
     }
     try {
@@ -92,22 +163,20 @@ export function installSpeechUnlock() {
       const done = () => {
         primeUtterances.delete(prime);
         unlocked = true;
-        removeListeners();
-        debugSpeech("unlocked");
+        debugSpeech("synth unlocked");
       };
       prime.onstart = done;
       prime.onend = done;
-      prime.onerror = () => {
-        primeUtterances.delete(prime);
-      };
+      prime.onerror = () => primeUtterances.delete(prime);
       primeUtterances.add(prime);
       s.speak(prime);
     } catch {}
   };
 
-  const resetWhenHidden = () => {
-    if (document.visibilityState !== "hidden") return;
-    cancelSpeech();
+  const handler = () => {
+    primeAudio();
+    primeSynth();
+    if (audioUnlocked && unlocked) removeListeners();
   };
 
   const removeListeners = () => {
@@ -121,44 +190,56 @@ export function installSpeechUnlock() {
   window.addEventListener("touchstart", handler, true);
   window.addEventListener("mousedown", handler, true);
   window.addEventListener("keydown", handler, true);
-  document.addEventListener("visibilitychange", resetWhenHidden);
-  window.addEventListener("pagehide", cancelSpeech);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") cancelSpeech();
+  });
+  window.addEventListener("pagehide", () => cancelSpeech());
 }
 
-
-/* --------------------------------- speak --------------------------------- */
+/* --------------------------------- state --------------------------------- */
 
 let generation = 0;
 const liveUtterances = new Set<SpeechSynthesisUtterance>();
 let pendingTimer: number | null = null;
 
-function debugSpeech(event: string, detail?: unknown) {
-  if (import.meta.env.DEV) console.debug(`[speech] ${event}`, detail ?? "");
+/** Session cache: identical sentence -> base64 mp3. Re-reads are instant. */
+const audioCache = new Map<string, string>();
+
+function clearTimer() {
+  if (pendingTimer != null && typeof window !== "undefined") {
+    window.clearTimeout(pendingTimer);
+  }
+  pendingTimer = null;
 }
 
 export function cancelSpeech() {
+  generation += 1;
+  clearTimer();
+  const el = audioEl;
+  if (el) {
+    try {
+      el.pause();
+    } catch {}
+  }
   const s = synth();
   if (!s) return;
-  generation += 1;
-  if (pendingTimer != null) {
-    window.clearTimeout(pendingTimer);
-    pendingTimer = null;
-  }
   try {
     if (s.paused) s.resume();
   } catch {}
   try {
     s.cancel();
   } catch {}
-  // Keep cancelled utterances alive briefly. Some WebKit versions dispatch the
-  // cancellation event asynchronously and can otherwise lose the JS wrapper.
   const cancelled = [...liveUtterances];
-  window.setTimeout(() => {
-    for (const utterance of cancelled) liveUtterances.delete(utterance);
-  }, 500);
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => {
+      for (const utterance of cancelled) liveUtterances.delete(utterance);
+    }, 500);
+  }
 }
 
 export function isSpeaking(): boolean {
+  const el = audioEl;
+  if (el && !el.paused && !el.ended) return true;
   const s = synth();
   if (!s) return false;
   try {
@@ -168,115 +249,172 @@ export function isSpeaking(): boolean {
   }
 }
 
-/**
- * Speak the newest text using the browser/device default voice. Idle speech is
- * submitted synchronously (important for mobile user activation). Replacing
- * active speech waits for cancel() to settle instead of racing a new utterance
- * into the old queue.
- */
+/* ----------------------------- audio playback ---------------------------- */
+
+async function fetchAudio(text: string): Promise<string> {
+  const cached = audioCache.get(text);
+  if (cached) return cached;
+  const { synthesizeSpeech } = await import("./tts.functions");
+  const { audio } = await synthesizeSpeech({ data: { text } });
+  if (audioCache.size > 60) audioCache.clear();
+  audioCache.set(text, audio);
+  return audio;
+}
+
+function playAudio(text: string, myGen: number, opts: SpeakOpts) {
+  debugSpeech("audio requested", { chars: text.length, cached: audioCache.has(text) });
+  const el = getAudioEl();
+  if (!el) {
+    debugSpeech("audio element unavailable");
+    opts.onError?.();
+    return;
+  }
+
+  const start = (base64: string) => {
+    if (myGen !== generation) return;
+    try {
+      el.pause();
+      el.src = `data:audio/mpeg;base64,${base64}`;
+      el.currentTime = 0;
+      el.muted = false;
+      el.volume = 1;
+      el.onended = () => {
+        if (myGen === generation) opts.onEnd?.();
+      };
+      el.playbackRate = opts.rate ?? 1;
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => debugSpeech("audio playing")).catch((error) => {
+          debugSpeech("audio blocked", String(error));
+          if (myGen === generation) opts.onError?.();
+        });
+      }
+    } catch (error) {
+      debugSpeech("audio threw", String(error));
+      if (myGen === generation) opts.onError?.();
+    }
+  };
+
+  const cached = audioCache.get(text);
+  if (cached) {
+    start(cached);
+    return;
+  }
+  fetchAudio(text)
+    .then((base64) => {
+      debugSpeech("audio fetched");
+      start(base64);
+    })
+    .catch((error) => {
+      debugSpeech("audio fetch failed", String(error));
+      if (myGen === generation) opts.onError?.();
+    });
+}
+
+/* ----------------------------- built-in engine --------------------------- */
+
+function speakWithSynth(
+  s: SpeechSynthesis,
+  clean: string,
+  myGen: number,
+  opts: SpeakOpts,
+  onSilentFailure: () => void,
+) {
+  let started = false;
+  let finished = false;
+
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.rate = opts.rate ?? 1;
+  utterance.pitch = opts.pitch ?? 1;
+  utterance.volume = 1;
+  // Voice and lang are deliberately left unset: that is the only portable way
+  // to honor the voice the browser or OS is configured to use.
+  utterance.onstart = () => {
+    started = true;
+    unlocked = true;
+    debugSpeech("synth start");
+  };
+  utterance.onend = () => {
+    liveUtterances.delete(utterance);
+    finished = true;
+    unlocked = true;
+    if (myGen === generation) opts.onEnd?.();
+  };
+  utterance.onerror = (event) => {
+    liveUtterances.delete(utterance);
+    debugSpeech("synth error", (event as SpeechSynthesisErrorEvent).error);
+    if ((event as SpeechSynthesisErrorEvent).error === "canceled") return;
+    if ((event as SpeechSynthesisErrorEvent).error === "interrupted") return;
+    finished = true;
+    if (myGen === generation && !started) onSilentFailure();
+  };
+
+  liveUtterances.add(utterance);
+  try {
+    if (s.paused) s.resume();
+    s.speak(utterance);
+    debugSpeech("synth queued", { pending: s.pending, speaking: s.speaking });
+  } catch (error) {
+    liveUtterances.delete(utterance);
+    debugSpeech("synth threw", String(error));
+    onSilentFailure();
+    return;
+  }
+
+  // Silent-drop watchdog: no start event and an idle queue means the browser
+  // discarded the utterance. Switch to audio playback instead of going quiet.
+  clearTimer();
+  pendingTimer = window.setTimeout(() => {
+    pendingTimer = null;
+    if (myGen !== generation || started || finished) return;
+    if (s.speaking || s.pending) return;
+    debugSpeech("synth silent drop");
+    onSilentFailure();
+  }, 900);
+}
+
+/* --------------------------------- speak --------------------------------- */
+
+/** Speak the newest text. Newest request always wins. */
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
-  const s = synth();
-  if (!s) return false;
+  if (typeof window === "undefined") return false;
   const clean = cleanForSpeech(text ?? "");
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
 
   const myGen = ++generation;
-  if (pendingTimer != null) {
-    window.clearTimeout(pendingTimer);
-    pendingTimer = null;
+  clearTimer();
+
+  // Always stop whatever is currently making sound.
+  const el = audioEl;
+  if (el) {
+    try {
+      el.pause();
+    } catch {}
   }
 
-  let started = false;
-  let finished = false;
-  let retried = false;
+  const s = synth();
 
-  const submit = () => {
-    if (myGen !== generation || finished) return;
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.rate = opts.rate ?? 1;
-    utterance.pitch = opts.pitch ?? 1;
-    utterance.volume = 1;
-    // Deliberately leave voice and lang unset. That is the only portable way
-    // to honor the voice selected by the browser or operating system.
-    utterance.onstart = () => {
-      started = true;
-      unlocked = true;
-      debugSpeech("start", "browser default voice");
-    };
-    utterance.onend = () => {
-      liveUtterances.delete(utterance);
-      finished = true;
-      unlocked = true;
-      if (myGen === generation) opts.onEnd?.();
-    };
-    utterance.onerror = (event) => {
-      liveUtterances.delete(utterance);
-      debugSpeech("error", event.error);
-      if (event.error === "canceled" || event.error === "interrupted") return;
-      finished = true;
-      if (myGen === generation) opts.onError?.();
-    };
+  // iPhone/iPad: go straight to audio playback. The built-in engine there is
+  // free to stay silent with no error, which is exactly what was happening.
+  if (isWebKitMobile() || !s) {
+    playAudio(clean, myGen, opts);
+    return true;
+  }
 
-    liveUtterances.add(utterance);
-    try {
-      if (s.paused) s.resume();
-      s.speak(utterance);
-      debugSpeech("queued", { pending: s.pending, speaking: s.speaking });
-    } catch (error) {
-      liveUtterances.delete(utterance);
-      finished = true;
-      debugSpeech("throw", error);
-      if (myGen === generation) opts.onError?.();
-      return;
-    }
+  try {
+    if (s.speaking || s.pending) s.cancel();
+  } catch {}
 
-    // Browsers sometimes drop an utterance without throwing or firing error.
-    // Retry once, only if the queue is fully idle and this is still the newest
-    // request. getVoices() refreshes Chrome's lazy voice registry without
-    // overriding the user's configured default voice.
-    pendingTimer = window.setTimeout(() => {
-      pendingTimer = null;
-      if (myGen !== generation || started || finished || retried) return;
-      if (s.speaking || s.pending) return;
-      retried = true;
-      try {
-        s.getVoices();
-      } catch {}
-      debugSpeech("retry", "utterance did not start");
-      submit();
-    }, 500);
+  const fallback = () => {
+    if (myGen !== generation) return;
+    playAudio(clean, myGen, opts);
   };
 
   try {
-    if (s.paused) s.resume();
-    if (s.speaking || s.pending) {
-      s.cancel();
-      if (isWebKitMobile()) {
-        // iOS (all browsers) only honors speak() while the user gesture is
-        // still live, so we must not defer submission to a timer.
-        submit();
-      } else {
-        let checks = 0;
-        const submitWhenIdle = () => {
-          pendingTimer = null;
-          if (myGen !== generation) return;
-          if ((s.speaking || s.pending) && checks < 12) {
-            checks += 1;
-            pendingTimer = window.setTimeout(submitWhenIdle, 25);
-            return;
-          }
-          submit();
-        };
-        pendingTimer = window.setTimeout(submitWhenIdle, 25);
-      }
-    } else {
-      submit();
-    }
-
+    speakWithSynth(s, clean, myGen, opts, fallback);
   } catch (error) {
-    debugSpeech("replace failed", error);
-    opts.onError?.();
-    return false;
+    debugSpeech("synth path failed", String(error));
+    fallback();
   }
   return true;
 }
