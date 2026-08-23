@@ -7,7 +7,8 @@ import {
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
   CheckSquare, CheckCircle2, FileText, ImageIcon, FolderInput, CopyPlus, FolderMinus,
 } from "lucide-react";
-import { AssignDocumentIconDialog } from "@/components/AssignDocumentIconDialog";
+import { AppBackground } from "@/components/AppBackground";
+import { useAppBackground, setAppBackground } from "@/lib/use-app-background";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
@@ -120,6 +121,7 @@ async function probeAudio(file: File): Promise<{ duration: number }> {
 function MediaPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const appBg = useAppBackground();
   const { folder: activeFolderId } = Route.useSearch();
   const [filter, setFilter] = useState<Filter>("all");
   const [folderPicker, setFolderPicker] = useState<
@@ -144,7 +146,7 @@ function MediaPage() {
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
-  const [iconAssignAsset, setIconAssignAsset] = useState<Asset | null>(null);
+  
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
@@ -531,12 +533,14 @@ function MediaPage() {
 
   return (
     <main
-      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden bg-background text-foreground"
+      className="relative flex h-[100svh] max-h-[100svh] flex-col overflow-hidden text-foreground"
       style={{
         paddingTop: "env(safe-area-inset-top)",
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
+      {/* Background — theme base color plus the user's chosen photo, if any */}
+      <AppBackground />
       {/* Background flourish */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-0 h-[40vh] w-[80vw] -translate-x-1/2 rounded-full opacity-15 blur-3xl"
@@ -1159,11 +1163,31 @@ function MediaPage() {
                 />
               )}
               {sheetAsset.kind === "image" && (
-                <SheetButton icon={<ImageIcon className="h-4 w-4" />} label="Set as document icon"
-                  onClick={() => {
+                <SheetButton icon={<ImageIcon className="h-4 w-4" />} label="Set as background"
+                  onClick={async () => {
                     const a = sheetAsset;
                     setSheetAsset(null);
-                    setIconAssignAsset(a);
+                    try {
+                      await setAppBackground(a.id);
+                      qc.invalidateQueries({ queryKey: ["app_background"] });
+                      toast.success("Background set");
+                    } catch {
+                      toast.error("Could not set background");
+                    }
+                  }}
+                />
+              )}
+              {appBg && (
+                <SheetButton icon={<X className="h-4 w-4" />} label="Remove background"
+                  onClick={async () => {
+                    setSheetAsset(null);
+                    try {
+                      await setAppBackground(null);
+                      qc.invalidateQueries({ queryKey: ["app_background"] });
+                      toast.success("Background removed");
+                    } catch {
+                      toast.error("Could not remove background");
+                    }
                   }}
                 />
               )}
@@ -1425,14 +1449,6 @@ function MediaPage() {
         />
       )}
 
-      {iconAssignAsset && (
-        <AssignDocumentIconDialog
-          open={!!iconAssignAsset}
-          onOpenChange={(o) => { if (!o) setIconAssignAsset(null); }}
-          mediaAssetId={iconAssignAsset.id}
-          mediaAssetTitle={iconAssignAsset.title}
-        />
-      )}
 
 
 
