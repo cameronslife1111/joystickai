@@ -4,9 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { proxyMediaUrl } from "@/lib/sb-proxy";
-import { Orb } from "@/components/Orb";
-import { DocumentIconAvatar } from "@/components/DocumentIconAvatar";
+import { OrbCluster } from "@/components/OrbCluster";
+import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech } from "@/lib/speech";
@@ -108,12 +107,12 @@ function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
 function AppPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const orbRef = useRef<HTMLButtonElement>(null);
+  const centerRef = useRef<HTMLDivElement>(null);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [flare, setFlare] = useState<null | "up" | "down" | "left" | "right">(null);
+  
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
@@ -178,7 +177,7 @@ function AppPage() {
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
   const [exportChooserOpen, setExportChooserOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [orbState, setOrbState] = useState<"idle" | "listening" | "thinking">("idle");
+  
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "light";
     const cached = window.localStorage.getItem("orby_theme");
@@ -443,48 +442,6 @@ function AppPage() {
     },
   });
 
-  // All document icons in one query — deriving `docIconUrl` synchronously
-  // means the correct image URL is already known the instant `activeDocId`
-  // changes, so swipes don't trigger a per-doc round-trip.
-  const { data: iconMap } = useQuery({
-    queryKey: ["document_icons_map"],
-    refetchOnWindowFocus: false,
-    queryFn: async (): Promise<Record<string, string>> => {
-      const { data, error } = await supabase
-        .from("document_icons")
-        .select("document_id, media_assets(url)");
-      if (error) return {};
-      const map: Record<string, string> = {};
-      for (const row of (data ?? []) as any[]) {
-        const url = row?.media_assets?.url;
-        if (row?.document_id && typeof url === "string" && url) {
-          map[row.document_id as string] = url;
-        }
-      }
-      return map;
-    },
-  });
-  const docIconUrl = activeDocId ? iconMap?.[activeDocId] ?? null : null;
-
-  // Warm the browser HTTP cache for the current doc's icon and its immediate
-  // neighbors so left/right swipes paint from cache instantly.
-  useEffect(() => {
-    if (!iconMap || !docs || docs.length === 0) return;
-    const idx = docs.findIndex((d) => d.id === activeDocId);
-    if (idx < 0) return;
-    const neighbors = [
-      docs[idx],
-      docs[(idx + 1) % docs.length],
-      docs[(idx - 1 + docs.length) % docs.length],
-    ];
-    for (const d of neighbors) {
-      const url = d && iconMap[d.id];
-      if (!url) continue;
-      const img = new Image();
-      img.decoding = "async";
-      img.src = proxyMediaUrl(url);
-    }
-  }, [iconMap, docs, activeDocId]);
 
 
 
@@ -1428,29 +1385,21 @@ function AppPage() {
   const onLongPressEnd = useCallback(() => {}, []);
 
 
+  // The transparent center pad is the only gesture surface: tap opens the
+  // editor, long-press toggles voice recording. Navigation lives on the six
+  // surrounding orb buttons now — no swipe handling here.
   useOrbGestures(
-    orbRef,
+    centerRef,
     {
       onTap: onDoubleTap,
       onDoubleTap,
       onLongPressStart,
       onLongPressEnd,
-      onSwipe: (dir) => {
-        if (editing) return; // disable all swipes while in edit mode
-        (orbRef.current as any)?.boostMood?.();
-        setFlare(dir);
-        if (dir === "up") void advanceSentence();
-        else if (dir === "down") void onSwipeUp();
-        else if (dir === "left") setMenuOpen(true);
-        else if (dir === "right") void onSwipeRight();
-      },
     },
     {
-      swipeThreshold: 38,
-      moveCancelPx: 16,
-      // The orb is unmounted while the editor is open, so exiting edit mode
-      // creates a brand-new element — rebind listeners to it.
-      rebindKey: `${docIconUrl ?? "orb"}|${editing ? "edit" : "read"}`,
+      // The cluster is unmounted while the editor is open, so exiting edit
+      // mode creates a brand-new center pad — rebind listeners to it.
+      rebindKey: editing ? "edit" : "read",
     },
   );
 
@@ -2500,10 +2449,8 @@ function AppPage() {
         paddingBottom: "env(safe-area-inset-bottom)",
       }}
     >
-      {/* Background — pure black in dark, pure white in light */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-background" />
-      </div>
+      {/* Background — theme base color plus the user's chosen photo, if any */}
+      <AppBackground />
 
       {/* Connection error fallback — never leave the user stuck on a blank shell */}
       {docsError && !docsLoading && (
@@ -2843,60 +2790,22 @@ function AppPage() {
 
       {!editing && (
         <section className="relative flex shrink-0 items-center justify-center pb-4">
-          <div
-            className={`orb-stage${recording ? " orb-recording" : ""}`}
-            style={{
-              width: "min(55vw, 28svh, 220px)",
-              height: "min(55vw, 28svh, 220px)",
+          {/* Six smiley orbs around a transparent center pad:
+              blue = prev, purple = next, yellow = menu, green = next doc,
+              red = delete, orange = repeat; center tap = edit, hold = record. */}
+          <OrbCluster
+            recording={recording}
+            centerRef={centerRef}
+            onPrev={() => void onSwipeUp()}
+            onNext={() => void advanceSentence()}
+            onMenu={() => setMenuOpen(true)}
+            onNextDoc={() => void onSwipeRight()}
+            onDelete={() => void deleteCurrent()}
+            onRepeat={() => {
+              const text = currentSentence?.content;
+              if (text) speak(text, claimSpeech());
             }}
-          >
-            <div className="orb-aura" aria-hidden />
-            {flare && (
-              <div
-                className={`orb-flare orb-flare-${flare}`}
-                aria-hidden
-                onAnimationEnd={() => setFlare(null)}
-              />
-            )}
-            {/* Linked-document pill moved to the header, under the title. */}
-            {docIconUrl ? (
-              <DocumentIconAvatar
-                ref={orbRef}
-                url={docIconUrl}
-                state={orbState}
-                className="!w-full !h-full"
-              />
-            ) : (
-              <Orb
-                ref={orbRef}
-                state={orbState}
-                size={0}
-                className="!w-full !h-full"
-              />
-            )}
-            {/* Swipe gestures on the orb handle directional navigation. */}
-            {/* Visible glowing-orb flanking buttons: left = delete, right = repeat */}
-            <button
-              type="button"
-              onClick={() => {
-                void deleteCurrent();
-              }}
-              className="glow-orb glow-orb-blue absolute top-1/2 right-full mr-3 -translate-y-1/2 z-10"
-              aria-label="Delete sentence"
-              title="Delete sentence"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const text = currentSentence?.content;
-                if (text) speak(text, claimSpeech());
-              }}
-              className="glow-orb glow-orb-green absolute top-1/2 left-full ml-3 -translate-y-1/2 z-10"
-              aria-label="Repeat sentence"
-              title="Repeat sentence"
-            />
-
-          </div>
+          />
         </section>
       )}
 
