@@ -26,7 +26,7 @@ interface OrbClusterProps {
   onRepeat: () => void;
 }
 
-type OrbColor = "red" | "orange" | "blue" | "purple" | "green" | "yellow";
+
 
 /** Little smiley face drawn on every orb. */
 function Smiley() {
@@ -71,13 +71,14 @@ function giggle(el: HTMLButtonElement) {
 }
 
 interface ClusterOrbProps {
-  color: OrbColor;
+  /** Full literal class (e.g. "glow-orb-blue") so Tailwind's scanner sees it. */
+  orbClass: string;
   label: string;
   onPress: () => void;
   placement: CSSProperties;
 }
 
-function ClusterOrb({ color, label, onPress, placement }: ClusterOrbProps) {
+function ClusterOrb({ orbClass, label, onPress, placement }: ClusterOrbProps) {
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     giggle(e.currentTarget);
     onPress();
@@ -88,7 +89,7 @@ function ClusterOrb({ color, label, onPress, placement }: ClusterOrbProps) {
       aria-label={label}
       title={label}
       onClick={handleClick}
-      className={cn("glow-orb", `glow-orb-${color}`)}
+      className={cn("glow-orb", orbClass)}
       style={placement}
     >
       <Smiley />
@@ -109,19 +110,19 @@ export function OrbCluster({
   return (
     <div className="orb-cluster">
       <ClusterOrb
-        color="blue"
+        orbClass="glow-orb-blue"
         label="Previous sentence"
         onPress={onPrev}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
       <ClusterOrb
-        color="red"
+        orbClass="glow-orb-red"
         label="Delete sentence"
         onPress={onDelete}
         placement={{ gridColumn: 1, gridRow: 2 }}
       />
       <ClusterOrb
-        color="yellow"
+        orbClass="glow-orb-yellow"
         label="Open menu"
         onPress={onMenu}
         placement={{ gridColumn: 2, gridRow: 2 }}
@@ -135,19 +136,19 @@ export function OrbCluster({
         style={{ gridColumn: 3, gridRow: 2 }}
       />
       <ClusterOrb
-        color="green"
+        orbClass="glow-orb-green"
         label="Next document"
         onPress={onNextDoc}
         placement={{ gridColumn: 4, gridRow: 2 }}
       />
       <ClusterOrb
-        color="orange"
+        orbClass="glow-orb-orange"
         label="Repeat sentence"
         onPress={onRepeat}
         placement={{ gridColumn: 5, gridRow: 2 }}
       />
       <ClusterOrb
-        color="purple"
+        orbClass="glow-orb-purple"
         label="Next sentence"
         onPress={onNext}
         placement={{ gridColumn: 3, gridRow: 3 }}
