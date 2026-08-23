@@ -582,6 +582,7 @@ export type Database = {
       }
       user_preferences: {
         Row: {
+          background_media_asset_id: string | null
           created_at: string
           favorites: Json
           grid_layout: Json
@@ -596,6 +597,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          background_media_asset_id?: string | null
           created_at?: string
           favorites?: Json
           grid_layout?: Json
@@ -610,6 +612,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          background_media_asset_id?: string | null
           created_at?: string
           favorites?: Json
           grid_layout?: Json
@@ -623,7 +626,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_background_media_asset_id_fkey"
+            columns: ["background_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
