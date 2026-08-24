@@ -40,12 +40,12 @@ function installBrowser(speechSynthesis: FakeSynth) {
 afterEach(() => cancelSpeech());
 
 describe("native browser sentence speech", () => {
-  test("cancels the browser queue and speaks one native utterance immediately", () => {
+  test("speaks the first native utterance immediately without cancelling", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
 
     expect(speakText("Read this sentence.")).toBe(true);
-    expect(engine.cancelCalls).toBe(1);
+    expect(engine.cancelCalls).toBe(0);
     expect(engine.utterances.map((item) => item.text)).toEqual(["Read this sentence."]);
   });
 
@@ -69,7 +69,7 @@ describe("native browser sentence speech", () => {
     expect(engine.utterances[0]?.text).toBe(long);
   });
 
-  test("immediately replaces the previous utterance", () => {
+  test("replaces active speech in a later task", async () => {
     const engine = new FakeSynth();
     installBrowser(engine);
     speakText("Older sentence.");
@@ -77,10 +77,36 @@ describe("native browser sentence speech", () => {
 
     speakText("Newest sentence.");
 
-    expect(engine.cancelCalls).toBe(2);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
+    expect(engine.cancelCalls).toBe(1);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence."]);
     expect(stale?.onstart).toBeNull();
     expect(stale?.onend).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
+  });
+
+  test("keeps only the newest rapid replacement", async () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("First sentence.");
+    speakText("Second sentence.");
+    speakText("Third sentence.");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(engine.utterances.map((item) => item.text)).toEqual(["First sentence.", "Third sentence."]);
+  });
+
+  test("explicit cancellation prevents a deferred replacement", async () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    speakText("First sentence.");
+    speakText("Never submit this sentence.");
+    cancelSpeech();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(engine.utterances.map((item) => item.text)).toEqual(["First sentence."]);
   });
 
   test("tracks native start and end callbacks", () => {
@@ -126,5 +152,24 @@ describe("native browser sentence speech", () => {
     expect(cleanForSpeech("🐝  hello  🟢")).toBe("hello");
     expect(speakText("🐝🟢")).toBe(false);
     expect(engine.utterances).toHaveLength(0);
+  });
+
+  test("does not touch audio routing or create media objects", () => {
+    const engine = new FakeSynth();
+    installBrowser(engine);
+    const writes: string[] = [];
+    const audioSession = {
+      get type() { return "auto"; },
+      set type(value: string) { writes.push(value); },
+    };
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { audioSession },
+    });
+
+    speakText("Native speech only.");
+
+    expect(writes).toEqual([]);
+    expect(engine.utterances).toHaveLength(1);
   });
 });
