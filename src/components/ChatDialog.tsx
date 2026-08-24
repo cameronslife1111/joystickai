@@ -1433,7 +1433,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
                 ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  cursorRef.current = e.target.selectionStart ?? e.target.value.length;
+                }}
+                onSelect={(e) => {
+                  cursorRef.current = e.currentTarget.selectionStart ?? 0;
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -1664,6 +1670,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           // Attaching images implies image analysis for the next message.
           if (picked.length) setCap("image_analysis", true);
         }}
+      />
+
+      <MediaGalleryPicker
+        open={titlePickerOpen}
+        onOpenChange={setTitlePickerOpen}
+        kind="image"
+        mode="multiple"
+        maxSelected={30}
+        heading="Attach Image titles"
+        showTitles
+        allowManage
+        onConfirm={insertTitlesAtCursor}
       />
 
       <InsertIntoDocDialog
