@@ -11,6 +11,7 @@ import {
   Send,
   Trash2,
   Image as ImageIcon,
+  Type,
   Plus,
   Pencil,
   MessagesSquare,
@@ -241,6 +242,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [pickedImages, setPickedImages] = useState<MediaAsset[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Composer clock button → schedule this message for later. */
