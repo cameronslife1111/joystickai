@@ -28,7 +28,6 @@ function synth(): SpeechSynthesis | null {
 let audibleSpeaking = false;
 let activeUtterance: SpeechSynthesisUtterance | null = null;
 let speechGeneration = 0;
-let pendingSpeak: ReturnType<typeof setTimeout> | null = null;
 
 function detach(utterance: SpeechSynthesisUtterance) {
   utterance.onstart = null;
@@ -39,10 +38,6 @@ function detach(utterance: SpeechSynthesisUtterance) {
 
 export function cancelSpeech() {
   speechGeneration += 1;
-  if (pendingSpeak !== null) {
-    clearTimeout(pendingSpeak);
-    pendingSpeak = null;
-  }
   const s = synth();
   audibleSpeaking = false;
   if (activeUtterance) {
@@ -68,11 +63,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
 
   const generation = ++speechGeneration;
-  const replacing = activeUtterance !== null || pendingSpeak !== null;
-  if (pendingSpeak !== null) {
-    clearTimeout(pendingSpeak);
-    pendingSpeak = null;
-  }
+  const replacing = activeUtterance !== null;
   if (activeUtterance) {
     detach(activeUtterance);
     activeUtterance = null;
@@ -88,40 +79,35 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   utterance.rate = opts.rate ?? 1;
   utterance.pitch = opts.pitch ?? 1;
   utterance.onstart = () => {
-    if (activeUtterance === utterance) audibleSpeaking = true;
+    if (generation === speechGeneration && activeUtterance === utterance) audibleSpeaking = true;
   };
   utterance.onboundary = () => {
-    if (activeUtterance === utterance) audibleSpeaking = true;
+    if (generation === speechGeneration && activeUtterance === utterance) audibleSpeaking = true;
   };
   utterance.onend = () => {
-    if (activeUtterance !== utterance) return;
+    if (generation !== speechGeneration || activeUtterance !== utterance) return;
     activeUtterance = null;
     audibleSpeaking = false;
     opts.onEnd?.();
   };
   utterance.onerror = () => {
-    if (activeUtterance !== utterance) return;
+    if (generation !== speechGeneration || activeUtterance !== utterance) return;
     activeUtterance = null;
     audibleSpeaking = false;
     opts.onError?.();
   };
   activeUtterance = utterance;
 
-  const submit = () => {
-    pendingSpeak = null;
-    if (generation !== speechGeneration || activeUtterance !== utterance) return;
-    try {
-      s.speak(utterance);
-    } catch {
-      if (activeUtterance === utterance) activeUtterance = null;
-      audibleSpeaking = false;
-      opts.onError?.();
+  // Keep the native call in the same user-activation turn as the button press.
+  // Current WebKit protects a newly queued utterance from a preceding cancel.
+  try {
+    s.speak(utterance);
+  } catch {
+    if (generation === speechGeneration && activeUtterance === utterance) {
+      activeUtterance = null;
     }
-  };
-
-  // Current WebKit can let cancel() clear a speak() submitted in the same
-  // task. Idle speech stays synchronous; replacements cross one task boundary.
-  if (replacing) pendingSpeak = setTimeout(submit, 0);
-  else submit();
+    audibleSpeaking = false;
+    opts.onError?.();
+  }
   return true;
 }
