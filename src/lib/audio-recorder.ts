@@ -3,6 +3,8 @@
 // only WAV is guaranteed decodable everywhere (iOS Safari records fragmented
 // MP4, which the transcription model rejects).
 
+import { restoreDefaultAudioSession } from "@/lib/audio-session";
+
 export type PcmRecorder = {
   /** Resolves once the mic is genuinely delivering audio frames. */
   ready: Promise<void>;
@@ -94,6 +96,9 @@ export function releaseMic(): Promise<void> {
     releasing.stream.getTracks().forEach((t) => t.stop());
     closing = releasing.ctx.close().catch(() => {}).then(() => {
       closing = null;
+      // Mic capture switches iOS into recording mode; restore the default
+      // session so music resumes and speech ducks it instead of killing it.
+      restoreDefaultAudioSession();
     });
   }
   return closing ?? Promise.resolve();
