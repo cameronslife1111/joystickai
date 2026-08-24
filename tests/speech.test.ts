@@ -69,7 +69,7 @@ describe("native browser sentence speech", () => {
     expect(engine.utterances[0]?.text).toBe(long);
   });
 
-  test("replaces active speech in a later task", async () => {
+  test("replaces active speech synchronously in the same task", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
     speakText("Older sentence.");
@@ -78,35 +78,40 @@ describe("native browser sentence speech", () => {
     speakText("Newest sentence.");
 
     expect(engine.cancelCalls).toBe(1);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence."]);
+    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
     expect(stale?.onstart).toBeNull();
     expect(stale?.onend).toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
   });
 
-  test("keeps only the newest rapid replacement", async () => {
+  test("rapid replacements synchronously cancel before each newest utterance", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
     speakText("First sentence.");
     speakText("Second sentence.");
     speakText("Third sentence.");
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(engine.utterances.map((item) => item.text)).toEqual(["First sentence.", "Third sentence."]);
+    expect(engine.cancelCalls).toBe(2);
+    expect(engine.utterances.map((item) => item.text)).toEqual([
+      "First sentence.",
+      "Second sentence.",
+      "Third sentence.",
+    ]);
+    expect(engine.utterances[1]?.onstart).toBeNull();
+    expect(engine.utterances[1]?.onend).toBeNull();
   });
 
-  test("explicit cancellation prevents a deferred replacement", async () => {
+  test("explicit cancellation detaches the active native utterance", () => {
     const engine = new FakeSynth();
     installBrowser(engine);
     speakText("First sentence.");
     speakText("Never submit this sentence.");
+    const active = engine.utterances[1];
     cancelSpeech();
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(engine.utterances.map((item) => item.text)).toEqual(["First sentence."]);
+    expect(engine.cancelCalls).toBe(2);
+    expect(active?.onstart).toBeNull();
+    expect(active?.onend).toBeNull();
+    expect(isSpeaking()).toBe(false);
   });
 
   test("tracks native start and end callbacks", () => {
