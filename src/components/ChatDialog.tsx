@@ -1115,10 +1115,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       className="justify-start"
                       onClick={() => {
                         setSettingsOpen(false);
+                        setTitlePickerOpen(true);
+                      }}
+                    >
+                      <Type className="mr-2 h-4 w-4" /> Attach Image titles
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSettingsOpen(false);
                         setImagePickerOpen(true);
                       }}
                     >
-                      <ImageIcon className="mr-2 h-4 w-4" /> Attach images
+                      <ImageIcon className="mr-2 h-4 w-4" /> Attach Image to Analyze
                     </Button>
                     <Button
                       variant="outline"
