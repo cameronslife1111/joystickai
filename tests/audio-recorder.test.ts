@@ -86,5 +86,4 @@ describe("audio recorder lifecycle", () => {
 
     expect(stream.track.stopCalls).toBe(1);
   });
-
 });
