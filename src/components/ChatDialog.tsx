@@ -11,6 +11,7 @@ import {
   Send,
   Trash2,
   Image as ImageIcon,
+  Type,
   Plus,
   Pencil,
   MessagesSquare,
@@ -241,6 +242,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [pickedImages, setPickedImages] = useState<MediaAsset[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Composer clock button → schedule this message for later. */
@@ -256,6 +258,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [renameValue, setRenameValue] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Last known cursor position in the composer (survives sheets opening). */
+  const cursorRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
@@ -282,6 +286,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       setTimeout(() => textareaRef.current?.focus(), 50);
     }, []),
   );
+
+  /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
+  const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
+    const titles = assets.map((a) => a.title.trim()).filter(Boolean);
+    if (!titles.length) return;
+    const insert = titles.join(", ");
+    setInput((prev) => {
+      const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
+      // Pad with spaces so the titles don't fuse with neighboring words.
+      let text = insert;
+      if (pos > 0 && !/\s/.test(prev[pos - 1])) text = " " + text;
+      if (pos < prev.length && !/\s/.test(prev[pos])) text = text + " ";
+      const next = prev.slice(0, pos) + text + prev.slice(pos);
+      const newCursor = pos + text.length;
+      cursorRef.current = newCursor;
+      setTimeout(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus();
+          ta.setSelectionRange(newCursor, newCursor);
+        }
+      }, 50);
+      return next;
+    });
+  }, []);
 
 
   useEffect(() => {
@@ -1086,10 +1115,21 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       className="justify-start"
                       onClick={() => {
                         setSettingsOpen(false);
+                        setTitlePickerOpen(true);
+                      }}
+                    >
+                      <Type className="mr-2 h-4 w-4" /> Attach Image titles
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      onClick={() => {
+                        setSettingsOpen(false);
                         setImagePickerOpen(true);
                       }}
                     >
-                      <ImageIcon className="mr-2 h-4 w-4" /> Attach images
+                      <ImageIcon className="mr-2 h-4 w-4" /> Attach Image to Analyze
                     </Button>
                     <Button
                       variant="outline"
@@ -1393,7 +1433,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
                 ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  cursorRef.current = e.target.selectionStart ?? e.target.value.length;
+                }}
+                onSelect={(e) => {
+                  cursorRef.current = e.currentTarget.selectionStart ?? 0;
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -1624,6 +1670,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           // Attaching images implies image analysis for the next message.
           if (picked.length) setCap("image_analysis", true);
         }}
+      />
+
+      <MediaGalleryPicker
+        open={titlePickerOpen}
+        onOpenChange={setTitlePickerOpen}
+        kind="image"
+        mode="multiple"
+        maxSelected={30}
+        heading="Attach Image titles"
+        showTitles
+        allowManage
+        onConfirm={insertTitlesAtCursor}
       />
 
       <InsertIntoDocDialog
