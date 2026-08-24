@@ -1,12 +1,13 @@
-import { useCallback, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, RefreshCw, SendHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useVoiceDictation } from "@/lib/use-voice-dictation";
+import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { rewriteMediaPrompt } from "@/lib/media-revise.functions";
 import { nextRedoTitle } from "@/lib/redo-title";
+import { Textarea } from "@/components/ui/textarea";
 
 type Params = Record<string, unknown> | null | undefined;
 
@@ -32,19 +33,74 @@ async function urlOf(id: string | undefined): Promise<string | null> {
 interface Props {
   asset: ReviseAsset;
   onDone: () => void;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
- * Red circle -> tap to record what should change -> black square -> tap to
- * transcribe, rewrite the prompt, and kick off the same generation pipeline
- * with the same reference media and settings.
+ * Redo -> compact typed/dictated change box -> the same regeneration pipeline
+ * with the same reference media and settings as the original voice-only flow.
  */
-export function VoiceReviseButton({ asset, onDone }: Props) {
+export function MediaRedoControl({ asset, onDone, onOpenChange }: Props) {
+  const [open, setOpen] = useState(false);
+  const [change, setChange] = useState("");
   const [working, setWorking] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const rewrite = useServerFn(rewriteMediaPrompt);
 
+  const focusComposerEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
+  }, []);
+
+  const handleDictationText = useCallback(
+    (text: string) => {
+      setChange((current) => appendTranscript(current, text));
+      focusComposerEnd();
+    },
+    [focusComposerEnd],
+  );
+
+  const dictation = useVoiceDictation(handleDictationText);
+  const cancelDictation = dictation.cancel;
+
+  const setComposerOpen = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) cancelDictation();
+      setOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+      if (nextOpen) focusComposerEnd();
+    },
+    [cancelDictation, focusComposerEnd, onOpenChange],
+  );
+
+  // Never leave the mic active when the viewed asset changes or this control unmounts.
+  useEffect(() => cancelDictation, [cancelDictation]);
+  useEffect(() => {
+    cancelDictation();
+    setOpen(false);
+    setChange("");
+    onOpenChange?.(false);
+    // Intentionally keyed only by asset changes; callback identity is stable at the call site.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset.id, cancelDictation]);
+
+  // Keep the compact input auto-growing up to roughly three lines.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el || !open) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+  }, [change, open]);
+
   const submit = useCallback(
-    async (spoken: string) => {
+    async (requestedChange: string) => {
+      const revisionText = requestedChange.trim();
+      if (!revisionText) return;
       setWorking(true);
       try {
         const params = (asset.generation_params ?? {}) as Record<string, unknown>;
@@ -55,7 +111,7 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
         const { prompt } = await rewrite({
           data: {
             originalPrompt: original,
-            change: spoken,
+            change: revisionText,
             kind: isVideo ? "video" : "image",
             mode: isVideo ? "rewrite" : "edit",
           },
@@ -68,7 +124,7 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
           ...params,
           user_text: prompt,
           revised_from_asset_id: asset.id,
-          revision_text: spoken,
+          revision_text: revisionText,
         };
 
         const redoTitle = await nextRedoTitle(asset.title);
@@ -206,6 +262,8 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
         toast(isVideo ? "Regenerating your video..." : "Remixing your image...", {
           description: "It'll appear in the gallery when ready.",
         });
+        setChange("");
+        setComposerOpen(false);
         onDone();
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to start regeneration");
@@ -213,35 +271,121 @@ export function VoiceReviseButton({ asset, onDone }: Props) {
         setWorking(false);
       }
     },
-    [asset, onDone, rewrite],
-  );
-
-  const dictation = useVoiceDictation(
-    useCallback((text: string) => { void submit(text); }, [submit]),
+    [asset, onDone, rewrite, setComposerOpen],
   );
 
   const busy = working || dictation.transcribing;
+  const canSubmit = !busy && !dictation.recording && change.trim().length > 0;
+
+  const submitCurrent = useCallback(() => {
+    if (!canSubmit) return;
+    void submit(change);
+  }, [canSubmit, change, submit]);
+
+  if (!open) {
+    return (
+      <div
+        className="absolute left-4 z-20"
+        style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => setComposerOpen(true)}
+          aria-label={`Redo this ${asset.kind === "video" ? "video" : "image"}`}
+          className="flex h-10 items-center gap-2 rounded-full border border-border/60 bg-background/70 px-4 text-sm font-medium text-foreground shadow-lg backdrop-blur transition active:scale-95 hover:bg-background/85"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Redo
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); if (!busy) void dictation.toggle(); }}
-      disabled={busy}
-      aria-label={dictation.recording ? "Stop and regenerate" : "Say what to change"}
-      className={
-        "flex h-10 w-10 items-center justify-center border border-white/20 text-white transition active:scale-95 " +
-        (dictation.recording
-          ? "rounded-lg bg-black"
-          : "rounded-full bg-red-600 animate-none")
-      }
+    <div
+      className="absolute inset-x-4 z-20 mx-auto max-w-2xl"
+      style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          if (!working) setComposerOpen(false);
+        }
+      }}
     >
-      {busy ? (
-        <Loader2 className="h-5 w-5 animate-spin" />
-      ) : dictation.recording ? (
-        <span className="h-4 w-4 rounded-sm bg-white/90" />
-      ) : (
-        <span className="h-4 w-4 rounded-full bg-white/90" />
-      )}
-    </button>
+      <div className="flex items-end gap-2 rounded-3xl border border-border/60 bg-background/80 p-2 shadow-2xl backdrop-blur-xl">
+        <button
+          type="button"
+          onClick={() => setComposerOpen(false)}
+          disabled={working}
+          aria-label="Close redo composer"
+          className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground disabled:opacity-40"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <Textarea
+          ref={textareaRef}
+          value={change}
+          onChange={(e) => setChange(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submitCurrent();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              if (!working) setComposerOpen(false);
+            }
+          }}
+          placeholder="What should change?"
+          rows={1}
+          disabled={busy}
+          aria-label="Describe the redo change"
+          className="max-h-24 min-h-11 flex-1 resize-none overflow-y-auto rounded-2xl border-input bg-background/70 px-3 py-2.5 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
+        />
+
+        <button
+          type="button"
+          onClick={() => void dictation.toggle()}
+          disabled={working || dictation.transcribing}
+          aria-label={dictation.recording ? "Stop voice input" : "Start voice input"}
+          aria-pressed={dictation.recording}
+          title={dictation.recording ? "Stop and transcribe" : "Voice input"}
+          className={
+            "flex h-11 w-11 shrink-0 items-center justify-center border transition active:scale-95 disabled:opacity-60 " +
+            (dictation.recording
+              ? "rounded-xl border-border bg-background text-foreground"
+              : "rounded-full border-destructive/60 bg-destructive text-destructive-foreground")
+          }
+        >
+          {dictation.transcribing ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : dictation.recording ? (
+            <span className="h-4 w-4 rounded-sm bg-foreground" />
+          ) : (
+            <span className="h-4 w-4 rounded-full bg-destructive-foreground" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={submitCurrent}
+          disabled={!canSubmit}
+          aria-label={`Redo this ${asset.kind === "video" ? "video" : "image"}`}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition active:scale-95 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {working ? <Loader2 className="h-5 w-5 animate-spin" /> : <SendHorizontal className="h-5 w-5" />}
+        </button>
+      </div>
+    </div>
   );
 }
