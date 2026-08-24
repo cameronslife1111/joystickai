@@ -600,3 +600,85 @@
 }
 
 
+
+/* ============ Landing page (public homepage) ============ */
+
+/* Decorative orbs never intercept clicks and read well on the dark sky. */
+.landing-orb {
+  pointer-events: none;
+  cursor: default;
+}
+.landing-orb .glow-orb-face {
+  color: #f1f5f9;
+  opacity: 0.95;
+}
+
+/* Highlighted orb in the "meet the orbs" sequence (filter only — the glow
+   pulse animation owns `transform` on this element). */
+.landing-orb-active {
+  filter: brightness(1.6) saturate(1.25) drop-shadow(0 0 14px rgba(255, 255, 255, 0.35));
+}
+
+/* Slow idle bobbing (layered above the orb's own glow pulse). */
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.landing-float {
+  animation: landing-float 6s ease-in-out infinite;
+}
+
+/* Scroll reveal — element starts hidden, `.reveal-visible` fades it up. */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 700ms ease, transform 700ms ease;
+}
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* One-sentence-at-a-time cycler: each new sentence rises into place. */
+@keyframes sentence-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.98);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+.sentence-swap {
+  animation: sentence-in 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Plan-step dot pops in once its row has revealed. */
+@keyframes step-dot-pop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.reveal-visible .step-dot {
+  animation: step-dot-pop 500ms ease-out 250ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-float { animation: none; }
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .sentence-swap { animation: none; }
+  .reveal-visible .step-dot { animation: none; }
+}
+
+/* "Meet the orbs" cluster: orbs stay square inside non-square grid cells. */
+.landing-cluster .landing-orb {
+  width: clamp(44px, 12vw, 60px);
+  height: clamp(44px, 12vw, 60px);
+}
