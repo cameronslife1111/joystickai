@@ -86,4 +86,27 @@ describe("audio recorder lifecycle", () => {
 
     expect(stream.track.stopCalls).toBe(1);
   });
+
+  test("release restores the default iOS audio session", async () => {
+    const stream = new FakeStream();
+    const audioSession = { type: "play-and-record" };
+    Object.assign(globalThis, {
+      window: Object.assign(globalThis, { AudioContext: FakeContext }),
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X)",
+        maxTouchPoints: 5,
+        audioSession,
+        mediaDevices: { getUserMedia: () => Promise.resolve(stream) },
+      },
+    });
+
+    const recorder = await startPcmRecorder();
+    recorder.cancel();
+    await releaseMic();
+
+    expect(audioSession.type).toBe("auto");
+  });
 });
