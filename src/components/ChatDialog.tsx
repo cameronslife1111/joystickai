@@ -258,6 +258,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [renameValue, setRenameValue] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Last known cursor position in the composer (survives sheets opening). */
+  const cursorRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
