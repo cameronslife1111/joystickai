@@ -287,6 +287,31 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }, []),
   );
 
+  /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
+  const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
+    const titles = assets.map((a) => a.title.trim()).filter(Boolean);
+    if (!titles.length) return;
+    const insert = titles.join(", ");
+    setInput((prev) => {
+      const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
+      // Pad with spaces so the titles don't fuse with neighboring words.
+      let text = insert;
+      if (pos > 0 && !/\s/.test(prev[pos - 1])) text = " " + text;
+      if (pos < prev.length && !/\s/.test(prev[pos])) text = text + " ";
+      const next = prev.slice(0, pos) + text + prev.slice(pos);
+      const newCursor = pos + text.length;
+      cursorRef.current = newCursor;
+      setTimeout(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus();
+          ta.setSelectionRange(newCursor, newCursor);
+        }
+      }, 50);
+      return next;
+    });
+  }, []);
+
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
