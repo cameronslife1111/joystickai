@@ -25,7 +25,7 @@ import { useVideoJobPolling } from "@/hooks/use-video-job-polling";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
 import { DownloadAllProgress } from "@/components/DownloadAllProgress";
-import { VoiceReviseButton } from "@/components/VoiceReviseButton";
+import { MediaRedoControl } from "@/components/MediaRedoControl";
 
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
@@ -146,7 +146,8 @@ function MediaPage() {
   const [i2vAsset, setI2vAsset] = useState<Asset | null>(null);
   const [v2vAsset, setV2vAsset] = useState<Asset | null>(null);
   const [aivAsset, setAivAsset] = useState<Asset | null>(null);
-  
+  const [redoComposerOpen, setRedoComposerOpen] = useState(false);
+
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
@@ -530,6 +531,10 @@ function MediaPage() {
   }, [filtered, markSeen]);
 
   const currentAsset = viewerIdx !== null ? filtered[viewerIdx] : null;
+
+  useEffect(() => {
+    setRedoComposerOpen(false);
+  }, [viewerIdx, currentAsset?.id, currentAsset?.status]);
 
   return (
     <main
@@ -973,7 +978,7 @@ function MediaPage() {
           onTouchEnd={(e) => {
             const start = swipeStartRef.current;
             swipeStartRef.current = null;
-            if (!start) return;
+            if (!start || redoComposerOpen) return;
             const t = e.changedTouches[0];
             const dx = t.clientX - start.x;
             const dy = t.clientY - start.y;
@@ -983,6 +988,7 @@ function MediaPage() {
             }
           }}
           onClick={(e) => {
+            if (redoComposerOpen) return;
             const w = (e.currentTarget as HTMLElement).clientWidth;
             const x = e.clientX;
             const third = w / 3;
@@ -1042,28 +1048,26 @@ function MediaPage() {
               {(currentAsset.kind === "image" || currentAsset.kind === "video") &&
                 currentAsset.status !== "generating" &&
                 currentAsset.status !== "failed" && (
-                  <div
-                    className="absolute left-4"
-                    style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <VoiceReviseButton
-                      asset={currentAsset}
-                      onDone={() => {
-                        setViewerIdx(null);
-                        qc.invalidateQueries({ queryKey: ["media_assets"] });
-                      }}
-                    />
-                  </div>
+                  <MediaRedoControl
+                    asset={currentAsset}
+                    onOpenChange={setRedoComposerOpen}
+                    onDone={() => {
+                      setRedoComposerOpen(false);
+                      setViewerIdx(null);
+                      qc.invalidateQueries({ queryKey: ["media_assets"] });
+                    }}
+                  />
                 )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
-                aria-label="Options"
-                className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
-                style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
-              >
-                <MoreVertical className="h-5 w-5" />
-              </button>
+              {!redoComposerOpen && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSheetAsset(currentAsset); }}
+                  aria-label="Options"
+                  className="absolute right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+                  style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </button>
+              )}
 
               <button
                 onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
