@@ -13,23 +13,22 @@ function iosAudioSession(): AudioSessionLike | null {
 }
 
 /**
- * Return to a MIXABLE audio category so speech synthesis layers on top of
- * whatever the user is already listening to. "playback" is exclusive on iOS and
- * pauses other apps' audio, so it must never be requested here.
+ * Return the page to the default ("auto") audio category after microphone
+ * capture or a WebRTC call ends. "auto" is the untouched state where iOS
+ * speechSynthesis ducks background music (Music/YouTube) and still plays
+ * while the Ring/Silent switch is on.
+ *
+ * Never request "ambient" here — it respects the silent switch, muting
+ * speech. Never request "playback" — it is exclusive and pauses other apps'
+ * audio. Only ever restore the default.
  */
-export function requestIosMixableSession(): boolean {
+export function restoreDefaultAudioSession(): boolean {
   const session = iosAudioSession();
   if (!session) return false;
-  for (const type of ["ambient", "auto"]) {
-    try {
-      session.type = type;
-      if (session.type === type) return true;
-    } catch {}
+  try {
+    session.type = "auto";
+    return session.type === "auto";
+  } catch {
+    return false;
   }
-  return false;
-}
-
-export function iosAudioSessionState() {
-  const session = iosAudioSession();
-  return session ? { type: session.type, state: session.state ?? "unknown" } : null;
 }

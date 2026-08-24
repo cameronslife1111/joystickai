@@ -5,7 +5,7 @@ import {
   composeRealtimeInstructions,
   createRealtimeSession,
 } from "@/lib/realtime.functions";
-import { requestIosMixableSession } from "@/lib/audio-session";
+import { restoreDefaultAudioSession } from "@/lib/audio-session";
 
 export type CallState = "idle" | "connecting" | "live";
 
@@ -66,7 +66,9 @@ export function useRealtimeVoice({
       audioRef.current.remove();
       audioRef.current = null;
     }
-    requestIosMixableSession();
+    // WebRTC put iOS in call mode; hand audio back to the default session so
+    // background music resumes and speechSynthesis ducks it normally.
+    restoreDefaultAudioSession();
     setSpeaking(false);
     setState("idle");
   }, []);
