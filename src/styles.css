@@ -676,3 +676,9 @@
   .sentence-swap { animation: none; }
   .reveal-visible .step-dot { animation: none; }
 }
+
+/* "Meet the orbs" cluster: orbs stay square inside non-square grid cells. */
+.landing-cluster .landing-orb {
+  width: clamp(44px, 12vw, 60px);
+  height: clamp(44px, 12vw, 60px);
+}

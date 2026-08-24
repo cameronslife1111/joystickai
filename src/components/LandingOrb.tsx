@@ -90,12 +90,19 @@ export function LandingOrb({
     };
   }, [drift]);
 
-  const sizeStyle: CSSProperties =
-    size === "fill" ? { width: "100%", height: "100%" } : { width: size, height: size };
+  // "fill" leaves sizing to CSS (`.landing-cluster .landing-orb`) so the orb
+  // stays square even inside a non-square grid cell.
+  const sizeStyle: CSSProperties = size === "fill" ? {} : { width: size, height: size };
 
   return (
     <div ref={wrapRef} aria-hidden className={cn("pointer-events-none", className)} style={style}>
-      <div className="landing-float h-full w-full" style={{ animationDelay: floatDelay }}>
+      <div
+        className={cn(
+          "landing-float h-full w-full",
+          size === "fill" && "flex items-center justify-center",
+        )}
+        style={{ animationDelay: floatDelay }}
+      >
         <div
           className={cn("glow-orb landing-orb", COLOR_CLASS[color], active && "landing-orb-active")}
           style={sizeStyle}

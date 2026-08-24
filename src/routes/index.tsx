@@ -216,7 +216,7 @@ function MeetTheOrbs() {
 
       <Reveal delay="150ms" className="mt-14">
         <div
-          className="grid"
+          className="landing-cluster grid"
           style={{
             alignItems: "stretch",
             justifyItems: "stretch",
@@ -287,7 +287,6 @@ function Plans() {
   return (
     <section className="relative mx-auto flex min-h-[90svh] w-full max-w-3xl flex-col justify-center px-6 py-24">
       <LandingOrb color="red" size={44} drift={0.12} floatDelay="0.7s" className="absolute -right-2 top-[10%] hidden lg:block" />
-      <LandingOrb color="blue" size={36} drift={-0.1} floatDelay="1.6s" className="absolute -left-2 bottom-[8%] hidden lg:block" />
 
       <Reveal>
         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
