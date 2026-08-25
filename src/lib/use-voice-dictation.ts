@@ -3,7 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 
 import { transcribeAudio } from "@/lib/whisper.functions";
-import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
+import {
+  startPcmRecorder,
+  blobToBase64,
+  releaseMic,
+  micErrorMessage,
+  type PcmRecorder,
+} from "@/lib/audio-recorder";
 
 export type DictationState = "idle" | "recording" | "transcribing";
 
@@ -60,10 +66,11 @@ export function useVoiceDictation(onText: (text: string) => void) {
       try {
         recorderRef.current = await startPcmRecorder();
         setState("recording");
-      } catch {
+      } catch (err) {
         releaseMic();
         setState("idle");
-        toast.error("Microphone access is needed to record");
+        const message = micErrorMessage(err);
+        if (message) toast.error(message);
       }
     } finally {
       busyRef.current = false;

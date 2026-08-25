@@ -18,7 +18,7 @@ import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
 import { transcribeAudio } from "@/lib/whisper.functions";
 
-import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
+import { startPcmRecorder, blobToBase64, releaseMic, micErrorMessage, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
@@ -1389,11 +1389,8 @@ function AppPage() {
         recordingRef.current = false;
         recorderRef.current = null;
         releaseMic();
-        toast.error(
-          err?.name === "NotAllowedError"
-            ? "Microphone access denied"
-            : "Couldn't start microphone",
-        );
+        const message = micErrorMessage(err);
+        if (message) toast.error(message);
       } finally {
         micStartingRef.current = false;
       }

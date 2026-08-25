@@ -47,6 +47,10 @@ export async function streamGoogleSpeech(
         responseHeaders.set(name, value);
       }
     });
+    // Pass Retry-After through so the client's bounded 429 retry waits the
+    // right amount of time.
+    const retryAfter = upstream.headers.get("retry-after");
+    if (retryAfter) responseHeaders.set("Retry-After", retryAfter);
     responseHeaders.set("Access-Control-Expose-Headers", RUN_ID_HEADER);
 
     if (!upstream.ok) {
