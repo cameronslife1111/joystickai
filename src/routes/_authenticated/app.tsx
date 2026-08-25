@@ -235,6 +235,23 @@ function AppPage() {
   );
 
   const callAi = useServerFn(aiContinue);
+  const askOrby = useServerFn(askAi);
+
+  /** 🤖 — send the composer text to the model and append the answer below it. */
+  const askAiFromComposer = useCallback(async () => {
+    const prompt = composeText.trim();
+    if (!prompt || askingAi) return;
+    setAskingAi(true);
+    try {
+      const { text } = await askOrby({ data: { prompt } });
+      setComposeText((prev) => `${prev.trimEnd()}\n\n${text}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't reach Orby");
+    } finally {
+      setAskingAi(false);
+    }
+  }, [composeText, askingAi, askOrby]);
+
   const transcribe = useServerFn(transcribeAudio);
   const sendChat = useServerFn(sendChatMessage);
   const nameChatThread = useServerFn(generateThreadTitle);
