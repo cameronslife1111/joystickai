@@ -778,8 +778,7 @@ function AppPage() {
   // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
   // Any change to activeDocId / currentIdx / sentence text tears this effect
   // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
-  // Does NOT touch Orb mood — only the existing speechSynthesis lip-sync
-  // poll in useOrbMood will animate the mouth.
+  // Does NOT touch Orb mood — the shared speech-state poll animates the mouth.
   const repeatText = sentences?.[currentIdx]?.content;
   useEffect(() => {
     if (!repeatText) return;
