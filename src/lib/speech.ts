@@ -10,7 +10,7 @@ type SpeakOpts = {
   onError?: () => void;
 };
 
-const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}þ‍]/gu;
+const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D]/gu;
 
 /** Anything that a synthesizer can actually pronounce. */
 const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
