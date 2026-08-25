@@ -51,7 +51,7 @@ export function useVoiceDictation(onText: (text: string) => void) {
         }
         try {
           const audioBase64 = await blobToBase64(blob);
-          const res = await transcribe({ data: { audioBase64, mimeType: "audio/wav" } });
+          const res = await transcribe({ data: { audioBase64, mimeType: blob.type || "audio/wav" } });
           const text = (res?.text ?? "").trim();
           if (!text) toast.error("Nothing was heard — try again");
           else onText(text);

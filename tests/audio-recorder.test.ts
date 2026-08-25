@@ -58,6 +58,13 @@ class FakeContext {
   }
 }
 
+class HangingContext extends FakeContext {
+  state = "suspended";
+  resume() {
+    return new Promise<void>(() => {});
+  }
+}
+
 function deferred<T>() {
   let resolve: (value: T) => void = () => {};
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -68,9 +75,23 @@ function useFakeMic(getUserMedia: () => Promise<unknown>) {
   Object.assign(globalThis, {
     window: Object.assign(globalThis, { AudioContext: FakeContext }),
   });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      visibilityState: "visible",
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  });
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: { mediaDevices: { getUserMedia } },
+  });
+}
+
+function useFakeContext(Context: typeof FakeContext) {
+  Object.assign(globalThis, {
+    window: Object.assign(globalThis.window ?? globalThis, { AudioContext: Context }),
   });
 }
 
@@ -122,6 +143,34 @@ describe("audio recorder lifecycle", () => {
     recorder.cancel();
   });
 
+  test("retries bounded transient iOS microphone startup failures", async () => {
+    const stream = new FakeStream();
+    let calls = 0;
+    useFakeMic(() => {
+      calls += 1;
+      if (calls < 3) {
+        return Promise.reject(new DOMException("The operation was interrupted", "AbortError"));
+      }
+      return Promise.resolve(stream);
+    });
+
+    const recorder = await startPcmRecorder();
+    expect(calls).toBe(3);
+    recorder.cancel();
+  });
+
+  test("rebuilds a recorder context when resume hangs", async () => {
+    const stream = new FakeStream();
+    useFakeMic(() => Promise.resolve(stream));
+    useFakeContext(HangingContext);
+
+    await expect(startPcmRecorder()).rejects.toMatchObject({ name: "InvalidStateError" });
+
+    useFakeContext(FakeContext);
+    const recorder = await startPcmRecorder();
+    recorder.cancel();
+  });
+
   test("surfaces the real error when both microphone attempts fail", async () => {
     useFakeMic(() => Promise.reject(new DOMException("denied", "NotAllowedError")));
     await expect(startPcmRecorder()).rejects.toMatchObject({ name: "NotAllowedError" });
@@ -152,6 +201,8 @@ describe("audio recorder lifecycle", () => {
     expect(
       micErrorMessage(new DOMException("Microphone request was superseded", "AbortError")),
     ).toBeNull();
+    expect(micErrorMessage(new DOMException("interrupted", "AbortError"))).toContain("interrupted");
+    expect(micErrorMessage(new DOMException("x", "NotSupportedError"))).toContain("not supported");
     expect(micErrorMessage(new Error("nope"))).toContain("try again");
   });
 });
