@@ -11,6 +11,33 @@ const requestSchema = z.object({
   voice: z.enum(voiceIds),
 });
 
+// Verified-token cache: rapid consecutive sentences (swipe-throughs) skip the
+// auth round-trip for ~60s. Verification still happens the first time a token
+// is seen by this instance; the cache just avoids repeating it every second.
+const VERIFY_TTL_MS = 60_000;
+const VERIFY_CACHE_LIMIT = 200;
+const verifiedTokens = new Map<string, number>();
+
+function recentlyVerified(token: string): boolean {
+  const until = verifiedTokens.get(token);
+  if (until === undefined) return false;
+  if (until <= Date.now()) {
+    verifiedTokens.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function markVerified(token: string) {
+  verifiedTokens.delete(token);
+  verifiedTokens.set(token, Date.now() + VERIFY_TTL_MS);
+  while (verifiedTokens.size > VERIFY_CACHE_LIMIT) {
+    const oldest = verifiedTokens.keys().next().value;
+    if (oldest === undefined) break;
+    verifiedTokens.delete(oldest);
+  }
+}
+
 export const Route = createFileRoute("/api/public/tts")({
   server: {
     handlers: {
@@ -27,13 +54,16 @@ export const Route = createFileRoute("/api/public/tts")({
         }
 
         const token = authorization.slice("Bearer ".length);
-        const authClient = createClient<Database>(backendUrl, publishableKey, {
-          global: { headers: { Authorization: authorization } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { data, error } = await authClient.auth.getClaims(token);
-        if (error || !data?.claims?.sub) {
-          return Response.json({ message: "Your session expired. Please sign in again." }, { status: 401 });
+        if (!recentlyVerified(token)) {
+          const authClient = createClient<Database>(backendUrl, publishableKey, {
+            global: { headers: { Authorization: authorization } },
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data, error } = await authClient.auth.getClaims(token);
+          if (error || !data?.claims?.sub) {
+            return Response.json({ message: "Your session expired. Please sign in again." }, { status: 401 });
+          }
+          markVerified(token);
         }
 
         let body: unknown;
