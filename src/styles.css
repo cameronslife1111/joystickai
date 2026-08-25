@@ -465,8 +465,8 @@
 /* Small flanking glowing-orb buttons */
 @utility glow-orb {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: var(--orb-size, 44px);
+  height: var(--orb-size, 44px);
   border-radius: 9999px;
   display: flex;
   align-items: center;
@@ -477,15 +477,15 @@
     radial-gradient(circle at 50% 100%, color-mix(in oklab, var(--glow-orb-color, white) 50%, transparent), transparent 65%),
     color-mix(in oklab, var(--glow-orb-color, white) 16%, transparent);
   box-shadow:
-    0 0 24px -2px color-mix(in oklab, var(--glow-orb-color, white) 75%, transparent),
-    inset 0 0 14px color-mix(in oklab, var(--glow-orb-color, white) 40%, transparent);
+    0 0 32px -2px color-mix(in oklab, var(--glow-orb-color, white) 75%, transparent),
+    inset 0 0 18px color-mix(in oklab, var(--glow-orb-color, white) 40%, transparent);
   backdrop-filter: blur(3px);
   transition: transform 150ms ease, box-shadow 200ms ease;
   animation: glow-orb-pulse 2.5s ease-in-out infinite;
   pointer-events: auto;
   &:active {
     transform: scale(0.92);
-    box-shadow: 0 0 32px 0px color-mix(in oklab, var(--glow-orb-color, white) 90%, transparent);
+    box-shadow: 0 0 44px 0px color-mix(in oklab, var(--glow-orb-color, white) 90%, transparent);
   }
 }
 @utility glow-orb-green {
@@ -528,10 +528,11 @@
 
 /* ============ Orb cluster (6 orbs + transparent center pad) ============ */
 .orb-cluster {
+  --orb-size: clamp(64px, 18vw, 96px);
   display: grid;
-  grid-template-columns: repeat(2, 44px) 64px repeat(2, 44px);
-  grid-template-rows: 44px 64px 44px;
-  gap: clamp(6px, 2.2vw, 14px);
+  grid-template-columns: var(--orb-size) var(--orb-size) 64px var(--orb-size) var(--orb-size);
+  grid-template-rows: var(--orb-size) var(--orb-size) var(--orb-size);
+  gap: clamp(10px, 2.5vw, 18px);
   align-items: center;
   justify-items: center;
 }
