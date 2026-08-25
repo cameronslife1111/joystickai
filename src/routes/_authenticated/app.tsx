@@ -8,7 +8,8 @@ import { OrbCluster } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechVoice } from "@/lib/speech";
+import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -20,6 +21,7 @@ import { transcribeAudio } from "@/lib/whisper.functions";
 import { startPcmRecorder, blobToBase64, releaseMic, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
+import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SentenceText } from "@/components/SentenceText";
@@ -112,6 +114,7 @@ function AppPage() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [soundSettingsOpen, setSoundSettingsOpen] = useState(false);
   
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
@@ -445,22 +448,24 @@ function AppPage() {
 
 
 
-  // Load user preferences (favorites array + muted flag + theme)
+  // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
+        .select("favorites, muted, tts_voice, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
+      const savedVoice = data?.tts_voice;
+      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
+  const ttsVoice = prefs?.tts_voice ?? DEFAULT_TTS_VOICE;
   const lockFavorites = prefs?.lock_favorites ?? false;
   const pinnedDocId = prefs?.pinned_document_id ?? null;
   const lockedDocId = prefs?.locked_document_id ?? null;
@@ -471,6 +476,19 @@ function AppPage() {
     if (prefs?.theme && prefs.theme !== theme) setTheme(prefs.theme);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs?.theme]);
+
+  useEffect(() => {
+    setSpeechVoice(ttsVoice);
+  }, [ttsVoice]);
+
+  useEffect(() => {
+    const showSpeechError = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail;
+      if (message) toast.error(message);
+    };
+    window.addEventListener("orby-speech-error", showSpeechError);
+    return () => window.removeEventListener("orby-speech-error", showSpeechError);
+  }, []);
 
   const saveTheme = useCallback(async (next: "dark" | "light") => {
     setTheme(next);
@@ -501,13 +519,23 @@ function AppPage() {
     qc.setQueryData(["user_preferences"], (prev: any) => ({
       ...(prev ?? {}), muted: next,
     }));
-    if (next && typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    if (next) cancelSpeech();
     await supabase.from("user_preferences").upsert(
       { user_id: u.user.id, muted: next, favorites: favorites as any },
       { onConflict: "user_id" },
     );
+  }, [qc, favorites]);
+
+  const saveTtsVoice = useCallback(async (next: TtsVoice) => {
+    setSpeechVoice(next);
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_voice: next }));
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { error } = await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, tts_voice: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+    if (error) toast.error(error.message);
   }, [qc, favorites]);
 
   const saveLastFavoriteSlot = useCallback(async (slot: number) => {
@@ -696,13 +724,11 @@ function AppPage() {
   };
 
 
-  // TTS — token-gated, race-safe against rapid handler chains. Keep the native
-  // speech call synchronous with the action that selected the sentence.
+  // TTS — token-gated and race-safe against rapid navigation.
   const speak = useCallback((text: string, token?: number) => {
-    if (mutedRef.current) return; // sound off — never invoke speechSynthesis
+    if (mutedRef.current) return;
     if (inCallRef.current) return; // on a call — only the conversation is audible
     if (recordingRef.current) return; // voice-edit mode — user is speaking, stay silent
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     if (!text) return;
     if (token != null && token !== speechTokenRef.current) return;
     const clean = stripEmoji(text);
@@ -752,8 +778,7 @@ function AppPage() {
   // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
   // Any change to activeDocId / currentIdx / sentence text tears this effect
   // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
-  // Does NOT touch Orb mood — only the existing speechSynthesis lip-sync
-  // poll in useOrbMood will animate the mouth.
+  // Does NOT touch Orb mood — the shared speech-state poll animates the mouth.
   const repeatText = sentences?.[currentIdx]?.content;
   useEffect(() => {
     if (!repeatText) return;
@@ -868,9 +893,7 @@ function AppPage() {
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
   const openNewIdea = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     setComposeText("");
     setComposing(true);
   }, []);
@@ -1279,9 +1302,7 @@ function AppPage() {
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
@@ -1351,9 +1372,7 @@ function AppPage() {
     }
     if (micStartingRef.current) return;
     // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     micStartingRef.current = true;
     void (async () => {
       try {
@@ -1838,9 +1857,7 @@ function AppPage() {
   // sentence using the same "Send to which list?" flow as New idea.
   const openSendSentence = useCallback(() => {
     if (!currentSentence) return;
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     setMoveOpen(false);
     setComposing(false);
     setComposeText(currentSentence.content);
@@ -2240,29 +2257,8 @@ function AppPage() {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
       fn: () => {
-        // CRITICAL iOS: close popup + speak synchronously inside this tap
-        // gesture. Any async hop here breaks the user-gesture context and
-        // iOS Safari silently drops the utterance.
-        const next = !muted;
         setMenuOpen(false);
-        if (next) {
-          // Muting: stop any in-flight speech immediately.
-          if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            try { cancelSpeech(); } catch {}
-          }
-        } else {
-          // Unmuting: speak the currently displayed sentence right now,
-          // synchronously, from this exact tap. This is the iPhone-safe
-          // trigger for the Web Speech API.
-          const text = currentSentence?.content;
-          if (text && typeof window !== "undefined" && "speechSynthesis" in window) {
-            try {
-              speakText(text);
-            } catch {}
-          }
-        }
-        // Persist preference (async, fire-and-forget — happens AFTER speak).
-        void saveMuted(next);
+        setSoundSettingsOpen(true);
       },
     },
     { e: "💬", t: "Chat", fn: () => {
@@ -2405,7 +2401,7 @@ function AppPage() {
       })();
     } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, saveMuted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
+  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
 
 
 
@@ -2835,6 +2831,19 @@ function AppPage() {
 
 
       {/* Grid menu overlay */}
+      <SoundSettingsDialog
+        open={soundSettingsOpen}
+        onOpenChange={setSoundSettingsOpen}
+        enabled={!muted}
+        voice={ttsVoice}
+        onEnabledChange={(enabled) => void saveMuted(!enabled)}
+        onVoiceChange={(voice) => void saveTtsVoice(voice)}
+        onPreview={(voice) => {
+          setSpeechVoice(voice);
+          speakText("This is Orby speaking with your selected voice.");
+        }}
+      />
+
       {menuOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
@@ -3181,8 +3190,7 @@ function AppPage() {
         );
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
-          // iOS-safe: speak synchronously inside the tap gesture if unmuted.
-          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (!muted) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;
@@ -3261,7 +3269,7 @@ function AppPage() {
           .filter((d): d is Doc => !!d);
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
-          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (!muted) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;

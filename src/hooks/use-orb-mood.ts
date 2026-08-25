@@ -144,11 +144,11 @@ export function useOrbMood(options?: { interactive?: boolean }) {
     return () => clearTimeout(timeout);
   }, []);
 
-  // Talking / lip-sync — polls window.speechSynthesis.speaking
+  // Talking / lip-sync — follows the shared hosted speech controller.
   const [talking, setTalking] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(0);
   useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (typeof window === "undefined") return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const start = performance.now();
     let lastOpen = 0;

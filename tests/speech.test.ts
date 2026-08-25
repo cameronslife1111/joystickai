@@ -1,130 +1,19 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { cancelSpeech, cleanForSpeech, isSpeaking, speakText } from "../src/lib/speech";
+import { describe, expect, test } from "bun:test";
+import { cleanForSpeech, speakText } from "../src/lib/speech";
+import { DEFAULT_TTS_VOICE, isTtsVoice, TTS_VOICES } from "../src/lib/tts-voices";
 
-class FakeUtterance {
-  text: string;
-  rate = 1;
-  pitch = 1;
-  voice?: unknown;
-  lang?: string;
-  onstart: (() => void) | null = null;
-  onend: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  onboundary: (() => void) | null = null;
-
-  constructor(text: string) {
-    this.text = text;
-  }
-}
-
-class FakeSynth {
-  cancelCalls = 0;
-  utterances: FakeUtterance[] = [];
-
-  speak(utterance: FakeUtterance) {
-    this.utterances.push(utterance);
-  }
-
-  cancel() {
-    this.cancelCalls += 1;
-  }
-}
-
-function installBrowser(speechSynthesis: FakeSynth) {
-  Object.assign(globalThis, {
-    window: Object.assign(globalThis, { speechSynthesis }),
-    SpeechSynthesisUtterance: FakeUtterance,
-  });
-}
-
-afterEach(() => cancelSpeech());
-
-describe("native browser sentence speech", () => {
-  test("cancels the browser queue and speaks one native utterance immediately", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-
-    expect(speakText("Read this sentence.")).toBe(true);
-    expect(engine.cancelCalls).toBe(1);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Read this sentence."]);
+describe("hosted sentence speech", () => {
+  test("exposes four supported Google voices with a valid default", () => {
+    expect(TTS_VOICES.map((voice) => voice.id)).toEqual(["Charon", "Fenrir", "Kore", "Aoede"]);
+    expect(isTtsVoice(DEFAULT_TTS_VOICE)).toBe(true);
+    expect(isTtsVoice("not-a-voice")).toBe(false);
   });
 
-  test("uses the browser default voice without selecting a voice or language", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    speakText("Use the browser voice.");
-
-    expect(engine.utterances[0]?.voice).toBeUndefined();
-    expect(engine.utterances[0]?.lang).toBeUndefined();
+  test("removes emoji and normalizes whitespace", () => {
+    expect(cleanForSpeech("🐝  hello   world  🟢")).toBe("hello world");
   });
 
-  test("keeps long text in one utterance", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    const long = `${"word ".repeat(300)}end.`.trim();
-
-    speakText(long);
-
-    expect(engine.utterances).toHaveLength(1);
-    expect(engine.utterances[0]?.text).toBe(long);
-  });
-
-  test("immediately replaces the previous utterance", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    speakText("Older sentence.");
-    const stale = engine.utterances[0];
-
-    speakText("Newest sentence.");
-
-    expect(engine.cancelCalls).toBe(2);
-    expect(engine.utterances.map((item) => item.text)).toEqual(["Older sentence.", "Newest sentence."]);
-    expect(stale?.onstart).toBeNull();
-    expect(stale?.onend).toBeNull();
-  });
-
-  test("tracks native start and end callbacks", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    let ended = false;
-    speakText("Track this sentence.", { onEnd: () => { ended = true; } });
-
-    expect(isSpeaking()).toBe(false);
-    engine.utterances[0]?.onstart?.();
-    expect(isSpeaking()).toBe(true);
-    engine.utterances[0]?.onend?.();
-    expect(isSpeaking()).toBe(false);
-    expect(ended).toBe(true);
-  });
-
-  test("reports a native utterance error without retrying", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    let failed = false;
-    speakText("Do not retry this.", { onError: () => { failed = true; } });
-
-    engine.utterances[0]?.onerror?.();
-
-    expect(failed).toBe(true);
-    expect(engine.utterances).toHaveLength(1);
-    expect(isSpeaking()).toBe(false);
-  });
-
-  test("applies rate and pitch without changing the output path", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-    speakText("Configured speech.", { rate: 1.25, pitch: 0.9 });
-
-    expect(engine.utterances[0]?.rate).toBe(1.25);
-    expect(engine.utterances[0]?.pitch).toBe(0.9);
-  });
-
-  test("removes emoji and rejects emoji-only content", () => {
-    const engine = new FakeSynth();
-    installBrowser(engine);
-
-    expect(cleanForSpeech("🐝  hello  🟢")).toBe("hello");
+  test("rejects emoji-only content before starting audio", () => {
     expect(speakText("🐝🟢")).toBe(false);
-    expect(engine.utterances).toHaveLength(0);
   });
 });

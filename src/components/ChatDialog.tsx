@@ -330,7 +330,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     try {
       window.localStorage.setItem("orby_chat_autospeak", next ? "1" : "0");
     } catch {}
-    if (!next && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (!next) {
       cancelSpeech();
       setSpeakingId(null);
     }
@@ -621,9 +621,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docsKey, voice.live]);
 
-  // Browser text-to-speech would fight the live voice — silence it while live.
+  // Read-aloud would fight the live voice — silence it while live.
   useEffect(() => {
-    if (voice.live && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (voice.live) {
       cancelSpeech();
       setSpeakingId(null);
     }
@@ -648,7 +648,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [messages, isActiveBusy, open]);
 
   useEffect(() => {
-    if (!open && typeof window !== "undefined" && "speechSynthesis" in window) {
+    if (!open) {
       cancelSpeech();
       setSpeakingId(null);
     }
