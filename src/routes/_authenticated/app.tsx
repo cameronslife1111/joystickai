@@ -2680,6 +2680,32 @@ function AppPage() {
         </div>
       )}
 
+      {/* Floating robot button while the New idea composer is open — asks Orby
+          about the current text and appends the answer below it. */}
+      {composing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            void askAiFromComposer();
+          }}
+          disabled={!composeText.trim() || askingAi}
+          aria-label="Ask Orby about this text"
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+          style={{ bottom: "76svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          {askingAi ? (
+            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground align-middle" />
+          ) : (
+            "🤖"
+          )}
+        </button>
+      )}
+
       {/* Floating trophy button while the New idea composer is open — prepends a
           trophy emoji to the beginning of the composer text. */}
       {composing && (
