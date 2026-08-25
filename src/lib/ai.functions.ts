@@ -63,6 +63,44 @@ export const aiContinue = createServerFn({ method: "POST" })
     return { text };
   });
 
+const askAiSchema = z.object({
+  prompt: z.string().min(1).max(100000),
+});
+
+/**
+ * Plain "ask the model a question" call — no document reads or writes.
+ * Used by the 🤖 button in the New idea composer.
+ */
+export const askAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => askAiSchema.parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+    const provider = createOpenAiProvider(apiKey);
+    const model = provider("gpt-5.5");
+
+    const system =
+      "You are Orby, a focused thinking companion. Answer the user's text directly and usefully. " +
+      "Plain text only — no markdown, no lists, no headings, no bold. " +
+      "Use clear, separable sentences each ending in . ! or ?. " +
+      "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
+      "If you reference any URL, include the full http:// or https:// URL inline in the sentence.";
+
+    const { text } = await aiSdkGenerateText({
+      model,
+      system,
+      prompt: data.prompt,
+    });
+
+    if (!text || !text.trim()) {
+      throw new Error("AI returned an empty response");
+    }
+
+    return { text: text.trim() };
+  });
+
+
 const generateTextSchema = z.object({
   prompt: z.string().min(1).max(100000),
   contextDocumentIds: z.array(z.string().uuid()).max(20).default([]),
