@@ -1,11 +1,46 @@
 import { describe, expect, test } from "bun:test";
 import {
   cleanForSpeech,
+  recoverPlaybackContext,
   resetSpeechCaches,
   SPEECH_RATE,
   speakText,
 } from "../src/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, TTS_VOICES } from "../src/lib/tts-voices";
+
+class FakePlaybackContext {
+  state = "running";
+  currentTime = 0;
+  sampleRate = 24000;
+  destination = {};
+  createBuffer() {
+    return { copyToChannel() {}, duration: 0 };
+  }
+  createBufferSource() {
+    return {
+      buffer: null,
+      playbackRate: { value: 1 },
+      connect() {},
+      start() {},
+      stop() {},
+      onended: null,
+    };
+  }
+  resume() {
+    this.state = "running";
+    return Promise.resolve();
+  }
+  close() {
+    this.state = "closed";
+    return Promise.resolve();
+  }
+}
+
+function useFakePlayback() {
+  Object.assign(globalThis, {
+    window: Object.assign(globalThis, { AudioContext: FakePlaybackContext }),
+  });
+}
 
 describe("hosted sentence speech", () => {
   test("exposes four supported Google voices with a valid default", () => {
@@ -38,5 +73,29 @@ describe("hosted sentence speech", () => {
 
   test("cache reset hook clears state without throwing", () => {
     expect(() => resetSpeechCaches()).not.toThrow();
+  });
+
+  test("recreates a playback context stuck in an interrupted state", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    expect(first).not.toBeNull();
+    // iOS leaves the context "interrupted" after another app uses the mic.
+    first!.state = "interrupted";
+    const second = await recoverPlaybackContext();
+    expect(second).not.toBe(first);
+    expect(second!.state).toBe("running");
+  });
+
+  test("recreates a context that refuses to resume", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    expect(first).not.toBeNull();
+    first!.state = "suspended";
+    first!.resume = () => Promise.resolve(); // resume() can no longer revive it
+    const second = await recoverPlaybackContext();
+    expect(second).not.toBe(first);
+    expect(second!.state).toBe("running");
   });
 });
