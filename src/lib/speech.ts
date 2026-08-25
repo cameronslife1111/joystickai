@@ -10,10 +10,12 @@ type SpeakOpts = {
   onError?: () => void;
 };
 
-const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D]/gu;
+const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}️‍]/gu;
 
 /** Anything that a synthesizer can actually pronounce. */
 const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
+
+const PLAYBACK_SAMPLE_RATE = 24_000;
 
 /**
  * Slightly-brisker-than-normal playback pace applied to every voice.
@@ -41,6 +43,13 @@ export function setSpeechVoice(voice: TtsVoice) {
 // round-trip per speak call; re-fetch only when it is about to expire.
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
+function cacheToken(token: string, expiresAtSeconds?: number) {
+  tokenCache = {
+    token,
+    expiresAt: expiresAtSeconds ? expiresAtSeconds * 1000 : Date.now() + 5 * 60_000,
+  };
+}
+
 async function getAccessToken(): Promise<string | null> {
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt - 30_000 > now) return tokenCache.token;
@@ -50,11 +59,25 @@ async function getAccessToken(): Promise<string | null> {
     tokenCache = null;
     return null;
   }
-  tokenCache = {
-    token: session.access_token,
-    expiresAt: session.expires_at ? session.expires_at * 1000 : now + 5 * 60_000,
-  };
-  return tokenCache.token;
+  cacheToken(session.access_token, session.expires_at);
+  return tokenCache?.token ?? null;
+}
+
+/**
+ * Force a fresh session token after a 401. A stale cached token must never
+ * wedge speech until the app is reloaded — refresh once and keep going.
+ */
+async function refreshAccessToken(): Promise<string | null> {
+  tokenCache = null;
+  try {
+    const { data } = await supabase.auth.refreshSession();
+    const session = data.session;
+    if (!session?.access_token) return null;
+    cacheToken(session.access_token, session.expires_at);
+    return session.access_token;
+  } catch {
+    return null;
+  }
 }
 
 // Decoded PCM for the last few spoken sentences, so Repeat / auto-repeat start
@@ -77,24 +100,96 @@ function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
   }
 }
 
-/** Test hook: drop cached tokens and replay clips. */
+/** Test hook: drop cached tokens, replay clips, and the playback context. */
 export function resetSpeechCaches() {
   tokenCache = null;
   replayCache.clear();
+  if (audioContext && audioContext.state !== "closed") {
+    try {
+      void audioContext.close().catch(() => {});
+    } catch {}
+  }
+  audioContext = null;
 }
 
-function ensureAudioContext(): AudioContext | null {
+function createPlaybackContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  const AudioContextConstructor = window.AudioContext
-    ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextConstructor) return null;
-  if (!audioContext || audioContext.state === "closed") {
-    audioContext = new AudioContextConstructor({ sampleRate: 24_000 });
+  try {
+    audioContext = new AudioContextConstructor({ sampleRate: PLAYBACK_SAMPLE_RATE });
+  } catch {
+    try {
+      audioContext = new AudioContextConstructor();
+    } catch {
+      audioContext = null;
+    }
   }
-  // iOS can leave the context suspended/interrupted after the microphone was
-  // open; resume so playback is not silently swallowed.
-  if (audioContext.state !== "running") void audioContext.resume().catch(() => {});
   return audioContext;
+}
+
+function isUnrecoverableState(state: string): boolean {
+  // iOS leaves contexts in "interrupted" after another app takes the mic (or a
+  // call comes in, or the phone sleeps); resume() almost never brings those
+  // back. Treat both interrupted and closed as dead.
+  return state === "closed" || state === "interrupted";
+}
+
+/**
+ * Return a playback context that can actually run: resume a suspended one, and
+ * recreate it when resume() cannot bring it back. A permanently broken context
+ * is the reason speech used to die until the app was restarted.
+ */
+export async function recoverPlaybackContext(): Promise<AudioContext | null> {
+  let context = audioContext;
+  if (!context || isUnrecoverableState(context.state)) {
+    context = createPlaybackContext();
+  }
+  if (!context) return null;
+  if (context.state !== "running") {
+    try {
+      await context.resume();
+    } catch {}
+  }
+  if (context.state !== "running") {
+    // Suspended and resume() did not bring it back — recreate from scratch.
+    try {
+      void context.close().catch(() => {});
+    } catch {}
+    context = createPlaybackContext();
+    if (context && context.state !== "running") {
+      try {
+        await context.resume();
+      } catch {}
+    }
+  }
+  return context;
+}
+
+let recoveryListenersAttached = false;
+
+/** After returning from the background, proactively revive the playback
+ *  context so the first swipe just works — even if another app held the mic. */
+function attachForegroundRecovery() {
+  if (recoveryListenersAttached) return;
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+  recoveryListenersAttached = true;
+  const recover = () => {
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState &&
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
+    void recoverPlaybackContext();
+  };
+  window.addEventListener("pageshow", recover);
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", recover);
+  }
 }
 
 /**
@@ -108,8 +203,10 @@ function reclaimAudioRoute() {
 }
 
 function emitSpeechError(message: string) {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("orby-speech-error", { detail: message }));
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    try {
+      window.dispatchEvent(new CustomEvent("orby-speech-error", { detail: message }));
+    } catch {}
   }
 }
 
@@ -119,6 +216,8 @@ function decodeBase64(value: string): Uint8Array {
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return bytes;
 }
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function cancelSpeech() {
   requestSequence += 1;
@@ -143,7 +242,7 @@ function scheduleSamples(
   samples: Float32Array<ArrayBuffer>,
   playhead: number,
 ): number {
-  const audioBuffer = context.createBuffer(1, samples.length, 24_000);
+  const audioBuffer = context.createBuffer(1, samples.length, PLAYBACK_SAMPLE_RATE);
   audioBuffer.copyToChannel(samples, 0);
   const source = context.createBufferSource();
   source.buffer = audioBuffer;
@@ -166,41 +265,80 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   cancelSpeech();
   reclaimAudioRoute();
-  const context = ensureAudioContext();
-  if (!context) return false;
+  attachForegroundRecovery();
   const sequence = requestSequence;
   const key = replayKey(clean, selectedVoice);
-
-  // Instant replay path: audio for this exact sentence + voice is already here.
-  const cached = replayCache.get(key);
-  if (cached) {
-    const endTime = scheduleSamples(context, cached, 0);
-    const remainingMs = Math.max(0, (endTime - context.currentTime) * 1_000);
-    finishTimer = setTimeout(() => {
-      if (sequence !== requestSequence) return;
-      audibleSpeaking = false;
-      activeRequest = null;
-      opts.onEnd?.();
-    }, remainingMs + 30);
-    return true;
-  }
+  const cached = replayCache.get(key) ?? null;
 
   const controller = new AbortController();
   activeRequest = controller;
 
+  // Watchdog: if nothing has started playing a few seconds after the gesture,
+  // reset and say so instead of hanging silently until the app is restarted.
+  const startWatchdog = setTimeout(() => {
+    if (sequence !== requestSequence || audibleSpeaking) return;
+    if (activeRequest === controller) activeRequest = null;
+    emitSpeechError("Speech couldn't start — please try again");
+    opts.onError?.();
+  }, 4_000);
+
   void (async () => {
     try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Please sign in to use speech.");
+      const context = await recoverPlaybackContext();
+      if (sequence !== requestSequence) return;
+      if (!context) throw new Error("Audio playback is unavailable on this device.");
 
-      const response = await fetch("/api/public/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ text: clean, voice: selectedVoice }),
-        signal: controller.signal,
-      });
+      // Instant replay path: audio for this exact sentence + voice is already here.
+      if (cached) {
+        const endTime = scheduleSamples(context, cached, 0);
+        clearTimeout(startWatchdog);
+        const remainingMs = Math.max(0, (endTime - context.currentTime) * 1_000);
+        finishTimer = setTimeout(() => {
+          if (sequence !== requestSequence) return;
+          audibleSpeaking = false;
+          activeRequest = null;
+          opts.onEnd?.();
+        }, remainingMs + 30);
+        return;
+      }
+
+      let bearer = await getAccessToken();
+      if (!bearer) throw new Error("Please sign in to use speech.");
+      if (sequence !== requestSequence) return;
+
+      const requestSpeech = (tokenValue: string) =>
+        fetch("/api/public/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenValue}` },
+          body: JSON.stringify({ text: clean, voice: selectedVoice }),
+          signal: controller.signal,
+        });
+
+      let response = await requestSpeech(bearer);
+
+      // Token rejected? Refresh the session once and retry — never wedge.
+      if (response.status === 401) {
+        const fresh = await refreshAccessToken();
+        if (fresh && sequence === requestSequence) {
+          bearer = fresh;
+          response = await requestSpeech(bearer);
+        }
+      }
+
+      // One bounded retry for transient gateway failures (429 / 5xx),
+      // honoring Retry-After when the gateway sends one.
+      if (response.status === 429 || response.status >= 500) {
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter, 10) * 1_000
+          : 1_000;
+        await sleep(waitMs);
+        if (sequence !== requestSequence) return;
+        response = await requestSpeech(bearer);
+      }
+
       if (!response.ok || !response.body) {
-        const payload = await response.json().catch(() => null) as { message?: string } | null;
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
         throw new Error(payload?.message ?? `Speech request failed (${response.status})`);
       }
 
@@ -225,6 +363,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         }
         if (!assertedOnFirstChunk) {
           assertedOnFirstChunk = true;
+          clearTimeout(startWatchdog);
           // Re-assert mixable once audio actually starts, catching any late
           // audio-session flip the microphone left behind.
           requestIosMixableSession();
@@ -271,6 +410,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         opts.onEnd?.();
       }, remainingMs + 30);
     } catch (error) {
+      clearTimeout(startWatchdog);
       if (controller.signal.aborted || sequence !== requestSequence) return;
       audibleSpeaking = false;
       activeRequest = null;

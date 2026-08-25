@@ -63,33 +63,80 @@ function downsampleTo16k(input: Float32Array, srcRate: number): Float32Array {
   return out;
 }
 
-// Keep the mic stream + AudioContext warm between recordings. Cold-starting
-// getUserMedia can take a second, which is exactly the window where the user
-// has already seen the red glow and started talking.
-let warm: { stream: MediaStream; ctx: AudioContext; source: MediaStreamAudioSourceNode } | null =
-  null;
-let closing: Promise<void> | null = null;
+// Keep the mic stream warm between recordings. Cold-starting getUserMedia can
+// take a second, which is exactly the window where the user has already seen
+// the red glow and started talking.
+//
+// ONE AudioContext is reused for the recorder's whole lifetime: iOS enforces a
+// low hardware limit on live audio contexts and closes them asynchronously, so
+// creating one per recording eventually makes the system refuse new ones —
+// until then every mic press failed with "access is needed" until reload.
+let recorderContext: AudioContext | null = null;
+let warm: { stream: MediaStream; source: MediaStreamAudioSourceNode } | null = null;
 let micGeneration = 0;
+
+function acquireRecorderContext(): AudioContext {
+  const AudioCtx =
+    (window as any).AudioContext || (window as any).webkitAudioContext;
+  if (!recorderContext || recorderContext.state === "closed") {
+    const created: AudioContext = new AudioCtx();
+    recorderContext = created;
+  }
+  return recorderContext;
+}
+
+function suspendRecorderContext() {
+  const ctx = recorderContext;
+  if (!ctx || ctx.state !== "running") return;
+  try {
+    void ctx.suspend().catch(() => {});
+  } catch {}
+}
 
 function warmIsLive() {
   if (!warm) return false;
   const tracks = warm.stream.getAudioTracks();
-  return (
-    tracks.length > 0 &&
-    tracks.every((t) => t.readyState === "live") &&
-    warm.ctx.state !== "closed"
-  );
+  return tracks.length > 0 && tracks.every((t) => t.readyState === "live");
 }
 
-/**
- * Synchronously stop any held or half-closed microphone so speech playback can
- * take the audio route immediately. Callers only speak when no recording is
- * active (recording flows cancel speech first), so this never kills a live
- * take — it finishes teardown without waiting on WebKit's close timer.
- */
-export function stopMicForPlayback(): void {
+// iOS kills mic tracks when the app is backgrounded or another app takes the
+// mic. Drop the warm stream the moment that happens so the next recording
+// re-acquires a real stream instead of capturing silence.
+function watchStream(stream: MediaStream) {
+  stream.getAudioTracks().forEach((track) => {
+    const invalidate = () => {
+      if (warm?.stream !== stream) return;
+      warm = null;
+      try {
+        track.stop();
+      } catch {}
+    };
+    track.addEventListener?.("ended", invalidate);
+    track.addEventListener?.("mute", invalidate);
+  });
+}
+
+/** Map a getUserMedia failure to an honest, actionable message (null = stay quiet). */
+export function micErrorMessage(error: unknown): string | null {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  const message = (error as { message?: string } | null)?.message ?? "";
+  // Replaced by a newer mic request (e.g. leaving the screen) — not an error.
+  if (message.includes("superseded")) return null;
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone permission is off — enable it for this app in Settings, then try again";
+  }
+  if (name === "NotReadableError") {
+    return "The microphone is busy in another app — close it and try again";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return "No microphone was found on this device";
+  }
+  return "Couldn't start the microphone — please try again";
+}
+
+function teardownWarm(bumpGeneration: boolean) {
+  if (bumpGeneration) micGeneration += 1;
   if (!warm) return;
-  micGeneration += 1;
   const releasing = warm;
   warm = null;
   try {
@@ -100,48 +147,58 @@ export function stopMicForPlayback(): void {
       track.stop();
     } catch {}
   });
-  closing = releasing.ctx.close().catch(() => {}).then(() => {
-    closing = null;
-  });
+  // Suspend (never close) the shared context: stopping the tracks is what
+  // drops the iOS recording indicator; the context itself stays reusable.
+  suspendRecorderContext();
+}
+
+/**
+ * Synchronously stop any held or half-closed microphone so speech playback can
+ * take the audio route immediately. Callers only speak when no recording is
+ * active (recording flows cancel speech first), so this never kills a live
+ * take — it finishes teardown without waiting on WebKit's timers.
+ */
+export function stopMicForPlayback(): void {
+  teardownWarm(true);
 }
 
 /** Fully release the microphone (call when leaving the screen). */
 export function releaseMic(): Promise<void> {
   // Invalidate a getUserMedia request that has not resolved yet.
-  micGeneration += 1;
-  if (warm) {
-    const releasing = warm;
-    warm = null;
-    try {
-      releasing.source.disconnect();
-    } catch {}
-    releasing.stream.getTracks().forEach((t) => t.stop());
-    closing = releasing.ctx.close().catch(() => {}).then(() => {
-      closing = null;
-    });
-  }
-  return closing ?? Promise.resolve();
+  teardownWarm(true);
+  return Promise.resolve();
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {
   if (!warmIsLive()) {
     await releaseMic();
     const requestGeneration = ++micGeneration;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (firstError) {
+      // iOS frequently rejects while the mic is still being torn down (by us,
+      // a phone call, or another app). Wait a beat and retry exactly once —
+      // the warm stream is already null here, so there is nothing to release.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      if (requestGeneration !== micGeneration) {
+        throw new DOMException("Microphone request was superseded", "AbortError");
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
     if (requestGeneration !== micGeneration) {
       stream.getTracks().forEach((track) => track.stop());
       throw new DOMException("Microphone request was superseded", "AbortError");
     }
-    const AudioCtx =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
-    const ctx: AudioContext = new AudioCtx();
-    const source = ctx.createMediaStreamSource(stream);
-    warm = { stream, ctx, source };
+    const source = acquireRecorderContext().createMediaStreamSource(stream);
+    warm = { stream, source };
+    watchStream(stream);
   }
   const active = warm;
   if (!active) throw new DOMException("Microphone is unavailable", "NotReadableError");
-  const { ctx, source } = active;
-  if (ctx.state === "suspended") {
+  const ctx = acquireRecorderContext();
+  const { source } = active;
+  if (ctx.state !== "running") {
     try {
       await ctx.resume();
     } catch {}
