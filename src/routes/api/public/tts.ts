@@ -54,13 +54,16 @@ export const Route = createFileRoute("/api/public/tts")({
         }
 
         const token = authorization.slice("Bearer ".length);
-        const authClient = createClient<Database>(backendUrl, publishableKey, {
-          global: { headers: { Authorization: authorization } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { data, error } = await authClient.auth.getClaims(token);
-        if (error || !data?.claims?.sub) {
-          return Response.json({ message: "Your session expired. Please sign in again." }, { status: 401 });
+        if (!recentlyVerified(token)) {
+          const authClient = createClient<Database>(backendUrl, publishableKey, {
+            global: { headers: { Authorization: authorization } },
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data, error } = await authClient.auth.getClaims(token);
+          if (error || !data?.claims?.sub) {
+            return Response.json({ message: "Your session expired. Please sign in again." }, { status: 401 });
+          }
+          markVerified(token);
         }
 
         let body: unknown;
