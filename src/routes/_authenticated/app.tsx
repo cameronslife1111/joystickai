@@ -894,9 +894,7 @@ function AppPage() {
   }, [activeDoc, sentences, currentIdx, setIndex, speak, claimSpeech]);
 
   const openNewIdea = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     setComposeText("");
     setComposing(true);
   }, []);
@@ -1305,9 +1303,7 @@ function AppPage() {
   const onDoubleTap = useCallback(() => {
     if (editing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
@@ -1377,9 +1373,7 @@ function AppPage() {
     }
     if (micStartingRef.current) return;
     // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     micStartingRef.current = true;
     void (async () => {
       try {
@@ -1864,9 +1858,7 @@ function AppPage() {
   // sentence using the same "Send to which list?" flow as New idea.
   const openSendSentence = useCallback(() => {
     if (!currentSentence) return;
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      cancelSpeech();
-    }
+    cancelSpeech();
     setMoveOpen(false);
     setComposing(false);
     setComposeText(currentSentence.content);
@@ -3199,8 +3191,7 @@ function AppPage() {
         );
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
-          // iOS-safe: speak synchronously inside the tap gesture if unmuted.
-          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (!muted) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;
@@ -3279,7 +3270,7 @@ function AppPage() {
           .filter((d): d is Doc => !!d);
         const pickDoc = (doc: Doc) => {
           if (lockFavorites) { toast.error("List is locked"); return; }
-          if (!muted && typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (!muted) {
             try {
               const cached = qc.getQueryData<Sentence[]>(["sentences", doc.id]);
               const idx = doc.current_sentence_index ?? 0;
