@@ -81,6 +81,30 @@ function warmIsLive() {
   );
 }
 
+/**
+ * Synchronously stop any held or half-closed microphone so speech playback can
+ * take the audio route immediately. Callers only speak when no recording is
+ * active (recording flows cancel speech first), so this never kills a live
+ * take — it finishes teardown without waiting on WebKit's close timer.
+ */
+export function stopMicForPlayback(): void {
+  if (!warm) return;
+  micGeneration += 1;
+  const releasing = warm;
+  warm = null;
+  try {
+    releasing.source.disconnect();
+  } catch {}
+  releasing.stream.getTracks().forEach((track) => {
+    try {
+      track.stop();
+    } catch {}
+  });
+  closing = releasing.ctx.close().catch(() => {}).then(() => {
+    closing = null;
+  });
+}
+
 /** Fully release the microphone (call when leaving the screen). */
 export function releaseMic(): Promise<void> {
   // Invalidate a getUserMedia request that has not resolved yet.
