@@ -161,6 +161,8 @@ function AppPage() {
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
+  const [askingAi, setAskingAi] = useState(false);
+
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
