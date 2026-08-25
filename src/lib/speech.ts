@@ -241,10 +241,13 @@ async function tryResume(context: AudioContext): Promise<boolean> {
     try {
       await Promise.race([context.resume(), sleep(RESUME_ATTEMPT_TIMEOUT_MS)]);
     } catch {}
-    if (context.state === "running") return true;
-    if (isUnrecoverableState(context.state)) return false;
+    // resume() mutates state asynchronously — re-read it un-narrowed.
+    const state: AudioContextState = context.state;
+    if (state === "running") return true;
+    if (isUnrecoverableState(state)) return false;
   }
-  return context.state === "running";
+  const finalState: AudioContextState = context.state;
+  return finalState === "running";
 }
 
 /**
