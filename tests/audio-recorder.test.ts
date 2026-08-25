@@ -162,6 +162,7 @@ describe("audio recorder lifecycle", () => {
   test("rebuilds a recorder context when resume hangs", async () => {
     const stream = new FakeStream();
     useFakeMic(() => Promise.resolve(stream));
+    globalThis.window.dispatchEvent(new Event("focus"));
     useFakeContext(HangingContext);
 
     await expect(startPcmRecorder()).rejects.toMatchObject({ name: "InvalidStateError" });
