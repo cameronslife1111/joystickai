@@ -1,8 +1,10 @@
 import { useEffect, useRef, type CSSProperties } from "react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Decorative version of the app's small smiley orbs for the public landing
+ * Decorative version of the app's small action-icon orbs for the public landing
  * page. Non-interactive: pointer events pass through. Supports a slow idle
  * float and an optional scroll parallax drift.
  */
@@ -19,6 +21,15 @@ const COLOR_CLASS: Record<OrbColor, string> = {
   orange: "glow-orb-orange",
 };
 
+const COLOR_ICON: Record<OrbColor, LucideIcon> = {
+  blue: ArrowUp,
+  purple: ArrowDown,
+  yellow: Menu,
+  green: FileText,
+  red: Trash2,
+  orange: Volume2,
+};
+
 /** Approximate hex per orb color, for dots/glows outside the orb itself. */
 export const ORB_HEX: Record<OrbColor, string> = {
   blue: "#60a5fa",
@@ -28,22 +39,6 @@ export const ORB_HEX: Record<OrbColor, string> = {
   red: "#f87171",
   orange: "#fb923c",
 };
-
-function Smiley() {
-  return (
-    <svg viewBox="0 0 24 24" className="glow-orb-face" aria-hidden focusable="false">
-      <circle cx="8.5" cy="9.5" r="1.7" fill="currentColor" />
-      <circle cx="15.5" cy="9.5" r="1.7" fill="currentColor" />
-      <path
-        d="M7.5 13.8 Q12 18.4 16.5 13.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 interface LandingOrbProps {
   color: OrbColor;
@@ -69,6 +64,7 @@ export function LandingOrb({
   active = false,
 }: LandingOrbProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const Icon = COLOR_ICON[color];
 
   useEffect(() => {
     if (!drift) return;
@@ -107,7 +103,7 @@ export function LandingOrb({
           className={cn("glow-orb landing-orb", COLOR_CLASS[color], active && "landing-orb-active")}
           style={sizeStyle}
         >
-          <Smiley />
+          <Icon className="glow-orb-icon" aria-hidden="true" focusable="false" strokeWidth={2.6} />
         </div>
       </div>
     </div>
