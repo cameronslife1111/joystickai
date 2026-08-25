@@ -32,7 +32,7 @@ export const Route = createFileRoute("/api/public/tts")({
           auth: { persistSession: false, autoRefreshToken: false },
         });
         const { data, error } = await authClient.auth.getClaims(token);
-        if (error || !data.claims?.sub) {
+        if (error || !data?.claims?.sub) {
           return Response.json({ message: "Your session expired. Please sign in again." }, { status: 401 });
         }
 
