@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   cleanForSpeech,
+  handleAppForeground,
   isSpeechEnabled,
+  markPlaybackContextStale,
   recoverPlaybackContext,
   resetSpeechCaches,
   setSpeechEnabled,
@@ -120,6 +122,76 @@ describe("hosted sentence speech", () => {
     expect(first).not.toBeNull();
     first!.state = "suspended";
     first!.resume = () => Promise.resolve(); // resume() can no longer revive it
+    const second = await recoverPlaybackContext();
+    expect(second).not.toBe(first);
+    expect(second!.state).toBe("running");
+  });
+
+  test("replaces a context whose clock is frozen while reporting running", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    expect(first!.state).toBe("running");
+    const realNow = Date.now;
+    let fakeNow = realNow();
+    Date.now = () => fakeNow;
+    try {
+      await recoverPlaybackContext(); // baseline clock sample, same context
+      // Wall time passes but the audio clock stays at 0 — the wedge iOS
+      // leaves after another app grabs the audio route.
+      fakeNow += 2_000;
+      const second = await recoverPlaybackContext();
+      expect(second).not.toBe(first);
+      expect(second!.state).toBe("running");
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test("keeps a healthy running context whose clock advances", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    const realNow = Date.now;
+    let fakeNow = realNow();
+    Date.now = () => fakeNow;
+    try {
+      await recoverPlaybackContext(); // baseline clock sample
+      fakeNow += 2_000;
+      first!.currentTime = 1.8; // audio clock kept ticking — engine is fine
+      const second = await recoverPlaybackContext();
+      expect(second).toBe(first);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test("returning to the foreground retires the context; the next speak builds a fresh one", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    handleAppForeground();
+    const second = await recoverPlaybackContext();
+    expect(second).not.toBe(first);
+    expect(second!.state).toBe("running");
+  });
+
+  test("recreates the engine when resume() hangs after an interruption", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    first!.state = "suspended";
+    first!.resume = () => new Promise<void>(() => {}); // never settles
+    const second = await recoverPlaybackContext();
+    expect(second).not.toBe(first);
+    expect(second!.state).toBe("running");
+  });
+
+  test("discards a context marked stale (watchdog / interruption self-heal path)", async () => {
+    useFakePlayback();
+    resetSpeechCaches();
+    const first = await recoverPlaybackContext();
+    markPlaybackContextStale();
     const second = await recoverPlaybackContext();
     expect(second).not.toBe(first);
     expect(second!.state).toBe("running");

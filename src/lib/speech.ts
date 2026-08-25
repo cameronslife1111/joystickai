@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_TTS_VOICE, type TtsVoice } from "@/lib/tts-voices";
-import { requestIosMixableSession } from "@/lib/audio-session";
+import { assertMixableSessionWithRetries, requestIosMixableSession } from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
@@ -23,6 +23,8 @@ const PLAYBACK_SAMPLE_RATE = 24_000;
  */
 export const SPEECH_RATE = 1.15;
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export function cleanForSpeech(s: string): string {
   return s.replace(EMOJI_RE, "").replace(/\s+/g, " ").trim();
 }
@@ -34,6 +36,14 @@ let activeRequest: AbortController | null = null;
 let activeSources = new Set<AudioBufferSourceNode>();
 let finishTimer: ReturnType<typeof setTimeout> | null = null;
 let requestSequence = 0;
+
+// Recovery state: a playback context is only trusted while its audio clock
+// provably advances. iOS can hand back a context that reports "running" but
+// plays nothing after another app (Voice Memos, a phone call, Siri) seizes
+// the audio route — the only cure is a brand-new context.
+let contextStale = false;
+let lastClockSample: { contextTime: number; wallTime: number } | null = null;
+let detachStateListener: (() => void) | null = null;
 
 // Master switch synced from the user's Sound preference. Default OFF until
 // preferences load: when Sound is off, speakText must never reach the network,
@@ -120,12 +130,55 @@ function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
 export function resetSpeechCaches() {
   tokenCache = null;
   replayCache.clear();
-  if (audioContext && audioContext.state !== "closed") {
+  discardPlaybackContext();
+}
+
+/**
+ * Mark the current playback engine as untrustworthy. The next speak call
+ * discards it and builds a fresh one inside the user's tap gesture, where iOS
+ * allows audio to start. Called by the startup watchdog, the statechange
+ * listener, and the foreground-return path.
+ */
+export function markPlaybackContextStale() {
+  contextStale = true;
+  lastClockSample = null;
+}
+
+function discardPlaybackContext() {
+  contextStale = false;
+  lastClockSample = null;
+  const context = audioContext;
+  audioContext = null;
+  detachStateListener?.();
+  detachStateListener = null;
+  if (context && context.state !== "closed") {
     try {
-      void audioContext.close().catch(() => {});
+      void context.close().catch(() => {});
     } catch {}
   }
-  audioContext = null;
+}
+
+function attachStateListener(context: AudioContext) {
+  detachStateListener?.();
+  detachStateListener = null;
+  if (typeof context.addEventListener !== "function") return;
+  const onStateChange = () => {
+    if (audioContext !== context) return;
+    const visible =
+      typeof document === "undefined" ||
+      !document.visibilityState ||
+      document.visibilityState === "visible";
+    if (context.state !== "running" && visible) {
+      // Interrupted while we were looking at it — never trust this engine again.
+      markPlaybackContextStale();
+    }
+  };
+  context.addEventListener("statechange", onStateChange);
+  detachStateListener = () => {
+    try {
+      context.removeEventListener("statechange", onStateChange);
+    } catch {}
+  };
 }
 
 function createPlaybackContext(): AudioContext | null {
@@ -143,6 +196,7 @@ function createPlaybackContext(): AudioContext | null {
       audioContext = null;
     }
   }
+  if (audioContext) attachStateListener(audioContext);
   return audioContext;
 }
 
@@ -154,45 +208,97 @@ function isUnrecoverableState(state: string): boolean {
 }
 
 /**
- * Return a playback context that can actually run: resume a suspended one, and
- * recreate it when resume() cannot bring it back. A permanently broken context
- * is the reason speech used to die until the app was restarted.
+ * A "running" context is only believable if its clock actually advances. When
+ * another app seizes the audio route, iOS can leave the context reporting
+ * "running" while currentTime stays frozen and nothing comes out of the
+ * speaker. Compare the audio clock against the wall clock since the last
+ * observation; frozen clock → the engine is wedged and must be replaced.
+ */
+function isContextClockAlive(context: AudioContext): boolean {
+  if (context.state !== "running") return true; // the resume path handles it
+  const now = Date.now();
+  const sample = lastClockSample;
+  lastClockSample = { contextTime: context.currentTime, wallTime: now };
+  if (!sample) return true; // first observation — nothing to compare yet
+  const wallDelta = now - sample.wallTime;
+  const contextDelta = context.currentTime - sample.contextTime;
+  // Too little wall time passed to judge → trust it. Otherwise the audio
+  // clock must have advanced at all.
+  return wallDelta < 750 || contextDelta > 0;
+}
+
+const RESUME_ATTEMPT_TIMEOUT_MS = 500;
+const RESUME_MAX_ATTEMPTS = 3;
+
+/**
+ * Bounded resume: right after an interruption iOS can leave resume() pending
+ * forever, which used to hang a sentence silently until the watchdog fired.
+ * Race each attempt against a timeout; give up so the caller can recreate.
+ */
+async function tryResume(context: AudioContext): Promise<boolean> {
+  if (context.state === "running") return true;
+  for (let attempt = 0; attempt < RESUME_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await Promise.race([context.resume(), sleep(RESUME_ATTEMPT_TIMEOUT_MS)]);
+    } catch {}
+    // resume() mutates state asynchronously — re-read it un-narrowed.
+    const state = context.state as AudioContextState;
+    if (state === "running") return true;
+    if (isUnrecoverableState(state)) return false;
+  }
+  return (context.state as AudioContextState) === "running";
+}
+
+/**
+ * Return a playback context that can actually run. Anything suspicious — a
+ * stale mark, an unrecoverable state, a frozen audio clock, or a resume that
+ * will not complete — means discarding the engine and building a fresh one.
+ * Called from speakText this runs inside the user's tap gesture, so iOS lets
+ * the fresh context start immediately.
  */
 export async function recoverPlaybackContext(): Promise<AudioContext | null> {
   let context = audioContext;
-  if (!context || isUnrecoverableState(context.state)) {
+  if (
+    contextStale ||
+    !context ||
+    isUnrecoverableState(context.state) ||
+    !isContextClockAlive(context)
+  ) {
+    discardPlaybackContext();
     context = createPlaybackContext();
   }
   if (!context) return null;
-  if (context.state !== "running") {
-    try {
-      await context.resume();
-    } catch {}
-  }
-  if (context.state !== "running") {
-    // Suspended and resume() did not bring it back — recreate from scratch.
-    try {
-      void context.close().catch(() => {});
-    } catch {}
+  if (!(await tryResume(context))) {
+    discardPlaybackContext();
     context = createPlaybackContext();
-    if (context && context.state !== "running") {
-      try {
-        await context.resume();
-      } catch {}
-    }
+    if (context) await tryResume(context);
+  }
+  if (context && context.state === "running") {
+    lastClockSample = { contextTime: context.currentTime, wallTime: Date.now() };
   }
   return context;
 }
 
 let recoveryListenersAttached = false;
 
-/** After returning from the background, proactively revive the playback
- *  context so the first swipe just works — even if another app held the mic. */
+/**
+ * The app was backgrounded and is visible again. iOS ignores resume() outside
+ * a user gesture, so don't try to heal the old engine here — retire it. The
+ * next orb tap builds a fresh context with a guaranteed clean audio route.
+ * Also win the mixable audio-session category back from whatever app just had
+ * it, retrying while iOS finishes the handoff.
+ */
+export function handleAppForeground() {
+  cancelSpeech();
+  discardPlaybackContext();
+  assertMixableSessionWithRetries();
+}
+
 function attachForegroundRecovery() {
   if (recoveryListenersAttached) return;
   if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   recoveryListenersAttached = true;
-  const recover = () => {
+  const onMaybeForeground = () => {
     if (
       typeof document !== "undefined" &&
       document.visibilityState &&
@@ -200,11 +306,12 @@ function attachForegroundRecovery() {
     ) {
       return;
     }
-    void recoverPlaybackContext();
+    handleAppForeground();
   };
-  window.addEventListener("pageshow", recover);
+  window.addEventListener("pageshow", onMaybeForeground);
+  window.addEventListener("focus", onMaybeForeground);
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
-    document.addEventListener("visibilitychange", recover);
+    document.addEventListener("visibilitychange", onMaybeForeground);
   }
 }
 
@@ -232,8 +339,6 @@ function decodeBase64(value: string): Uint8Array {
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return bytes;
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function cancelSpeech() {
   requestSequence += 1;
@@ -271,6 +376,8 @@ function scheduleSamples(
     : Math.max(playhead, context.currentTime);
   source.start(startAt);
   audibleSpeaking = true;
+  // Fresh proof the engine is alive — the liveness baseline for the next speak.
+  lastClockSample = { contextTime: context.currentTime, wallTime: Date.now() };
   return startAt + audioBuffer.duration / SPEECH_RATE;
 }
 
@@ -294,9 +401,12 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   // Watchdog: if nothing has started playing a few seconds after the gesture,
   // reset and say so instead of hanging silently until the app is restarted.
+  // Marking the engine stale means the very next swipe gets a fresh context
+  // instead of re-failing on the same suspect one.
   const startWatchdog = setTimeout(() => {
     if (sequence !== requestSequence || audibleSpeaking) return;
     if (activeRequest === controller) activeRequest = null;
+    markPlaybackContextStale();
     emitSpeechError("Speech couldn't start — please try again");
     opts.onError?.();
   }, 4_000);
@@ -433,6 +543,9 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (controller.signal.aborted || sequence !== requestSequence) return;
       audibleSpeaking = false;
       activeRequest = null;
+      // A failed sentence often means the engine is suspect — make the next
+      // swipe rebuild it rather than re-fail the same way.
+      markPlaybackContextStale();
       const message = error instanceof Error ? error.message : "Speech could not start.";
       emitSpeechError(message);
       opts.onError?.();
