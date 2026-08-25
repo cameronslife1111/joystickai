@@ -79,7 +79,8 @@ function acquireRecorderContext(): AudioContext {
   const AudioCtx =
     (window as any).AudioContext || (window as any).webkitAudioContext;
   if (!recorderContext || recorderContext.state === "closed") {
-    recorderContext = new AudioCtx();
+    const created: AudioContext = new AudioCtx();
+    recorderContext = created;
   }
   return recorderContext;
 }
