@@ -11,7 +11,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
-import { aiContinue } from "@/lib/ai.functions";
+import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
@@ -161,6 +161,8 @@ function AppPage() {
   const recorderRef = useRef<PcmRecorder | null>(null);
   const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
+  const [askingAi, setAskingAi] = useState(false);
+
   const [sendOpen, setSendOpen] = useState(false);
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
@@ -233,6 +235,23 @@ function AppPage() {
   );
 
   const callAi = useServerFn(aiContinue);
+  const askOrby = useServerFn(askAi);
+
+  /** 🤖 — send the composer text to the model and append the answer below it. */
+  const askAiFromComposer = useCallback(async () => {
+    const prompt = composeText.trim();
+    if (!prompt || askingAi) return;
+    setAskingAi(true);
+    try {
+      const { text } = await askOrby({ data: { prompt } });
+      setComposeText((prev) => `${prev.trimEnd()}\n\n${text}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't reach Orby");
+    } finally {
+      setAskingAi(false);
+    }
+  }, [composeText, askingAi, askOrby]);
+
   const transcribe = useServerFn(transcribeAudio);
   const sendChat = useServerFn(sendChatMessage);
   const nameChatThread = useServerFn(generateThreadTitle);
@@ -2659,6 +2678,32 @@ function AppPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Floating robot button while the New idea composer is open — asks Orby
+          about the current text and appends the answer below it. */}
+      {composing && (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            void askAiFromComposer();
+          }}
+          disabled={!composeText.trim() || askingAi}
+          aria-label="Ask Orby about this text"
+          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+          style={{ bottom: "76svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+        >
+          {askingAi ? (
+            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground align-middle" />
+          ) : (
+            "🤖"
+          )}
+        </button>
       )}
 
       {/* Floating trophy button while the New idea composer is open — prepends a
