@@ -512,8 +512,8 @@
   50% { opacity: 1; transform: scale(1.08); }
 }
 
-/* Smiley face drawn inside each small orb */
-.glow-orb-face {
+/* Action icon drawn inside each small orb */
+.glow-orb-icon {
   width: 58%;
   height: 58%;
   color: var(--foreground);
