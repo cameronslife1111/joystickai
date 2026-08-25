@@ -1331,7 +1331,7 @@ function AppPage() {
       try {
         const audioBase64 = await blobToBase64(audioBlob);
         const { text } = await transcribe({
-          data: { audioBase64, mimeType: "audio/wav" },
+          data: { audioBase64, mimeType: audioBlob.type || "audio/wav" },
         });
         const transcript = (text ?? "").trim();
         if (!transcript) {

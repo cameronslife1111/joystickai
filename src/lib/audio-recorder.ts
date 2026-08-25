@@ -11,6 +11,8 @@ export type PcmRecorder = {
 };
 
 const TARGET_RATE = 16000;
+const MIC_RETRY_DELAYS_MS = [0, 300, 800] as const;
+const CONTEXT_RESUME_TIMEOUT_MS = 500;
 
 function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
@@ -74,15 +76,100 @@ function downsampleTo16k(input: Float32Array, srcRate: number): Float32Array {
 let recorderContext: AudioContext | null = null;
 let warm: { stream: MediaStream; source: MediaStreamAudioSourceNode } | null = null;
 let micGeneration = 0;
+let activeRecorders = 0;
+let recorderContextStale = false;
+let lifecycleInstalled = false;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function makeDomException(message: string, name: string) {
+  if (typeof DOMException !== "undefined") return new DOMException(message, name);
+  const error = new Error(message) as Error & { name: string };
+  error.name = name;
+  return error;
+}
+
+function stopStream(stream: MediaStream) {
+  stream.getTracks().forEach((track) => {
+    try {
+      track.stop();
+    } catch {}
+  });
+}
+
+function closeRecorderContext() {
+  const ctx = recorderContext;
+  recorderContext = null;
+  recorderContextStale = false;
+  if (!ctx || ctx.state === "closed") return;
+  try {
+    void ctx.close().catch(() => {});
+  } catch {}
+}
+
+function maybeCloseStaleContext() {
+  if (!recorderContextStale || activeRecorders > 0) return;
+  closeRecorderContext();
+}
+
+function retireRecorderContext() {
+  recorderContextStale = true;
+  teardownWarm(true);
+  maybeCloseStaleContext();
+}
+
+function installRecorderLifecycle() {
+  if (lifecycleInstalled || typeof window === "undefined") return;
+  lifecycleInstalled = true;
+  const markStaleOnReturn = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    // Returning from another app on iOS can leave the old mic/audio session in
+    // a zombie state. Drop it so the next user press starts cleanly.
+    retireRecorderContext();
+  };
+  window.addEventListener("pageshow", markStaleOnReturn);
+  window.addEventListener("focus", markStaleOnReturn);
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", markStaleOnReturn);
+  }
+}
 
 function acquireRecorderContext(): AudioContext {
+  installRecorderLifecycle();
   const AudioCtx =
     (window as any).AudioContext || (window as any).webkitAudioContext;
-  if (!recorderContext || recorderContext.state === "closed") {
+  if (!AudioCtx) {
+    throw makeDomException("Audio recording is not supported in this browser", "NotSupportedError");
+  }
+  if (!recorderContext || recorderContext.state === "closed" || recorderContextStale) {
+    if (recorderContextStale && activeRecorders === 0) closeRecorderContext();
     const created: AudioContext = new AudioCtx();
     recorderContext = created;
+    recorderContextStale = false;
   }
   return recorderContext;
+}
+
+async function resumeRecorderContext(ctx: AudioContext) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if ((ctx.state as string) === "running") return;
+    try {
+      await Promise.race([
+        ctx.resume(),
+        new Promise((_, reject) => {
+          setTimeout(
+            () => reject(makeDomException("Audio context resume timed out", "AbortError")),
+            CONTEXT_RESUME_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch {}
+    if ((ctx.state as string) === "running") return;
+    await delay(80);
+  }
+  throw makeDomException("Audio context could not start", "InvalidStateError");
 }
 
 function suspendRecorderContext() {
@@ -95,8 +182,65 @@ function suspendRecorderContext() {
 
 function warmIsLive() {
   if (!warm) return false;
+  if (recorderContextStale) return false;
   const tracks = warm.stream.getAudioTracks();
   return tracks.length > 0 && tracks.every((t) => t.readyState === "live");
+}
+
+function isTransientMicError(error: unknown) {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  const message = ((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  if (
+    name === "AbortError" ||
+    name === "InvalidStateError" ||
+    name === "UnknownError" ||
+    name === "NotReadableError"
+  ) {
+    return true;
+  }
+  return (
+    message.includes("interrupted") ||
+    message.includes("couldn't start") ||
+    message.includes("could not start") ||
+    message.includes("unable to start") ||
+    message.includes("failed to start") ||
+    message.includes("operation could not be completed") ||
+    message.includes("audio context")
+  );
+}
+
+async function getMicStreamWithRetries(requestGeneration: number) {
+  installRecorderLifecycle();
+  const mediaDevices = navigator.mediaDevices;
+  if (!mediaDevices?.getUserMedia) {
+    throw makeDomException("Microphone capture is not supported in this browser", "NotSupportedError");
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MIC_RETRY_DELAYS_MS.length; attempt++) {
+    if (MIC_RETRY_DELAYS_MS[attempt] > 0) await delay(MIC_RETRY_DELAYS_MS[attempt]);
+    if (requestGeneration !== micGeneration) {
+      throw makeDomException("Microphone request was superseded", "AbortError");
+    }
+    try {
+      return await mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+    } catch (error) {
+      lastError = error;
+      teardownWarm(false);
+      recorderContextStale = true;
+      maybeCloseStaleContext();
+      if (!isTransientMicError(error) || attempt === MIC_RETRY_DELAYS_MS.length - 1) {
+        throw error;
+      }
+    }
+  }
+  throw lastError ?? makeDomException("Microphone could not start", "UnknownError");
 }
 
 // iOS kills mic tracks when the app is backgrounded or another app takes the
@@ -120,16 +264,32 @@ function watchStream(stream: MediaStream) {
 export function micErrorMessage(error: unknown): string | null {
   const name = (error as { name?: string } | null)?.name ?? "";
   const message = (error as { message?: string } | null)?.message ?? "";
+  const lower = message.toLowerCase();
   // Replaced by a newer mic request (e.g. leaving the screen) — not an error.
   if (message.includes("superseded")) return null;
   if (name === "NotAllowedError" || name === "SecurityError") {
     return "Microphone permission is off — enable it for this app in Settings, then try again";
+  }
+  if (name === "NotSupportedError") {
+    return "Microphone recording is not supported in this browser";
   }
   if (name === "NotReadableError") {
     return "The microphone is busy in another app — close it and try again";
   }
   if (name === "NotFoundError" || name === "OverconstrainedError") {
     return "No microphone was found on this device";
+  }
+  if (
+    name === "AbortError" ||
+    name === "InvalidStateError" ||
+    name === "UnknownError" ||
+    lower.includes("interrupted") ||
+    lower.includes("audio context") ||
+    lower.includes("couldn't start") ||
+    lower.includes("could not start") ||
+    lower.includes("unable to start")
+  ) {
+    return "The microphone was interrupted by iOS — wait a moment and try again";
   }
   return "Couldn't start the microphone — please try again";
 }
@@ -166,43 +326,126 @@ export function stopMicForPlayback(): void {
 export function releaseMic(): Promise<void> {
   // Invalidate a getUserMedia request that has not resolved yet.
   teardownWarm(true);
+  maybeCloseStaleContext();
   return Promise.resolve();
+}
+
+function pickMediaRecorderMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = [
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+  ];
+  for (const mimeType of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(mimeType)) return mimeType;
+    } catch {}
+  }
+  return "";
+}
+
+function startMediaRecorderFallback(stream: MediaStream, originalError: unknown): PcmRecorder {
+  if (typeof MediaRecorder === "undefined") {
+    stopStream(stream);
+    throw originalError;
+  }
+  const mimeType = pickMediaRecorderMimeType();
+  const chunks: Blob[] = [];
+  let recorder: MediaRecorder;
+  let readyResolve: () => void = () => {};
+  let stopResolve: ((blob: Blob) => void) | null = null;
+  let stopReject: ((error: unknown) => void) | null = null;
+  const ready = new Promise<void>((resolve) => {
+    readyResolve = resolve;
+  });
+  try {
+    recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  } catch {
+    stopStream(stream);
+    throw originalError;
+  }
+
+  recorder.onstart = () => readyResolve();
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) chunks.push(event.data);
+  };
+  recorder.onerror = (event) => {
+    stopStream(stream);
+    const error = (event as Event & { error?: unknown }).error ?? originalError;
+    stopReject?.(error);
+    readyResolve();
+  };
+  recorder.onstop = () => {
+    stopStream(stream);
+    const type = recorder.mimeType || mimeType || "audio/mp4";
+    stopResolve?.(new Blob(chunks, { type }));
+  };
+
+  try {
+    recorder.start();
+  } catch {
+    stopStream(stream);
+    throw originalError;
+  }
+
+  return {
+    ready,
+    stop() {
+      if (recorder.state === "inactive") {
+        stopStream(stream);
+        const type = recorder.mimeType || mimeType || "audio/mp4";
+        return Promise.resolve(new Blob(chunks, { type }));
+      }
+      return new Promise((resolve, reject) => {
+        stopResolve = resolve;
+        stopReject = reject;
+        try {
+          recorder.requestData();
+        } catch {}
+        try {
+          recorder.stop();
+        } catch (error) {
+          stopStream(stream);
+          reject(error);
+        }
+      });
+    },
+    cancel() {
+      try {
+        if (recorder.state !== "inactive") recorder.stop();
+      } catch {}
+      stopStream(stream);
+    },
+  };
 }
 
 export async function startPcmRecorder(): Promise<PcmRecorder> {
   if (!warmIsLive()) {
     await releaseMic();
     const requestGeneration = ++micGeneration;
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (firstError) {
-      // iOS frequently rejects while the mic is still being torn down (by us,
-      // a phone call, or another app). Wait a beat and retry exactly once —
-      // the warm stream is already null here, so there is nothing to release.
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (requestGeneration !== micGeneration) {
-        throw new DOMException("Microphone request was superseded", "AbortError");
-      }
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    }
+    const stream = await getMicStreamWithRetries(requestGeneration);
     if (requestGeneration !== micGeneration) {
-      stream.getTracks().forEach((track) => track.stop());
-      throw new DOMException("Microphone request was superseded", "AbortError");
+      stopStream(stream);
+      throw makeDomException("Microphone request was superseded", "AbortError");
     }
-    const source = acquireRecorderContext().createMediaStreamSource(stream);
-    warm = { stream, source };
-    watchStream(stream);
+    try {
+      const ctx = acquireRecorderContext();
+      await resumeRecorderContext(ctx);
+      const source = ctx.createMediaStreamSource(stream);
+      warm = { stream, source };
+      watchStream(stream);
+    } catch (setupError) {
+      recorderContextStale = true;
+      maybeCloseStaleContext();
+      return startMediaRecorderFallback(stream, setupError);
+    }
   }
   const active = warm;
-  if (!active) throw new DOMException("Microphone is unavailable", "NotReadableError");
+  if (!active) throw makeDomException("Microphone is unavailable", "NotReadableError");
   const ctx = acquireRecorderContext();
   const { source } = active;
-  if (ctx.state !== "running") {
-    try {
-      await ctx.resume();
-    } catch {}
-  }
+  await resumeRecorderContext(ctx);
 
   // ScriptProcessorNode is deprecated but universally supported; AudioWorklet
   // adds significant setup we don't need for a short push-to-talk clip.
@@ -210,6 +453,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   const chunks: Float32Array[] = [];
   let cancelled = false;
   let stopped = false;
+  activeRecorders += 1;
 
   let markReady!: () => void;
   const ready = new Promise<void>((resolve) => {
@@ -231,6 +475,7 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
 
   // Detach only this recording's processor; the stream + context stay warm.
   const detach = () => {
+    if (processor.onaudioprocess === null) return;
     clearTimeout(readyTimer);
     try {
       processor.disconnect();
@@ -239,6 +484,8 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
       source.disconnect(processor);
     } catch {}
     processor.onaudioprocess = null;
+    activeRecorders = Math.max(0, activeRecorders - 1);
+    maybeCloseStaleContext();
   };
 
   return {

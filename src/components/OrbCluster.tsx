@@ -1,4 +1,6 @@
 import type { CSSProperties, MouseEvent, RefObject } from "react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,25 +26,6 @@ interface OrbClusterProps {
   onNextDoc: () => void;
   onDelete: () => void;
   onRepeat: () => void;
-}
-
-
-
-/** Little smiley face drawn on every orb. */
-function Smiley() {
-  return (
-    <svg viewBox="0 0 24 24" className="glow-orb-face" aria-hidden focusable="false">
-      <circle cx="8.5" cy="9.5" r="1.7" fill="currentColor" />
-      <circle cx="15.5" cy="9.5" r="1.7" fill="currentColor" />
-      <path
-        d="M7.5 13.8 Q12 18.4 16.5 13.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 /** Short, soundless jiggle played on the pressed orb. */
@@ -73,12 +56,13 @@ function giggle(el: HTMLButtonElement) {
 interface ClusterOrbProps {
   /** Full literal class (e.g. "glow-orb-blue") so Tailwind's scanner sees it. */
   orbClass: string;
+  Icon: LucideIcon;
   label: string;
   onPress: () => void;
   placement: CSSProperties;
 }
 
-function ClusterOrb({ orbClass, label, onPress, placement }: ClusterOrbProps) {
+function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbProps) {
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     giggle(e.currentTarget);
     onPress();
@@ -92,7 +76,7 @@ function ClusterOrb({ orbClass, label, onPress, placement }: ClusterOrbProps) {
       className={cn("glow-orb", orbClass)}
       style={placement}
     >
-      <Smiley />
+      <Icon className="glow-orb-icon" aria-hidden="true" focusable="false" strokeWidth={2.6} />
     </button>
   );
 }
@@ -111,18 +95,21 @@ export function OrbCluster({
     <div className="orb-cluster">
       <ClusterOrb
         orbClass="glow-orb-blue"
+        Icon={ArrowUp}
         label="Previous sentence"
         onPress={onPrev}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
       <ClusterOrb
         orbClass="glow-orb-red"
+        Icon={Trash2}
         label="Delete sentence"
         onPress={onDelete}
         placement={{ gridColumn: 1, gridRow: 2 }}
       />
       <ClusterOrb
         orbClass="glow-orb-yellow"
+        Icon={Menu}
         label="Open menu"
         onPress={onMenu}
         placement={{ gridColumn: 2, gridRow: 2 }}
@@ -137,18 +124,21 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-green"
+        Icon={FileText}
         label="Next document"
         onPress={onNextDoc}
         placement={{ gridColumn: 4, gridRow: 2 }}
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
+        Icon={Volume2}
         label="Repeat sentence"
         onPress={onRepeat}
         placement={{ gridColumn: 5, gridRow: 2 }}
       />
       <ClusterOrb
         orbClass="glow-orb-purple"
+        Icon={ArrowDown}
         label="Next sentence"
         onPress={onNext}
         placement={{ gridColumn: 3, gridRow: 3 }}
