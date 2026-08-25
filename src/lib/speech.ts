@@ -61,7 +61,7 @@ async function getAccessToken(): Promise<string | null> {
 // instantly with no network and no extra AI credits. Only sentences the user
 // already heard are cached — nothing is pre-generated.
 const REPLAY_CACHE_LIMIT = 12;
-const replayCache = new Map<string, Float32Array>();
+const replayCache = new Map<string, Float32Array<ArrayBuffer>>();
 
 function replayKey(text: string, voice: string) {
   return `${voice}::${text}`;
