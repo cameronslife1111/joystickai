@@ -67,7 +67,7 @@ function replayKey(text: string, voice: string) {
   return `${voice}::${text}`;
 }
 
-function rememberClip(key: string, samples: Float32Array) {
+function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
   replayCache.delete(key);
   replayCache.set(key, samples);
   while (replayCache.size > REPLAY_CACHE_LIMIT) {
@@ -140,7 +140,7 @@ export function isSpeaking(): boolean {
 /** Schedule one PCM chunk for immediate playback at SPEECH_RATE. Returns its end time. */
 function scheduleSamples(
   context: AudioContext,
-  samples: Float32Array,
+  samples: Float32Array<ArrayBuffer>,
   playhead: number,
 ): number {
   const audioBuffer = context.createBuffer(1, samples.length, 24_000);
