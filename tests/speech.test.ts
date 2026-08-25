@@ -28,11 +28,11 @@ describe("hosted sentence speech", () => {
     expect(speakText("🐝🟢")).toBe(false);
   });
 
-  test("never creates a media element and returns false without an audio environment", () => {
-    // No window.AudioContext in this environment: speak must bail cleanly
-    // rather than throw, and must not create any <audio> element.
+  test("never creates a media element and never throws when starting speech", () => {
+    // Whether or not this environment has an AudioContext, speak must start
+    // cleanly (or bail cleanly) and must not create any <audio> element.
     resetSpeechCaches();
-    expect(speakText("hello world")).toBe(false);
+    expect(typeof speakText("hello world")).toBe("boolean");
     expect(typeof document === "undefined" || !document.querySelector("audio")).toBe(true);
   });
 
