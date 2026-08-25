@@ -11,7 +11,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
-import { aiContinue } from "@/lib/ai.functions";
+import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
