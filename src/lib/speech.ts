@@ -35,6 +35,22 @@ let activeSources = new Set<AudioBufferSourceNode>();
 let finishTimer: ReturnType<typeof setTimeout> | null = null;
 let requestSequence = 0;
 
+// Master switch synced from the user's Sound preference. Default OFF until
+// preferences load: when Sound is off, speakText must never reach the network,
+// so the user is never charged for speech they didn't ask for. Every speech
+// path in the app (sentences, chat, plan cues, previews) funnels through
+// speakText, so this one gate is a structural guarantee.
+let speechEnabled = false;
+
+export function setSpeechEnabled(on: boolean) {
+  speechEnabled = on;
+  if (!on) cancelSpeech();
+}
+
+export function isSpeechEnabled(): boolean {
+  return speechEnabled;
+}
+
 export function setSpeechVoice(voice: TtsVoice) {
   selectedVoice = voice;
 }
@@ -260,6 +276,9 @@ function scheduleSamples(
 
 /** Stream one sentence from hosted Google speech and play its PCM chunks immediately. */
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
+  // Sound is off — return before touching tokens, network, or audio so the
+  // user is never billed for speech while muted.
+  if (!speechEnabled) return false;
   const clean = cleanForSpeech(text ?? "");
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
 
