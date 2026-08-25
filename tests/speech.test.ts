@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   cleanForSpeech,
+  isSpeechEnabled,
   recoverPlaybackContext,
   resetSpeechCaches,
+  setSpeechEnabled,
   SPEECH_RATE,
   speakText,
 } from "../src/lib/speech";
@@ -43,6 +45,30 @@ function useFakePlayback() {
 }
 
 describe("hosted sentence speech", () => {
+  test("makes no network request while speech is disabled (Sound off)", () => {
+    setSpeechEnabled(false);
+    expect(isSpeechEnabled()).toBe(false);
+    let fetched = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      fetched = true;
+      return Promise.reject(new Error("network must not be touched while muted"));
+    }) as typeof fetch;
+    try {
+      expect(speakText("hello world")).toBe(false);
+      expect(fetched).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("re-enabling speech lets speakText start again", () => {
+    setSpeechEnabled(true);
+    resetSpeechCaches();
+    expect(isSpeechEnabled()).toBe(true);
+    expect(speakText("hello world")).toBe(true);
+  });
+
   test("exposes four supported Google voices with a valid default", () => {
     expect(TTS_VOICES.map((voice) => voice.id)).toEqual(["Charon", "Fenrir", "Kore", "Aoede"]);
     expect(isTtsVoice(DEFAULT_TTS_VOICE)).toBe(true);

@@ -8,7 +8,7 @@ import { OrbCluster } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, setSpeechVoice } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue } from "@/lib/ai.functions";
@@ -686,6 +686,10 @@ function AppPage() {
 
   // Keep mutedRef in sync with persisted preference.
   useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+  // Keep the speech engine's master switch in sync: Sound off means
+  // speakText never reaches the network, so muted users are never charged.
+  useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
   // Strip emoji and pictographic symbols, but preserve digits, letters,
   // punctuation, and whitespace.
