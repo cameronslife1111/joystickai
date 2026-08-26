@@ -136,9 +136,11 @@ export async function sendTextToChatThread(opts: {
     if (aErr) throw aErr;
   }
 
+  // The reply landed while the chat window was closed — mark it unread.
+  const stamp = new Date().toISOString();
   await supabase
     .from("chat_threads")
-    .update({ updated_at: new Date().toISOString() })
+    .update({ updated_at: stamp, last_assistant_at: stamp })
     .eq("id", threadId);
 }
 
