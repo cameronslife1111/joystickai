@@ -87,18 +87,27 @@ function ClusterOrb({
 }: ClusterOrbProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
 
   const clearTimer = () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
+    start.current = null;
+  };
+
+  /** Small finger drift shouldn't cancel the hold; a real drag should. */
+  const handlePointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!timer.current || !start.current) return;
+    if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 12) clearTimer();
   };
 
   const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
     if (!onLongPress) return;
     fired.current = false;
     clearTimer();
+    start.current = { x: e.clientX, y: e.clientY };
     const el = e.currentTarget;
     timer.current = setTimeout(() => {
       timer.current = null;
