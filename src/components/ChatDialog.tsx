@@ -465,6 +465,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     [qc, userId],
   );
 
+  // Viewing a thread clears its unread state — including replies that arrive
+  // from the background while the thread is on screen.
+  useEffect(() => {
+    if (!open || drawerOpen || !activeThreadId) return;
+    markThreadRead(activeThreadId);
+  }, [open, drawerOpen, activeThreadId, threads, markThreadRead]);
+
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
     const { data, error } = await supabase
