@@ -250,7 +250,7 @@ async function getMicStreamWithRetries(requestGeneration: number) {
       });
     } catch (error) {
       lastError = error;
-      teardownWarm(false);
+      teardownWarm(false, false);
       recorderContextStale = true;
       maybeCloseStaleContext();
       if (!isTransientMicError(error) || attempt === MIC_RETRY_DELAYS_MS.length - 1) {
