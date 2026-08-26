@@ -312,10 +312,10 @@ export function micErrorMessage(error: unknown): string | null {
   return "Couldn't start the microphone — please try again";
 }
 
-function teardownWarm(bumpGeneration: boolean) {
+function teardownWarm(bumpGeneration: boolean, restoreSession = true) {
   if (bumpGeneration) micGeneration += 1;
   if (!warm) {
-    endMicSession();
+    if (restoreSession) endMicSession();
     return;
   }
   const releasing = warm;
@@ -331,7 +331,7 @@ function teardownWarm(bumpGeneration: boolean) {
   // Suspend (never close) the shared context: stopping the tracks is what
   // drops the iOS recording indicator; the context itself stays reusable.
   suspendRecorderContext();
-  endMicSession();
+  if (restoreSession) endMicSession();
 }
 
 /**
