@@ -17,9 +17,17 @@ import { cn } from "@/lib/utils";
  * the parent via `centerRef` and `useOrbGestures`.
  */
 
+/** Orbs that can be pressed programmatically (keyboard arrows). */
+export type OrbId = "prev" | "next" | "menu" | "nextDoc";
+
 interface OrbClusterProps {
   recording: boolean;
   centerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Receives an imperative press function so keyboard shortcuts can go through
+   * the exact same click path (giggle animation included) as a real press.
+   */
+  pressRef?: RefObject<((id: OrbId) => void) | null>;
   onPrev: () => void;
   onNext: () => void;
   onMenu: () => void;
