@@ -187,7 +187,7 @@ const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number 
   { color: "red", label: "Delete sentence", col: 1, row: 2 },
   { color: "yellow", label: "Open the menu", col: 2, row: 2 },
   { color: "green", label: "Next document", col: 4, row: 2 },
-  { color: "orange", label: "Repeat aloud", col: 5, row: 2 },
+  { color: "orange", label: "Pinned document", col: 5, row: 2 },
   { color: "purple", label: "Next sentence", col: 3, row: 3 },
 ];
 
