@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,7 +27,7 @@ const COLOR_ICON: Record<OrbColor, LucideIcon> = {
   yellow: Menu,
   green: FileText,
   red: Trash2,
-  orange: Volume2,
+  orange: Pin,
 };
 
 /** Approximate hex per orb color, for dots/glows outside the orb itself. */

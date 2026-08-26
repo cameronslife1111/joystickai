@@ -1,7 +1,7 @@
-import type { CSSProperties, MouseEvent, RefObject } from "react";
+import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  *
  *   Layout (grid):
  *                    blue · previous
- *   red · delete   yellow · menu   [center]   green · next doc   orange · repeat
+ *   red · delete   yellow · menu   [center]   green · next doc   orange · pinned doc
  *                    purple · next
  *
  * The center pad is intentionally empty/transparent so the app background
@@ -34,7 +34,10 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
-  onRepeat: () => void;
+  /** Orange orb tap: open the pinned document. */
+  onPinnedDoc: () => void;
+  /** Orange orb hold: choose a new document to pin. */
+  onPinnedDocLongPress: () => void;
 }
 
 /** Short, soundless jiggle played on the pressed orb. */
@@ -62,21 +65,73 @@ function giggle(el: HTMLButtonElement) {
   }
 }
 
+const LONG_PRESS_MS = 500;
+
 interface ClusterOrbProps {
   /** Full literal class (e.g. "glow-orb-blue") so Tailwind's scanner sees it. */
   orbClass: string;
   Icon: LucideIcon;
   label: string;
   onPress: () => void;
+  /** Optional hold action; when it fires, the tap action is suppressed. */
+  onLongPress?: () => void;
   placement: CSSProperties;
   buttonRef?: (el: HTMLButtonElement | null) => void;
 }
 
-function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: ClusterOrbProps) {
+function ClusterOrb({
+  orbClass,
+  Icon,
+  label,
+  onPress,
+  onLongPress,
+  placement,
+  buttonRef,
+}: ClusterOrbProps) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fired = useRef(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    start.current = null;
+  };
+
+  /** Small finger drift shouldn't cancel the hold; a real drag should. */
+  const handlePointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!timer.current || !start.current) return;
+    if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 12) clearTimer();
+  };
+
+  const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!onLongPress) return;
+    fired.current = false;
+    clearTimer();
+    start.current = { x: e.clientX, y: e.clientY };
+    const el = e.currentTarget;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      fired.current = true;
+      giggle(el);
+      onLongPress();
+    }, LONG_PRESS_MS);
+  };
+
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    clearTimer();
+    if (fired.current) {
+      fired.current = false;
+      return;
+    }
     giggle(e.currentTarget);
     onPress();
   };
+
+  useEffect(() => clearTimer, []);
+
   return (
     <button
       type="button"
@@ -84,6 +139,14 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: Cl
       aria-label={label}
       title={label}
       onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={clearTimer}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={clearTimer}
+      onPointerCancel={clearTimer}
+      onContextMenu={(e) => {
+        if (onLongPress) e.preventDefault();
+      }}
       className={cn("glow-orb", orbClass)}
       style={placement}
     >
@@ -101,7 +164,8 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
-  onRepeat,
+  onPinnedDoc,
+  onPinnedDocLongPress,
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
@@ -160,9 +224,10 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
-        Icon={Volume2}
-        label="Repeat sentence"
-        onPress={onRepeat}
+        Icon={Pin}
+        label="Open pinned document (hold to pin another)"
+        onPress={onPinnedDoc}
+        onLongPress={onPinnedDocLongPress}
         placement={{ gridColumn: 5, gridRow: 2 }}
       />
       <ClusterOrb
