@@ -116,7 +116,28 @@ type Thread = {
   attached_document_ids: string[];
   capabilities: ChatCapabilities;
   updated_at: string;
+  last_assistant_at: string | null;
+  last_read_at: string | null;
 };
+
+/** A chat is unread when AI activity is newer than the last time it was read. */
+function isUnread(t: Thread): boolean {
+  if (!t.last_assistant_at) return false;
+  if (!t.last_read_at) return true;
+  return t.last_assistant_at > t.last_read_at;
+}
+
+/** Unread chats first (newest AI activity on top), then most-recently-used. */
+function sortThreads(list: Thread[]): Thread[] {
+  return [...list].sort((a, b) => {
+    const ua = isUnread(a);
+    const ub = isUnread(b);
+    if (ua !== ub) return ua ? -1 : 1;
+    const ka = ua ? (a.last_assistant_at ?? a.updated_at) : a.updated_at;
+    const kb = ub ? (b.last_assistant_at ?? b.updated_at) : b.updated_at;
+    return ka < kb ? 1 : ka > kb ? -1 : 0;
+  });
+}
 
 const DEFAULT_CAPS: ChatCapabilities = {
   web_search: true,
@@ -339,19 +360,29 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const { data: threads = [], isFetched: threadsFetched } = useQuery({
     queryKey: ["chat_threads", userId],
     enabled: !!userId && open,
+    // Keeps the inbox live while the chat is open: replies written by scheduled
+    // messages and background plans show up on their own.
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
     queryFn: async (): Promise<Thread[]> => {
       const { data, error } = await supabase
         .from("chat_threads")
-        .select("id, title, attached_document_ids, capabilities, updated_at")
+        .select(
+          "id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at",
+        )
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        attached_document_ids: t.attached_document_ids ?? [],
-        capabilities: normalizeCaps(t.capabilities),
-        updated_at: t.updated_at,
-      }));
+      return sortThreads(
+        (data ?? []).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          attached_document_ids: t.attached_document_ids ?? [],
+          capabilities: normalizeCaps(t.capabilities),
+          updated_at: t.updated_at,
+          last_assistant_at: t.last_assistant_at ?? null,
+          last_read_at: t.last_read_at ?? null,
+        })),
+      );
     },
   });
 
@@ -389,20 +420,44 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
    * without waiting for a reload.
    */
   const bumpThread = useCallback(
-    (id: string) => {
+    (id: string, opts?: { assistant?: boolean; read?: boolean }) => {
       if (!id) return;
       const now = new Date().toISOString();
+      const patch: Record<string, string> = { updated_at: now };
+      if (opts?.assistant) patch.last_assistant_at = now;
+      if (opts?.read !== false) patch.last_read_at = now;
       qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
-        (cur ?? [])
-          .map((t) => (t.id === id ? { ...t, updated_at: now } : t))
-          .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0)),
+        sortThreads((cur ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t))),
       );
       void supabase
         .from("chat_threads")
-        .update({ updated_at: now })
+        .update(patch)
         .eq("id", id)
         .then(() => {
           qc.invalidateQueries({ queryKey: ["chat_threads", userId] });
+          qc.invalidateQueries({ queryKey: ["chat_unread"] });
+        });
+    },
+    [qc, userId],
+  );
+
+  /** Clear the unread dot for a chat the user is now looking at. */
+  const markThreadRead = useCallback(
+    (id: string) => {
+      if (!id) return;
+      const now = new Date().toISOString();
+      const cached = qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? [];
+      const t = cached.find((x) => x.id === id);
+      if (t && !isUnread(t)) return; // already read — no write needed
+      qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
+        sortThreads((cur ?? []).map((x) => (x.id === id ? { ...x, last_read_at: now } : x))),
+      );
+      void supabase
+        .from("chat_threads")
+        .update({ last_read_at: now })
+        .eq("id", id)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["chat_unread"] });
         });
     },
     [qc, userId],
@@ -413,7 +468,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const { data, error } = await supabase
       .from("chat_threads")
       .insert({ user_id: userId, title, capabilities: DEFAULT_CAPS })
-      .select("id, title, attached_document_ids, capabilities, updated_at")
+      .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
       .single();
     if (error || !data) {
       toast.error("Couldn't create thread");
@@ -425,6 +480,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       attached_document_ids: data.attached_document_ids ?? [],
       capabilities: normalizeCaps(data.capabilities),
       updated_at: data.updated_at,
+      last_assistant_at: (data as any).last_assistant_at ?? null,
+      last_read_at: (data as any).last_read_at ?? null,
     };
     qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) => [t, ...(cur ?? [])]);
     return t;
@@ -918,8 +975,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           speakMessage(insertedAssistant.id, insertedAssistant.content);
         }
       }
-      // bump thread ordering
-      bumpThread(threadId);
+      // bump thread ordering; the reply counts as read only when the user is
+      // actually looking at this thread.
+      bumpThread(threadId, {
+        assistant: !!insertedAssistant,
+        read: open && threadId === activeThreadId,
+      });
 
       // Auto-name the thread from the first message (background, non-blocking).
       const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
