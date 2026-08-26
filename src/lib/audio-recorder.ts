@@ -370,6 +370,7 @@ function pickMediaRecorderMimeType() {
 function startMediaRecorderFallback(stream: MediaStream, originalError: unknown): PcmRecorder {
   if (typeof MediaRecorder === "undefined") {
     stopStream(stream);
+    endMicSession();
     throw originalError;
   }
   const mimeType = pickMediaRecorderMimeType();
@@ -385,6 +386,7 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
     recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   } catch {
     stopStream(stream);
+    endMicSession();
     throw originalError;
   }
 
@@ -394,12 +396,14 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
   };
   recorder.onerror = (event) => {
     stopStream(stream);
+    endMicSession();
     const error = (event as Event & { error?: unknown }).error ?? originalError;
     stopReject?.(error);
     readyResolve();
   };
   recorder.onstop = () => {
     stopStream(stream);
+    endMicSession();
     const type = recorder.mimeType || mimeType || "audio/mp4";
     stopResolve?.(new Blob(chunks, { type }));
   };
@@ -408,6 +412,7 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
     recorder.start();
   } catch {
     stopStream(stream);
+    endMicSession();
     throw originalError;
   }
 
@@ -416,6 +421,7 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
     stop() {
       if (recorder.state === "inactive") {
         stopStream(stream);
+        endMicSession();
         const type = recorder.mimeType || mimeType || "audio/mp4";
         return Promise.resolve(new Blob(chunks, { type }));
       }
@@ -429,6 +435,7 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
           recorder.stop();
         } catch (error) {
           stopStream(stream);
+          endMicSession();
           reject(error);
         }
       });
@@ -438,6 +445,7 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
         if (recorder.state !== "inactive") recorder.stop();
       } catch {}
       stopStream(stream);
+      endMicSession();
     },
   };
 }
