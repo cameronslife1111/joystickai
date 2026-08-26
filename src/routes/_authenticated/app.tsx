@@ -294,6 +294,22 @@ function AppPage() {
     },
   });
 
+  // Unread chat count: chats where Orby replied after the last time the user
+  // looked at that chat (scheduled messages, background plans, etc.).
+  const { data: chatUnreadCount = 0 } = useQuery({
+    queryKey: ["chat_unread"],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("chat_threads")
+        .select("last_assistant_at, last_read_at")
+        .not("last_assistant_at", "is", null);
+      return (data ?? []).filter(
+        (t: any) => !t.last_read_at || t.last_assistant_at > t.last_read_at,
+      ).length;
+    },
+  });
+
   // Background plan advancer
   useRunningPlansAdvancer(
     currentUserId,
@@ -2312,7 +2328,7 @@ function AppPage() {
         setSoundSettingsOpen(true);
       },
     },
-    { e: "💬", t: "Chat", fn: () => {
+    { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
       setMenuOpen(false);
       setPendingChatThreadId(null);
       setChatStartInList(true);
