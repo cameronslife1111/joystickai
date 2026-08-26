@@ -138,7 +138,7 @@ function ClusterOrb({
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerUp={clearTimer}
-      onPointerMove={clearTimer}
+      onPointerMove={handlePointerMove}
       onPointerLeave={clearTimer}
       onPointerCancel={clearTimer}
       onContextMenu={(e) => {
