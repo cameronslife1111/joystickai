@@ -2468,7 +2468,7 @@ function AppPage() {
       })();
     } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
+  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, chatUnreadCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
 
 
 
