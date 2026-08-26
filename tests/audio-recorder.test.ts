@@ -90,6 +90,7 @@ function useFakeMic(getUserMedia: () => Promise<unknown>, audioSession?: { type:
       visibilityState: "visible",
       addEventListener() {},
       removeEventListener() {},
+      querySelector() { return null; },
     },
   });
   Object.defineProperty(globalThis, "navigator", {
@@ -234,6 +235,7 @@ describe("audio recorder lifecycle", () => {
       return Promise.resolve(calls === 1 ? first : second);
     });
     useFakeContext(InterruptibleContext);
+    globalThis.window.dispatchEvent(new Event("focus"));
 
     const rec1 = await startPcmRecorder();
     rec1.cancel();
