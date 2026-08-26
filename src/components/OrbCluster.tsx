@@ -164,7 +164,8 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
-  onRepeat,
+  onPinnedDoc,
+  onPinnedDocLongPress,
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
