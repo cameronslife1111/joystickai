@@ -224,9 +224,10 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
-        Icon={Volume2}
-        label="Repeat sentence"
-        onPress={onRepeat}
+        Icon={Pin}
+        label="Open pinned document (hold to pin another)"
+        onPress={onPinnedDoc}
+        onLongPress={onPinnedDocLongPress}
         placement={{ gridColumn: 5, gridRow: 2 }}
       />
       <ClusterOrb
