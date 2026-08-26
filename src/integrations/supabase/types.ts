@@ -68,6 +68,8 @@ export type Database = {
           capabilities: Json
           created_at: string
           id: string
+          last_assistant_at: string | null
+          last_read_at: string | null
           title: string
           updated_at: string
           user_id: string
@@ -77,6 +79,8 @@ export type Database = {
           capabilities?: Json
           created_at?: string
           id?: string
+          last_assistant_at?: string | null
+          last_read_at?: string | null
           title?: string
           updated_at?: string
           user_id: string
@@ -86,6 +90,8 @@ export type Database = {
           capabilities?: Json
           created_at?: string
           id?: string
+          last_assistant_at?: string | null
+          last_read_at?: string | null
           title?: string
           updated_at?: string
           user_id?: string

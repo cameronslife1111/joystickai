@@ -116,7 +116,28 @@ type Thread = {
   attached_document_ids: string[];
   capabilities: ChatCapabilities;
   updated_at: string;
+  last_assistant_at: string | null;
+  last_read_at: string | null;
 };
+
+/** A chat is unread when AI activity is newer than the last time it was read. */
+function isUnread(t: Thread): boolean {
+  if (!t.last_assistant_at) return false;
+  if (!t.last_read_at) return true;
+  return t.last_assistant_at > t.last_read_at;
+}
+
+/** Unread chats first (newest AI activity on top), then most-recently-used. */
+function sortThreads(list: Thread[]): Thread[] {
+  return [...list].sort((a, b) => {
+    const ua = isUnread(a);
+    const ub = isUnread(b);
+    if (ua !== ub) return ua ? -1 : 1;
+    const ka = ua ? (a.last_assistant_at ?? a.updated_at) : a.updated_at;
+    const kb = ub ? (b.last_assistant_at ?? b.updated_at) : b.updated_at;
+    return ka < kb ? 1 : ka > kb ? -1 : 0;
+  });
+}
 
 const DEFAULT_CAPS: ChatCapabilities = {
   web_search: true,
@@ -339,19 +360,29 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const { data: threads = [], isFetched: threadsFetched } = useQuery({
     queryKey: ["chat_threads", userId],
     enabled: !!userId && open,
+    // Keeps the inbox live while the chat is open: replies written by scheduled
+    // messages and background plans show up on their own.
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
     queryFn: async (): Promise<Thread[]> => {
       const { data, error } = await supabase
         .from("chat_threads")
-        .select("id, title, attached_document_ids, capabilities, updated_at")
+        .select(
+          "id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at",
+        )
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        attached_document_ids: t.attached_document_ids ?? [],
-        capabilities: normalizeCaps(t.capabilities),
-        updated_at: t.updated_at,
-      }));
+      return sortThreads(
+        (data ?? []).map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          attached_document_ids: t.attached_document_ids ?? [],
+          capabilities: normalizeCaps(t.capabilities),
+          updated_at: t.updated_at,
+          last_assistant_at: t.last_assistant_at ?? null,
+          last_read_at: t.last_read_at ?? null,
+        })),
+      );
     },
   });
 
@@ -383,37 +414,74 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
+  const unreadCount = useMemo(() => threads.filter(isUnread).length, [threads]);
+
   /**
    * Mark a thread as just-used: persist a fresh `updated_at` and immediately
    * re-sort the cached thread list so the chat jumps to the top of the list
    * without waiting for a reload.
    */
   const bumpThread = useCallback(
-    (id: string) => {
+    (id: string, opts?: { assistant?: boolean; read?: boolean }) => {
       if (!id) return;
       const now = new Date().toISOString();
+      const patch: {
+        updated_at: string;
+        last_assistant_at?: string;
+        last_read_at?: string;
+      } = { updated_at: now };
+      if (opts?.assistant) patch.last_assistant_at = now;
+      if (opts?.read !== false) patch.last_read_at = now;
       qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
-        (cur ?? [])
-          .map((t) => (t.id === id ? { ...t, updated_at: now } : t))
-          .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0)),
+        sortThreads((cur ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t))),
       );
       void supabase
         .from("chat_threads")
-        .update({ updated_at: now })
+        .update(patch)
         .eq("id", id)
         .then(() => {
           qc.invalidateQueries({ queryKey: ["chat_threads", userId] });
+          qc.invalidateQueries({ queryKey: ["chat_unread"] });
         });
     },
     [qc, userId],
   );
+
+  /** Clear the unread dot for a chat the user is now looking at. */
+  const markThreadRead = useCallback(
+    (id: string) => {
+      if (!id) return;
+      const now = new Date().toISOString();
+      const cached = qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? [];
+      const t = cached.find((x) => x.id === id);
+      if (t && !isUnread(t)) return; // already read — no write needed
+      qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
+        sortThreads((cur ?? []).map((x) => (x.id === id ? { ...x, last_read_at: now } : x))),
+      );
+      void supabase
+        .from("chat_threads")
+        .update({ last_read_at: now })
+        .eq("id", id)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["chat_unread"] });
+        });
+    },
+    [qc, userId],
+  );
+
+  // Viewing a thread clears its unread state — including replies that arrive
+  // from the background while the thread is on screen.
+  useEffect(() => {
+    if (!open || drawerOpen || !activeThreadId) return;
+    markThreadRead(activeThreadId);
+  }, [open, drawerOpen, activeThreadId, threads, markThreadRead]);
 
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
     const { data, error } = await supabase
       .from("chat_threads")
       .insert({ user_id: userId, title, capabilities: DEFAULT_CAPS })
-      .select("id, title, attached_document_ids, capabilities, updated_at")
+      .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
       .single();
     if (error || !data) {
       toast.error("Couldn't create thread");
@@ -425,6 +493,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       attached_document_ids: data.attached_document_ids ?? [],
       capabilities: normalizeCaps(data.capabilities),
       updated_at: data.updated_at,
+      last_assistant_at: (data as any).last_assistant_at ?? null,
+      last_read_at: (data as any).last_read_at ?? null,
     };
     qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) => [t, ...(cur ?? [])]);
     return t;
@@ -918,8 +988,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           speakMessage(insertedAssistant.id, insertedAssistant.content);
         }
       }
-      // bump thread ordering
-      bumpThread(threadId);
+      // bump thread ordering; the reply counts as read only when the user is
+      // actually looking at this thread.
+      bumpThread(threadId, {
+        assistant: !!insertedAssistant,
+        read: open && threadId === activeThreadId,
+      });
 
       // Auto-name the thread from the first message (background, non-blocking).
       const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
@@ -1496,6 +1570,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     <X className="h-5 w-5" />
                   </Button>
                   <span className="text-base font-medium">Chats</span>
+                  {unreadCount > 0 && (
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                      {unreadCount}
+                    </span>
+                  )}
                 </div>
                 <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
                   <Plus className="mr-1 h-3.5 w-3.5" /> New
@@ -1533,9 +1612,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             bumpThread(t.id);
                             setDrawerOpen(false);
                           }}
-                          className="min-w-0 flex-1 truncate px-1 py-3.5 text-left text-base"
+                          className={`flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base ${
+                            isUnread(t) ? "font-semibold text-foreground" : ""
+                          }`}
                         >
-                          {t.title || "Untitled"}
+                          {isUnread(t) && (
+                            <span
+                              aria-label="Unread"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary"
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
                         </button>
                         <button
                           type="button"
