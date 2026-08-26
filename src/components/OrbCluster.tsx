@@ -94,6 +94,7 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: Cl
 export function OrbCluster({
   recording,
   centerRef,
+  pressRef,
   onPrev,
   onNext,
   onMenu,
@@ -101,6 +102,20 @@ export function OrbCluster({
   onDelete,
   onRepeat,
 }: OrbClusterProps) {
+  const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
+  const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
+    buttons.current[id] = el;
+  };
+
+  useEffect(() => {
+    if (!pressRef) return;
+    const ref = pressRef as { current: ((id: OrbId) => void) | null };
+    ref.current = (id) => buttons.current[id]?.click();
+    return () => {
+      ref.current = null;
+    };
+  }, [pressRef]);
+
   return (
     <div className="orb-cluster">
       <ClusterOrb
@@ -108,6 +123,7 @@ export function OrbCluster({
         Icon={ArrowUp}
         label="Previous sentence"
         onPress={onPrev}
+        buttonRef={setButton("prev")}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
       <ClusterOrb
