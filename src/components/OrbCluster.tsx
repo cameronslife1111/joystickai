@@ -34,7 +34,10 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
-  onRepeat: () => void;
+  /** Orange orb tap: open the pinned document. */
+  onPinnedDoc: () => void;
+  /** Orange orb hold: choose a new document to pin. */
+  onPinnedDocLongPress: () => void;
 }
 
 /** Short, soundless jiggle played on the pressed orb. */
