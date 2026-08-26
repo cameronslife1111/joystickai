@@ -27,7 +27,7 @@ const COLOR_ICON: Record<OrbColor, LucideIcon> = {
   yellow: Menu,
   green: FileText,
   red: Trash2,
-  orange: Volume2,
+  orange: Pin,
 };
 
 /** Approximate hex per orb color, for dots/glows outside the orb itself. */
