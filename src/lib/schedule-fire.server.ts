@@ -106,6 +106,15 @@ async function insertChatMessage(
     kind,
     ...(planId ? { plan_id: planId } : {}),
   });
+  // Assistant activity arriving in the background makes the chat "unread" so it
+  // surfaces at the top of the chats list with a blue dot.
+  if (role === "assistant") {
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from("chat_threads")
+      .update({ last_assistant_at: now, updated_at: now })
+      .eq("id", threadId);
+  }
 }
 
 /**
