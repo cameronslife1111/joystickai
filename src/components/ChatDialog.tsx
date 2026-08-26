@@ -414,6 +414,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
   const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
 
+  const unreadCount = useMemo(() => threads.filter(isUnread).length, [threads]);
+
   /**
    * Mark a thread as just-used: persist a fresh `updated_at` and immediately
    * re-sort the cached thread list so the chat jumps to the top of the list
@@ -1557,6 +1559,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     <X className="h-5 w-5" />
                   </Button>
                   <span className="text-base font-medium">Chats</span>
+                  {unreadCount > 0 && (
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                      {unreadCount}
+                    </span>
+                  )}
                 </div>
                 <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
                   <Plus className="mr-1 h-3.5 w-3.5" /> New
@@ -1594,9 +1601,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             bumpThread(t.id);
                             setDrawerOpen(false);
                           }}
-                          className="min-w-0 flex-1 truncate px-1 py-3.5 text-left text-base"
+                          className={`flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base ${
+                            isUnread(t) ? "font-semibold text-foreground" : ""
+                          }`}
                         >
-                          {t.title || "Untitled"}
+                          {isUnread(t) && (
+                            <span
+                              aria-label="Unread"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary"
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
                         </button>
                         <button
                           type="button"
