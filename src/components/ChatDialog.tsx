@@ -425,7 +425,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     (id: string, opts?: { assistant?: boolean; read?: boolean }) => {
       if (!id) return;
       const now = new Date().toISOString();
-      const patch: Record<string, string> = { updated_at: now };
+      const patch: {
+        updated_at: string;
+        last_assistant_at?: string;
+        last_read_at?: string;
+      } = { updated_at: now };
       if (opts?.assistant) patch.last_assistant_at = now;
       if (opts?.read !== false) patch.last_read_at = now;
       qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
