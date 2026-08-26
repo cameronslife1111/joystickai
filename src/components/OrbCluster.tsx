@@ -68,9 +68,10 @@ interface ClusterOrbProps {
   label: string;
   onPress: () => void;
   placement: CSSProperties;
+  buttonRef?: (el: HTMLButtonElement | null) => void;
 }
 
-function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbProps) {
+function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: ClusterOrbProps) {
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     giggle(e.currentTarget);
     onPress();
@@ -78,6 +79,7 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbPro
   return (
     <button
       type="button"
+      ref={buttonRef}
       aria-label={label}
       title={label}
       onClick={handleClick}
