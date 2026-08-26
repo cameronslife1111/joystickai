@@ -1,7 +1,7 @@
-import type { CSSProperties, MouseEvent, RefObject } from "react";
+import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
