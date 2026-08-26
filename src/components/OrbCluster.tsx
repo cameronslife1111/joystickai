@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  *
  *   Layout (grid):
  *                    blue · previous
- *   red · delete   yellow · menu   [center]   green · next doc   orange · repeat
+ *   red · delete   yellow · menu   [center]   green · next doc   orange · pinned doc
  *                    purple · next
  *
  * The center pad is intentionally empty/transparent so the app background
