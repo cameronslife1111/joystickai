@@ -3,6 +3,8 @@
 // only WAV is guaranteed decodable everywhere (iOS Safari records fragmented
 // MP4, which the transcription model rejects).
 
+import { beginIosRecordingSession, endIosRecordingSession } from "@/lib/audio-session";
+
 export type PcmRecorder = {
   /** Resolves once the mic is genuinely delivering audio frames. */
   ready: Promise<void>;
@@ -79,6 +81,7 @@ let micGeneration = 0;
 let activeRecorders = 0;
 let recorderContextStale = false;
 let lifecycleInstalled = false;
+let iosRecordingSessionToken: number | null = null;
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -107,6 +110,18 @@ function closeRecorderContext() {
   try {
     void ctx.close().catch(() => {});
   } catch {}
+}
+
+function beginMicSession() {
+  if (iosRecordingSessionToken === null) {
+    iosRecordingSessionToken = beginIosRecordingSession();
+  }
+}
+
+function endMicSession() {
+  const token = iosRecordingSessionToken;
+  iosRecordingSessionToken = null;
+  endIosRecordingSession(token);
 }
 
 function maybeCloseStaleContext() {
@@ -183,6 +198,8 @@ function suspendRecorderContext() {
 function warmIsLive() {
   if (!warm) return false;
   if (recorderContextStale) return false;
+  const state = (recorderContext?.state ?? "closed") as string;
+  if (state === "closed" || state === "interrupted") return false;
   const tracks = warm.stream.getAudioTracks();
   return tracks.length > 0 && tracks.every((t) => t.readyState === "live");
 }
@@ -211,6 +228,7 @@ function isTransientMicError(error: unknown) {
 
 async function getMicStreamWithRetries(requestGeneration: number) {
   installRecorderLifecycle();
+  beginMicSession();
   const mediaDevices = navigator.mediaDevices;
   if (!mediaDevices?.getUserMedia) {
     throw makeDomException("Microphone capture is not supported in this browser", "NotSupportedError");
@@ -296,7 +314,10 @@ export function micErrorMessage(error: unknown): string | null {
 
 function teardownWarm(bumpGeneration: boolean) {
   if (bumpGeneration) micGeneration += 1;
-  if (!warm) return;
+  if (!warm) {
+    endMicSession();
+    return;
+  }
   const releasing = warm;
   warm = null;
   try {
@@ -310,6 +331,7 @@ function teardownWarm(bumpGeneration: boolean) {
   // Suspend (never close) the shared context: stopping the tracks is what
   // drops the iOS recording indicator; the context itself stays reusable.
   suspendRecorderContext();
+  endMicSession();
 }
 
 /**
@@ -423,10 +445,18 @@ function startMediaRecorderFallback(stream: MediaStream, originalError: unknown)
 export async function startPcmRecorder(): Promise<PcmRecorder> {
   if (!warmIsLive()) {
     await releaseMic();
+    beginMicSession();
     const requestGeneration = ++micGeneration;
-    const stream = await getMicStreamWithRetries(requestGeneration);
+    let stream: MediaStream;
+    try {
+      stream = await getMicStreamWithRetries(requestGeneration);
+    } catch (error) {
+      endMicSession();
+      throw error;
+    }
     if (requestGeneration !== micGeneration) {
       stopStream(stream);
+      endMicSession();
       throw makeDomException("Microphone request was superseded", "AbortError");
     }
     try {
@@ -445,7 +475,12 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   if (!active) throw makeDomException("Microphone is unavailable", "NotReadableError");
   const ctx = acquireRecorderContext();
   const { source } = active;
-  await resumeRecorderContext(ctx);
+  try {
+    await resumeRecorderContext(ctx);
+  } catch (resumeError) {
+    retireRecorderContext();
+    return startPcmRecorder();
+  }
 
   // ScriptProcessorNode is deprecated but universally supported; AudioWorklet
   // adds significant setup we don't need for a short push-to-talk clip.
