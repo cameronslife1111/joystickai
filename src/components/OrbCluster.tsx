@@ -62,21 +62,64 @@ function giggle(el: HTMLButtonElement) {
   }
 }
 
+const LONG_PRESS_MS = 500;
+
 interface ClusterOrbProps {
   /** Full literal class (e.g. "glow-orb-blue") so Tailwind's scanner sees it. */
   orbClass: string;
   Icon: LucideIcon;
   label: string;
   onPress: () => void;
+  /** Optional hold action; when it fires, the tap action is suppressed. */
+  onLongPress?: () => void;
   placement: CSSProperties;
   buttonRef?: (el: HTMLButtonElement | null) => void;
 }
 
-function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: ClusterOrbProps) {
+function ClusterOrb({
+  orbClass,
+  Icon,
+  label,
+  onPress,
+  onLongPress,
+  placement,
+  buttonRef,
+}: ClusterOrbProps) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fired = useRef(false);
+
+  const clearTimer = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!onLongPress) return;
+    fired.current = false;
+    clearTimer();
+    const el = e.currentTarget;
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      fired.current = true;
+      giggle(el);
+      onLongPress();
+    }, LONG_PRESS_MS);
+  };
+
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    clearTimer();
+    if (fired.current) {
+      fired.current = false;
+      return;
+    }
     giggle(e.currentTarget);
     onPress();
   };
+
+  useEffect(() => clearTimer, []);
+
   return (
     <button
       type="button"
@@ -84,6 +127,14 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: Cl
       aria-label={label}
       title={label}
       onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={clearTimer}
+      onPointerMove={clearTimer}
+      onPointerLeave={clearTimer}
+      onPointerCancel={clearTimer}
+      onContextMenu={(e) => {
+        if (onLongPress) e.preventDefault();
+      }}
       className={cn("glow-orb", orbClass)}
       style={placement}
     >
