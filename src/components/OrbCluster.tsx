@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent, RefObject } from "react";
+import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,9 +18,17 @@ import { cn } from "@/lib/utils";
  * the parent via `centerRef` and `useOrbGestures`.
  */
 
+/** Orbs that can be pressed programmatically (keyboard arrows). */
+export type OrbId = "prev" | "next" | "menu" | "nextDoc";
+
 interface OrbClusterProps {
   recording: boolean;
   centerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Receives an imperative press function so keyboard shortcuts can go through
+   * the exact same click path (giggle animation included) as a real press.
+   */
+  pressRef?: RefObject<((id: OrbId) => void) | null>;
   onPrev: () => void;
   onNext: () => void;
   onMenu: () => void;
@@ -60,9 +69,10 @@ interface ClusterOrbProps {
   label: string;
   onPress: () => void;
   placement: CSSProperties;
+  buttonRef?: (el: HTMLButtonElement | null) => void;
 }
 
-function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbProps) {
+function ClusterOrb({ orbClass, Icon, label, onPress, placement, buttonRef }: ClusterOrbProps) {
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     giggle(e.currentTarget);
     onPress();
@@ -70,6 +80,7 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbPro
   return (
     <button
       type="button"
+      ref={buttonRef}
       aria-label={label}
       title={label}
       onClick={handleClick}
@@ -84,6 +95,7 @@ function ClusterOrb({ orbClass, Icon, label, onPress, placement }: ClusterOrbPro
 export function OrbCluster({
   recording,
   centerRef,
+  pressRef,
   onPrev,
   onNext,
   onMenu,
@@ -91,6 +103,20 @@ export function OrbCluster({
   onDelete,
   onRepeat,
 }: OrbClusterProps) {
+  const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
+  const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
+    buttons.current[id] = el;
+  };
+
+  useEffect(() => {
+    if (!pressRef) return;
+    const ref = pressRef as { current: ((id: OrbId) => void) | null };
+    ref.current = (id) => buttons.current[id]?.click();
+    return () => {
+      ref.current = null;
+    };
+  }, [pressRef]);
+
   return (
     <div className="orb-cluster">
       <ClusterOrb
@@ -98,6 +124,7 @@ export function OrbCluster({
         Icon={ArrowUp}
         label="Previous sentence"
         onPress={onPrev}
+        buttonRef={setButton("prev")}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
       <ClusterOrb
@@ -112,6 +139,7 @@ export function OrbCluster({
         Icon={Menu}
         label="Open menu"
         onPress={onMenu}
+        buttonRef={setButton("menu")}
         placement={{ gridColumn: 2, gridRow: 2 }}
       />
       <div
@@ -127,6 +155,7 @@ export function OrbCluster({
         Icon={FileText}
         label="Next document"
         onPress={onNextDoc}
+        buttonRef={setButton("nextDoc")}
         placement={{ gridColumn: 4, gridRow: 2 }}
       />
       <ClusterOrb
@@ -141,6 +170,7 @@ export function OrbCluster({
         Icon={ArrowDown}
         label="Next sentence"
         onPress={onNext}
+        buttonRef={setButton("next")}
         placement={{ gridColumn: 3, gridRow: 3 }}
       />
     </div>

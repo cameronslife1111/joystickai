@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { OrbCluster } from "@/components/OrbCluster";
+import { OrbCluster, type OrbId } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
@@ -767,6 +767,8 @@ function AppPage() {
 
   // Track "busy" UI state via a ref so the auto-repeat timer can check it at
   // fire time without re-subscribing every time a dialog toggles.
+  const orbPressRef = useRef<((id: OrbId) => void) | null>(null);
+
   const busyRef = useRef(false);
   busyRef.current =
     editing ||
@@ -1441,6 +1443,35 @@ function AppPage() {
       rebindKey: editing ? "edit" : "read",
     },
   );
+
+  // Arrow keys mirror the four navigation orbs for keyboard / Bluetooth-keyboard
+  // users. The press goes through the real button click so the giggle animation
+  // and handler are identical to a tap.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const id =
+        e.key === "ArrowUp"
+          ? "prev"
+          : e.key === "ArrowDown"
+            ? "next"
+            : e.key === "ArrowLeft"
+              ? "menu"
+              : e.key === "ArrowRight"
+                ? "nextDoc"
+                : null;
+      if (!id) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (busyRef.current) return; // editor / dialog open
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+      if (!orbPressRef.current) return;
+      e.preventDefault();
+      orbPressRef.current(id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
   useEffect(() => {
@@ -2838,6 +2869,7 @@ function AppPage() {
           <OrbCluster
             recording={recording}
             centerRef={centerRef}
+            pressRef={orbPressRef}
             onPrev={() => void onSwipeUp()}
             onNext={() => void advanceSentence()}
             onMenu={() => setMenuOpen(true)}
