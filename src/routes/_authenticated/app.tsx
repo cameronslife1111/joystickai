@@ -2891,9 +2891,10 @@ function AppPage() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
-            onRepeat={() => {
-              const text = currentSentence?.content;
-              if (text) speak(text, claimSpeech());
+            onPinnedDoc={() => void openPinnedDocument()}
+            onPinnedDocLongPress={() => {
+              setPinPickerQuery("");
+              setPinPickerOpen(true);
             }}
           />
         </section>
