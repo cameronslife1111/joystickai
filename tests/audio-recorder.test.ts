@@ -58,6 +58,15 @@ class FakeContext {
   }
 }
 
+class InterruptibleContext extends FakeContext {
+  static latest: InterruptibleContext | null = null;
+
+  constructor() {
+    super();
+    InterruptibleContext.latest = this;
+  }
+}
+
 class HangingContext extends FakeContext {
   state = "suspended";
   resume() {
@@ -71,7 +80,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function useFakeMic(getUserMedia: () => Promise<unknown>) {
+function useFakeMic(getUserMedia: () => Promise<unknown>, audioSession?: { type: string; state?: string }) {
   Object.assign(globalThis, {
     window: Object.assign(globalThis, { AudioContext: FakeContext }),
   });
@@ -81,11 +90,17 @@ function useFakeMic(getUserMedia: () => Promise<unknown>) {
       visibilityState: "visible",
       addEventListener() {},
       removeEventListener() {},
+      querySelector() { return null; },
     },
   });
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
-    value: { mediaDevices: { getUserMedia } },
+    value: {
+      mediaDevices: { getUserMedia },
+      userAgent: audioSession ? "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X)" : "",
+      maxTouchPoints: audioSession ? 5 : 0,
+      ...(audioSession ? { audioSession } : {}),
+    },
   });
 }
 
@@ -157,6 +172,82 @@ describe("audio recorder lifecycle", () => {
     const recorder = await startPcmRecorder();
     expect(calls).toBe(3);
     recorder.cancel();
+  });
+
+  test("switches iPhone into recording mode before opening the microphone", async () => {
+    const stream = new FakeStream();
+    const session = { type: "ambient", state: "active" };
+    const seenTypes: string[] = [];
+    useFakeMic(() => {
+      seenTypes.push(session.type);
+      return Promise.resolve(stream);
+    }, session);
+
+    const recorder = await startPcmRecorder();
+
+    expect(seenTypes).toEqual(["play-and-record"]);
+    recorder.cancel();
+    await releaseMic();
+    expect(session.type).toBe("ambient");
+  });
+
+  test("delayed mixable retries cannot overwrite recording mode", async () => {
+    const stream = new FakeStream();
+    const session = { type: "ambient", state: "active" };
+    useFakeMic(() => Promise.resolve(stream), session);
+
+    await releaseMic();
+    const recorder = await startPcmRecorder();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect(session.type).toBe("play-and-record");
+    recorder.cancel();
+    await releaseMic();
+  });
+
+  test("stays in recording mode across transient iOS startup retries", async () => {
+    const stream = new FakeStream();
+    const session = { type: "ambient", state: "active" };
+    const seenTypes: string[] = [];
+    let calls = 0;
+    useFakeMic(() => {
+      calls += 1;
+      seenTypes.push(session.type);
+      if (calls < 3) {
+        return Promise.reject(new DOMException("The operation was interrupted", "AbortError"));
+      }
+      return Promise.resolve(stream);
+    }, session);
+
+    const recorder = await startPcmRecorder();
+
+    expect(seenTypes).toEqual(["play-and-record", "play-and-record", "play-and-record"]);
+    recorder.cancel();
+    await releaseMic();
+  });
+
+  test("rebuilds when a warm stream stays live but the recorder context is interrupted", async () => {
+    const first = new FakeStream();
+    const second = new FakeStream();
+    let calls = 0;
+    useFakeMic(() => {
+      calls += 1;
+      return Promise.resolve(calls === 1 ? first : second);
+    });
+    useFakeContext(InterruptibleContext);
+    globalThis.window.dispatchEvent(new Event("focus"));
+
+    const rec1 = await startPcmRecorder();
+    rec1.cancel();
+    const interrupted = InterruptibleContext.latest;
+    if (!interrupted) throw new Error("missing fake recorder context");
+    interrupted.state = "interrupted";
+
+    const rec2 = await startPcmRecorder();
+
+    expect(calls).toBe(2);
+    expect(first.track.stopCalls).toBe(1);
+    rec2.cancel();
   });
 
   test("rebuilds a recorder context when resume hangs", async () => {
