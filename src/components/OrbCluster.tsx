@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent, RefObject } from "react";
+import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowDown, ArrowUp, FileText, Menu, Trash2, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -138,6 +139,7 @@ export function OrbCluster({
         Icon={Menu}
         label="Open menu"
         onPress={onMenu}
+        buttonRef={setButton("menu")}
         placement={{ gridColumn: 2, gridRow: 2 }}
       />
       <div
@@ -153,6 +155,7 @@ export function OrbCluster({
         Icon={FileText}
         label="Next document"
         onPress={onNextDoc}
+        buttonRef={setButton("nextDoc")}
         placement={{ gridColumn: 4, gridRow: 2 }}
       />
       <ClusterOrb
@@ -167,6 +170,7 @@ export function OrbCluster({
         Icon={ArrowDown}
         label="Next sentence"
         onPress={onNext}
+        buttonRef={setButton("next")}
         placement={{ gridColumn: 3, gridRow: 3 }}
       />
     </div>
