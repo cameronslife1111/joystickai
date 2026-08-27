@@ -96,7 +96,6 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       return originalFetch(input as any, init);
     }
 
-    const rewritten = rewriteUrl(url);
     const method = (init?.method ?? (typeof input !== "string" && !(input instanceof URL) ? input.method : "GET") ?? "GET").toUpperCase();
 
     // When input is a Request object, fold it into init so the rewritten URL is used.
@@ -112,6 +111,13 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       };
     }
 
+    // Big bodies (file uploads) go straight to the backend: buffering them
+    // through the proxy worker only adds latency and memory pressure.
+    const upload = isUploadLike(baseInit.body);
+    const target = upload ? url : rewriteUrl(url);
+    const timeoutMs = timeoutFor(baseInit.body);
+    const reason = upload ? UPLOAD_TIMEOUT_REASON : REQUEST_TIMEOUT_REASON;
+
     const attempts = shouldRetry(method) ? MAX_RETRIES + 1 : 1;
     let lastErr: unknown;
 
@@ -122,9 +128,9 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
         if (externalSignal.aborted) controller.abort();
         else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
       }
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(new DOMException(reason, "TimeoutError")), timeoutMs);
       try {
-        const res = await originalFetch(rewritten, { ...baseInit, signal: controller.signal });
+        const res = await originalFetch(target, { ...baseInit, signal: controller.signal });
         clearTimeout(timer);
         return res;
       } catch (err) {
@@ -136,6 +142,7 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       }
     }
     throw lastErr;
+
   };
 }
 
