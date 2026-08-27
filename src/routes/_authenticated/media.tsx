@@ -386,7 +386,14 @@ function MediaPage() {
         console.log("[media] inserted row for", file.name);
       } catch (e: any) {
         console.error("[media] upload failed", file.name, e);
-        toast.error(`${file.name}: ${e?.message ?? "upload failed"}`);
+        const raw = String(e?.message ?? "");
+        const aborted = e?.name === "AbortError" || e?.name === "TimeoutError" || /abort|timed out|timeout/i.test(raw);
+        toast.error(
+          aborted
+            ? `${file.name}: upload timed out — check your connection and try again`
+            : `${file.name}: ${raw || "upload failed"}`,
+        );
+
       } finally {
         setUploadProgress({ done: i + 1, total: arr.length });
       }
