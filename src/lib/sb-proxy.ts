@@ -13,8 +13,43 @@ const BACKEND_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const TIMEOUT_MS = 20_000;
 const MAX_RETRIES = 2;
 
+// Anything at/above this body size is treated as a file upload: it gets a
+// generous, size-scaled timeout and goes straight to the backend instead of
+// being buffered through the same-origin proxy worker.
+const LARGE_BODY_BYTES = 512 * 1024;
+const UPLOAD_TIMEOUT_FLOOR_MS = 60_000;
+const UPLOAD_TIMEOUT_PER_MB_MS = 30_000;
+const UPLOAD_TIMEOUT_CEILING_MS = 300_000;
+
+export const UPLOAD_TIMEOUT_REASON = "Upload timed out — check your connection and try again";
+const REQUEST_TIMEOUT_REASON = "Request timed out — check your connection and try again";
+
 function isClient() {
   return typeof window !== "undefined" && typeof window.fetch === "function";
+}
+
+// Best-effort body size. Returns null when the size can't be determined
+// (streams, FormData) — FormData is treated as an upload regardless.
+function bodySize(body: unknown): number | null {
+  if (body == null) return 0;
+  if (typeof body === "string") return body.length;
+  if (typeof Blob !== "undefined" && body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer) return body.byteLength;
+  if (ArrayBuffer.isView(body as any)) return (body as ArrayBufferView).byteLength;
+  return null;
+}
+
+function isUploadLike(body: unknown): boolean {
+  if (typeof FormData !== "undefined" && body instanceof FormData) return true;
+  const size = bodySize(body);
+  return size != null && size >= LARGE_BODY_BYTES;
+}
+
+function timeoutFor(body: unknown): number {
+  if (!isUploadLike(body)) return TIMEOUT_MS;
+  const size = bodySize(body) ?? 0;
+  const scaled = UPLOAD_TIMEOUT_FLOOR_MS + (size / (1024 * 1024)) * UPLOAD_TIMEOUT_PER_MB_MS;
+  return Math.min(UPLOAD_TIMEOUT_CEILING_MS, Math.max(UPLOAD_TIMEOUT_FLOOR_MS, scaled));
 }
 
 function rewriteUrl(rawUrl: string): string {
@@ -45,6 +80,7 @@ function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+
 if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
   (window as any).__sbProxyInstalled = true;
   const originalFetch = window.fetch.bind(window);
@@ -60,7 +96,6 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       return originalFetch(input as any, init);
     }
 
-    const rewritten = rewriteUrl(url);
     const method = (init?.method ?? (typeof input !== "string" && !(input instanceof URL) ? input.method : "GET") ?? "GET").toUpperCase();
 
     // When input is a Request object, fold it into init so the rewritten URL is used.
@@ -76,6 +111,13 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       };
     }
 
+    // Big bodies (file uploads) go straight to the backend: buffering them
+    // through the proxy worker only adds latency and memory pressure.
+    const upload = isUploadLike(baseInit.body);
+    const target = upload ? url : rewriteUrl(url);
+    const timeoutMs = timeoutFor(baseInit.body);
+    const reason = upload ? UPLOAD_TIMEOUT_REASON : REQUEST_TIMEOUT_REASON;
+
     const attempts = shouldRetry(method) ? MAX_RETRIES + 1 : 1;
     let lastErr: unknown;
 
@@ -86,9 +128,9 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
         if (externalSignal.aborted) controller.abort();
         else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
       }
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(new DOMException(reason, "TimeoutError")), timeoutMs);
       try {
-        const res = await originalFetch(rewritten, { ...baseInit, signal: controller.signal });
+        const res = await originalFetch(target, { ...baseInit, signal: controller.signal });
         clearTimeout(timer);
         return res;
       } catch (err) {
@@ -100,6 +142,7 @@ if (isClient() && BACKEND_URL && !(window as any).__sbProxyInstalled) {
       }
     }
     throw lastErr;
+
   };
 }
 
