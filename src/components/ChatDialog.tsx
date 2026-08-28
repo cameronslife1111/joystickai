@@ -59,8 +59,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
-import { useRealtimeVoice } from "@/lib/use-realtime-voice";
-import { buildRealtimeDocContext } from "@/lib/realtime.functions";
+import { useHandsFree } from "@/lib/hands-free";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
@@ -587,109 +586,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   // ── 📞 Hands-free call (OpenAI Realtime, interruptible) ───────────────────
   // Everything spoken is mirrored into this thread as normal chat messages.
-  const appendVoiceMessage = useCallback(
-    async (role: "user" | "assistant", content: string) => {
-      const threadId = activeThreadId;
-      if (!threadId || !userId) return;
-      const text = role === "assistant" ? toPlainText(content) : content.trim();
-      if (!text) return;
-      const { data: row, error } = await supabase
-        .from("chat_messages")
-        .insert({ user_id: userId, thread_id: threadId, role, content: text, kind: "text" })
-        .select("id, role, content, created_at, kind, plan_id")
-        .single();
-      if (error || !row) return;
-      qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) => [
-        ...(cur ?? []),
-        row as ChatRow,
-      ]);
-      bumpThread(threadId);
-    },
-    [activeThreadId, userId, qc, bumpThread],
-
-  );
-
   const messagesRef = useRef<ChatRow[]>([]);
   messagesRef.current = messages;
 
-  const docIdsRef = useRef<string[]>([]);
-  docIdsRef.current = contextDocIds;
+  // The call lives above this dialog (see HandsFreeProvider) so it keeps
+  // running while the user moves around the rest of the app.
+  const call = useHandsFree();
+  const voice = useMemo(
+    () => ({
+      state: call.threadId && call.threadId !== activeThreadId ? ("idle" as const) : call.state,
+      live: call.live && call.threadId === activeThreadId,
+      connecting: call.connecting && call.threadId === activeThreadId,
+      stop: call.stop,
+      start: () =>
+        activeThreadId
+          ? call.start(
+              activeThreadId,
+              messagesRef.current
+                .slice(-10)
+                .filter((m) => (m.content ?? "").trim())
+                .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+                .join("\n"),
+            )
+          : Promise.resolve(),
+    }),
+    [call, activeThreadId],
+  );
 
-  const voice = useRealtimeVoice({
-    buildDocumentIds: useCallback(() => docIdsRef.current, []),
-    buildContext: useCallback(
-      () =>
-        messagesRef.current
-          .slice(-10)
-          .filter((m) => (m.content ?? "").trim())
-          .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
-          .join("\n"),
-      [],
-    ),
-    onUserText: useCallback(
-      (t: string) => void appendVoiceMessage("user", t),
-      [appendVoiceMessage],
-    ),
-    onAssistantText: useCallback(
-      (t: string) => void appendVoiceMessage("assistant", t),
-      [appendVoiceMessage],
-    ),
-    onError: useCallback((m: string) => toast.error(m), []),
-  });
-
-  // Never keep a call running once the chat closes or the thread changes.
+  // A call belongs to one thread — switching conversations ends it.
   useEffect(() => {
-    if (!open) voice.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  useEffect(() => {
-    if (voice.state !== "idle") voice.stop();
+    if (call.threadId && activeThreadId && call.threadId !== activeThreadId) call.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId]);
-
-  // Keep a live call's document context in sync when the user attaches or
-  // removes a document mid-conversation.
-  const fetchDocContext = useServerFn(buildRealtimeDocContext);
-  const pushedDocsRef = useRef<string | null>(null);
-  const docsKey = contextDocIds.join(",");
-  useEffect(() => {
-    if (!voice.live) {
-      pushedDocsRef.current = null;
-      return;
-    }
-    // The call was minted with whatever was attached at start time.
-    if (pushedDocsRef.current === null) {
-      pushedDocsRef.current = docsKey;
-      return;
-    }
-    if (pushedDocsRef.current === docsKey) return;
-    pushedDocsRef.current = docsKey;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const ids = docsKey ? docsKey.split(",") : [];
-        const { block, included, trimmed } = await fetchDocContext({
-          data: { documentIds: ids },
-        });
-        if (cancelled) return;
-        if (!voice.updateContext(block)) return;
-        if (included === 0) {
-          toast.success("Orby is no longer seeing any documents");
-        } else {
-          toast.success(
-            `Orby can now see ${included} document${included === 1 ? "" : "s"}` +
-              (trimmed ? " (trimmed to fit)" : ""),
-          );
-        }
-      } catch {
-        if (!cancelled) toast.error("Couldn't update the call's documents");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docsKey, voice.live]);
 
   // Read-aloud would fight the live voice — silence it while live.
   useEffect(() => {

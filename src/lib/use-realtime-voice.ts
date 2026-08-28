@@ -45,6 +45,28 @@ async function acquireMic(reassertSession: () => void): Promise<MediaStream> {
   }
 }
 
+function normalizeSpeech(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * True when a "user" transcript is really the speaker feeding Orby's own voice
+ * back into the mic — the cause of Orby replying to herself.
+ */
+function isSelfEcho(userText: string, assistantText: string): boolean {
+  const u = normalizeSpeech(userText);
+  const a = normalizeSpeech(assistantText);
+  if (!u || !a || u.length < 6) return false;
+  if (a.includes(u)) return true;
+  const words = u.split(" ");
+  const hits = words.filter((w) => w.length > 2 && a.includes(w)).length;
+  return words.length >= 4 && hits / words.length >= 0.9;
+}
+
 type Options = {
   /** Recent conversation text handed to the model as call context. */
   buildContext: () => string;
@@ -81,6 +103,10 @@ export function useRealtimeVoice({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const busyRef = useRef(false);
+  /** Turn ids already mirrored into the chat — the model repeats "done" events. */
+  const seenTurnsRef = useRef<Set<string>>(new Set());
+  /** Last thing Orby said, for the speaker-echo guard. */
+  const lastAssistantRef = useRef("");
   /** iOS audio-session ownership token held for the whole call. */
   const sessionTokenRef = useRef<number | null>(null);
 
@@ -109,6 +135,8 @@ export function useRealtimeVoice({
     const sessionToken = sessionTokenRef.current;
     sessionTokenRef.current = null;
     endIosRecordingSession(sessionToken);
+    seenTurnsRef.current.clear();
+    lastAssistantRef.current = "";
     setSpeaking(false);
     setState("idle");
   }, []);
@@ -145,6 +173,11 @@ export function useRealtimeVoice({
 
       const audio = document.createElement("audio");
       audio.autoplay = true;
+      // Inline playback keeps iOS from handing the stream to the fullscreen
+      // player (which bypasses echo cancellation and makes Orby hear herself).
+      audio.setAttribute("playsinline", "");
+      (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+      audio.volume = 1;
       audio.style.display = "none";
       document.body.appendChild(audio);
       audioRef.current = audio;
@@ -166,10 +199,27 @@ export function useRealtimeVoice({
         }
         const type: string = evt?.type ?? "";
 
+        // Only ever mirror a given turn once: the model emits repeat and
+        // legacy-named "done" events, which otherwise read as extra turns.
+        const once = (key: string) => {
+          if (!key) return true;
+          if (seenTurnsRef.current.has(key)) return false;
+          seenTurnsRef.current.add(key);
+          if (seenTurnsRef.current.size > 200) {
+            seenTurnsRef.current = new Set([...seenTurnsRef.current].slice(-100));
+          }
+          return true;
+        };
+
         // User's finished speech.
         if (type === "conversation.item.input_audio_transcription.completed") {
           const t = (evt.transcript ?? "").trim();
-          if (t) cbRef.current.onUserText(t);
+          if (!t) return;
+          if (!once(`user:${evt.item_id ?? t}`)) return;
+          // Speaker bleed: this is Orby's own sentence coming back through the
+          // mic. Mirroring it would make her answer herself.
+          if (isSelfEcho(t, lastAssistantRef.current)) return;
+          cbRef.current.onUserText(t);
           return;
         }
         // Orby's finished spoken reply (event name varies by model version).
@@ -178,8 +228,11 @@ export function useRealtimeVoice({
           type === "response.audio_transcript.done"
         ) {
           const t = (evt.transcript ?? "").trim();
-          if (t) cbRef.current.onAssistantText(t);
           setSpeaking(false);
+          if (!t) return;
+          if (!once(`assistant:${evt.item_id ?? evt.response_id ?? t}`)) return;
+          lastAssistantRef.current = t;
+          cbRef.current.onAssistantText(t);
           return;
         }
         if (type === "response.created") setSpeaking(true);

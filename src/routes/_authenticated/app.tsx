@@ -21,6 +21,7 @@ import { transcribeAudio } from "@/lib/whisper.functions";
 import { startPcmRecorder, blobToBase64, releaseMic, micErrorMessage, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
+import { HandsFreeProvider, HandsFreeIndicator } from "@/lib/hands-free";
 import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,14 @@ function MenuGridButton({ index, slot }: { index: number; slot: MenuSlot }) {
 }
 
 function AppPage() {
+  return (
+    <HandsFreeProvider>
+      <AppPageInner />
+    </HandsFreeProvider>
+  );
+}
+
+function AppPageInner() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const centerRef = useRef<HTMLDivElement>(null);
@@ -3867,6 +3876,7 @@ function AppPage() {
           if (f) void handleImportFile(f);
         }}
       />
+      <HandsFreeIndicator hidden={chatOpen} />
       <ChatDialog
         open={chatOpen}
         onOpenChange={(o) => {
