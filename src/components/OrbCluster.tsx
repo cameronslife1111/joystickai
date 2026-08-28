@@ -235,9 +235,11 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-yellow"
         Icon={Menu}
-        label="Open menu"
+        label="Open menu (hold for New idea)"
         onPress={onMenu}
+        onLongPress={onMenuLongPress}
         buttonRef={setButton("menu")}
+
         placement={{ gridColumn: 2, gridRow: 2 }}
       />
       <div
