@@ -2897,10 +2897,20 @@ function AppPage() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
-            onPinnedDoc={() => void openPinnedDocument()}
-            onPinnedDocLongPress={() => {
-              setPinPickerQuery("");
-              setPinPickerOpen(true);
+            orangeMode={orangeMode}
+            onOrangeTap={() => {
+              if (orangeMode === "pin") void openPinnedDocument();
+              else {
+                setSearchQuery("");
+                setSearchOpen(true);
+              }
+            }}
+            onOrangeLongPress={() => {
+              setOrangeMode((m) => {
+                const next = m === "pin" ? "search" : "pin";
+                toast(next === "pin" ? "📌 Pinned document" : "🔍 Search docs", { id: "orange-mode" });
+                return next;
+              });
             }}
             moveMode={pinkMode}
             onMoveJump={() => {
