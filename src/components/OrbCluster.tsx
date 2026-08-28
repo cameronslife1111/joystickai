@@ -193,6 +193,7 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
+  onPrevLongPress,
   onMenuLongPress,
   onPinnedDoc,
   onPinnedDocLongPress,
@@ -222,8 +223,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-blue"
         Icon={ArrowUp}
-        label="Previous sentence"
+        label="Previous sentence (hold to lock/unlock list)"
         onPress={onPrev}
+        onLongPress={onPrevLongPress}
         buttonRef={setButton("prev")}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
