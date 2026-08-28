@@ -87,8 +87,15 @@ export function useRealtimeVoice({
         data: { context: buildContext(), documentIds: buildDocumentIds() },
       });
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      // iOS refuses audio capture while the page sits in the mixable "ambient"
+      // category speech playback puts it in ("audio session category is not
+      // compatible with audio capture"). Take ownership of a play-and-record
+      // session before opening the mic and keep it for the whole call.
+      if (sessionTokenRef.current === null) {
+        sessionTokenRef.current = beginIosRecordingSession();
+      }
+      const stream = await acquireMic(() => {
+        sessionTokenRef.current = beginIosRecordingSession();
       });
       streamRef.current = stream;
 
