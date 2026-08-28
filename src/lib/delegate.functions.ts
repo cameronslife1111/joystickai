@@ -68,7 +68,7 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
 
       const provider = createOpenAiProvider(apiKey);
       const { text } = await generateText({
-        model: provider("gpt-5.6-terra"),
+        model: provider("gpt-5.6-sol"),
         system: DELEGATE_SUGGEST_SYSTEM,
         messages: [
           {
