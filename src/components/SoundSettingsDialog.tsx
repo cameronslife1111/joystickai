@@ -40,8 +40,15 @@ export function SoundSettingsDialog({
           <Switch checked={enabled} onCheckedChange={onEnabledChange} aria-label="Read sentences aloud" />
         </div>
 
-        <div className="space-y-2">
-          {TTS_VOICES.map((option) => {
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          {(["female", "male"] as const).flatMap((group) => [
+            <div
+              key={`h-${group}`}
+              className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              {group === "female" ? "US female voices" : "US male voices"}
+            </div>,
+            ...TTS_VOICES.filter((o) => o.gender === group).map((option) => {
             const selected = option.id === voice;
             return (
               <div
@@ -76,8 +83,9 @@ export function SoundSettingsDialog({
                   <Volume2 />
                 </Button>
               </div>
-            );
-          })}
+              );
+            }),
+          ])}
         </div>
       </DialogContent>
     </Dialog>
