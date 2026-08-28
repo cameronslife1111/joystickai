@@ -11,13 +11,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from six little glowing orbs.",
+          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
       },
       { property: "og:title", content: "Orby — Focus more in a busy world, one sentence at a time" },
       {
         property: "og:description",
         content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from six little glowing orbs.",
+          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -96,7 +96,7 @@ function Hero() {
       <Reveal delay="240ms">
         <p className="mx-auto mt-6 max-w-xl text-base text-slate-400 md:text-lg">
           Orby reads your documents to you one sentence at a time, listens when you speak, and runs
-          multi-step plans — all through six little glowing orbs.
+          multi-step plans — all through eight little glowing orbs.
         </p>
       </Reveal>
       <Reveal delay="360ms">
