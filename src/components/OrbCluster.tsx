@@ -287,10 +287,15 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-gray"
-        Icon={Image}
-        label="Media gallery"
-        badge={mediaBadge}
-        onPress={onMediaGallery}
+        Icon={grayMode === "media" ? Image : MessageSquare}
+        label={
+          grayMode === "media"
+            ? "Media gallery (hold for Chat)"
+            : "Chat (hold for Media gallery)"
+        }
+        badge={grayBadge}
+        onPress={onGrayTap}
+        onLongPress={onGrayLongPress}
         placement={{ gridColumn: 5, gridRow: 3 }}
       />
     </div>
