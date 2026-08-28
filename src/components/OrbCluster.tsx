@@ -34,27 +34,24 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
-  /** Orange orb mode: "pin" = pinned document, "search" = Search docs. */
-  orangeMode: "pin" | "search";
-  /** Orange orb tap: run the action for the current mode. */
-  onOrangeTap: () => void;
-  /** Orange orb hold: toggle between Pinned document and Search docs. */
-  onOrangeLongPress: () => void;
-  /** Pink orb mode: "move" = Move sentence sheet, "jump" = Jump to sheet. */
-  moveMode: "move" | "jump";
-  /** Pink orb tap: open the sheet for the current mode. */
-  onMoveJump: () => void;
-  /** Pink orb hold: toggle between Move sentence and Jump to. */
-  onMoveJumpLongPress: () => void;
-  /** Gray orb mode: "media" = Media gallery, "chat" = Chat dialog. */
-  grayMode: "media" | "chat";
-  /** Gray orb tap: run the action for the current mode. */
-  onGrayTap: () => void;
-  /** Gray orb hold: toggle between Media gallery and Chat. */
-  onGrayLongPress: () => void;
-  /** Badge count shown on the gray orb (media unseen or chat unread). */
+  /** Yellow orb hold: open the New idea composer. */
+  onMenuLongPress: () => void;
+  /** Orange orb tap: open the pinned document. */
+  onPinnedDoc: () => void;
+  /** Orange orb hold: open Search docs. */
+  onPinnedDocLongPress: () => void;
+  /** Pink orb tap: open the Move sentence sheet. */
+  onMoveSentence: () => void;
+  /** Pink orb hold: open the Jump to sheet. */
+  onJumpTo: () => void;
+  /** Gray orb tap: open the media gallery. */
+  onMediaGallery: () => void;
+  /** Gray orb hold: open Chat. */
+  onChat: () => void;
+  /** Badge count shown on the gray orb (unseen media). */
   grayBadge?: number;
 }
+
 
 /** Short, soundless jiggle played on the pressed orb. */
 function giggle(el: HTMLButtonElement) {
