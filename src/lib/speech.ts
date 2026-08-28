@@ -61,6 +61,19 @@ export function isSpeechEnabled(): boolean {
   return speechEnabled;
 }
 
+// Temporary override held while a hands-free voice call is live: the call has
+// its own voice, so no other speech path in the app may play (or be billed).
+let speechSuppressed = false;
+
+export function setSpeechSuppressed(on: boolean) {
+  speechSuppressed = on;
+  if (on) cancelSpeech();
+}
+
+export function isSpeechSuppressed(): boolean {
+  return speechSuppressed;
+}
+
 export function setSpeechVoice(voice: TtsVoice) {
   selectedVoice = voice;
 }
