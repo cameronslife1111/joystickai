@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -194,8 +194,9 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
-  onPinnedDoc,
-  onPinnedDocLongPress,
+  orangeMode,
+  onOrangeTap,
+  onOrangeLongPress,
   moveMode,
   onMoveJump,
   onMoveJumpLongPress,
@@ -261,10 +262,14 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
-        Icon={Pin}
-        label="Open pinned document (hold to pin another)"
-        onPress={onPinnedDoc}
-        onLongPress={onPinnedDocLongPress}
+        Icon={orangeMode === "pin" ? Pin : Search}
+        label={
+          orangeMode === "pin"
+            ? "Open pinned document (hold for Search)"
+            : "Search docs (hold for Pinned document)"
+        }
+        onPress={onOrangeTap}
+        onLongPress={onOrangeLongPress}
         placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb
