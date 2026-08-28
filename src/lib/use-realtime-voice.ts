@@ -173,6 +173,11 @@ export function useRealtimeVoice({
 
       const audio = document.createElement("audio");
       audio.autoplay = true;
+      // Inline playback keeps iOS from handing the stream to the fullscreen
+      // player (which bypasses echo cancellation and makes Orby hear herself).
+      audio.setAttribute("playsinline", "");
+      (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
+      audio.volume = 1;
       audio.style.display = "none";
       document.body.appendChild(audio);
       audioRef.current = audio;
