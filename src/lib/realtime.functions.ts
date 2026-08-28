@@ -13,7 +13,11 @@ const docsSchema = z.object({
   documentIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
-export const REALTIME_MODEL = "gpt-realtime";
+/**
+ * Cheaper mini realtime voice model for hands-free calls. Typed chat, planning
+ * and everything else stay on gpt-5.6-sol, so ending a call returns to sol.
+ */
+export const REALTIME_MODEL = "gpt-realtime-2.1-mini";
 /** Natural American female voice for the hands-free call. */
 export const REALTIME_VOICE = "shimmer";
 
