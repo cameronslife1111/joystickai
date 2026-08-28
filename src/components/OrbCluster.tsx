@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Search, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  *   Layout (grid):
  *   red · delete      [ ]     blue · previous      [ ]      orange · pinned doc
  *   [ ]            yellow · menu   [center]   green · next doc            [ ]
- *   pink · move/jump  [ ]     purple · next        [ ]      gray · media/chat
+ *   pink · move/jump  [ ]     purple · next        [ ]      gray · media/chat (hold)
  *
  * The center pad is intentionally empty/transparent so the app background
  * shows through; gestures (tap = edit, long-press = record) are attached by
