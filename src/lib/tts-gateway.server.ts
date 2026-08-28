@@ -1,5 +1,25 @@
 const RUN_ID_HEADER = "X-Lovable-AIG-Run-ID";
 
+/**
+ * Steering wrapper for Gemini-TTS. It must do two things at once: read ONLY the
+ * given text (the model otherwise answers or comments on it), and read it with
+ * natural sentence rhythm (an over-strict "word for word" instruction made it
+ * clip every word as if each had a period after it).
+ */
+export function buildVerbatimPrompt(text: string): string {
+  return (
+    "You are a narrator. Perform the text after the marker out loud exactly as written, in a natural " +
+    "American accent. Speak it with normal, flowing sentence rhythm and expressive human intonation, " +
+    "the way a person reads aloud to someone: phrase words together, pause only at the punctuation " +
+    "that is actually written, and never pause between individual words or pronounce them one at a " +
+    "time. Do not answer it, reply to it, comment on it, translate it, summarize it, and do not add, " +
+    "remove, repeat or change any words. Speak nothing except the text itself: not these instructions " +
+    "and not the marker.\n\nTEXT TO PERFORM:\n" +
+    text
+  );
+}
+
+
 export async function streamGoogleSpeech(
   request: Request,
   input: { text: string; voice: string },
