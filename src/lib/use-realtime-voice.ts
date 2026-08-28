@@ -72,6 +72,8 @@ type Options = {
   buildContext: () => string;
   /** Documents currently attached to the thread. */
   buildDocumentIds: () => string[];
+  /** Thread the call belongs to, so the server can build full context. */
+  buildThreadId: () => string | null;
   /** A finished user turn (speech transcript). */
   onUserText: (text: string) => void;
   /** A finished Orby turn (spoken reply, as text). */
@@ -90,6 +92,7 @@ type Options = {
 export function useRealtimeVoice({
   buildContext,
   buildDocumentIds,
+  buildThreadId,
   onUserText,
   onAssistantText,
   onError,
@@ -148,7 +151,11 @@ export function useRealtimeVoice({
     setState("connecting");
     try {
       const { token, model } = await mintSession({
-        data: { context: buildContext(), documentIds: buildDocumentIds() },
+        data: {
+          context: buildContext(),
+          documentIds: buildDocumentIds(),
+          threadId: buildThreadId(),
+        },
       });
 
       // iOS refuses audio capture while the page sits in the mixable "ambient"
@@ -293,7 +300,7 @@ export function useRealtimeVoice({
     } finally {
       busyRef.current = false;
     }
-  }, [buildContext, buildDocumentIds, mintSession, stop]);
+  }, [buildContext, buildDocumentIds, buildThreadId, mintSession, stop]);
 
   /**
    * Push a new attached-document block into the live session so mid-call

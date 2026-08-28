@@ -101,6 +101,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
   const voice = useRealtimeVoice({
     buildContext: useCallback(() => contextRef.current, []),
     buildDocumentIds: useCallback(() => docIdsRef.current, []),
+    buildThreadId: useCallback(() => threadIdRef.current, []),
     onUserText: useCallback((t: string) => void appendMessage("user", t), [appendMessage]),
     onAssistantText: useCallback(
       (t: string) => void appendMessage("assistant", t),
@@ -168,7 +169,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         pushedDocsRef.current = key;
         docIdsRef.current = ids;
         const { block, included, trimmed } = await fetchDocContext({
-          data: { documentIds: ids },
+          data: { documentIds: ids, threadId },
         });
         if (cancelled) return;
         if (!voiceRef.current.updateContext(block)) return;
