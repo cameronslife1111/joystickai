@@ -130,11 +130,6 @@ function AppPage() {
   const [newDocText, setNewDocText] = useState("");
   const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  // Pink orb mode: tap opens Move sentence or Jump to; long press toggles.
-  const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
-  // Gray orb mode: tap opens Media gallery or Chat; long press toggles.
-  const [grayMode, setGrayMode] = useState<"media" | "chat">("media");
-  const [orangeMode, setOrangeMode] = useState<"pin" | "search">("pin");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
@@ -2884,11 +2879,12 @@ function AppPage() {
 
       {!editing && (
         <section className="relative flex shrink-0 items-center justify-center pb-4">
-          {/* Six smiley orbs around a transparent center pad:
-              blue = prev, purple = next, yellow = menu, green = next doc,
-              red = delete, orange = pinned doc (hold = pick a new pin),
-              pink = move sentence / jump to (hold = switch), gray = media gallery;
+          {/* Eight orbs around a transparent center pad:
+              blue = prev, purple = next, yellow = menu (hold = New idea),
+              green = next doc, red = delete, orange = pinned doc (hold = search),
+              pink = move sentence (hold = jump to), gray = media gallery (hold = chat);
               center tap = edit, hold = record. */}
+
           <OrbCluster
             recording={recording}
             centerRef={centerRef}
@@ -2898,51 +2894,22 @@ function AppPage() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
-            orangeMode={orangeMode}
-            onOrangeTap={() => {
-              if (orangeMode === "pin") void openPinnedDocument();
-              else {
-                setSearchQuery("");
-                setSearchOpen(true);
-              }
+            onMenuLongPress={() => openNewIdea()}
+            onPinnedDoc={() => void openPinnedDocument()}
+            onPinnedDocLongPress={() => {
+              setSearchQuery("");
+              setSearchOpen(true);
             }}
-            onOrangeLongPress={() => {
-              setOrangeMode((m) => {
-                const next = m === "pin" ? "search" : "pin";
-                toast(next === "pin" ? "📌 Pinned document" : "🔍 Search docs", { id: "orange-mode" });
-                return next;
-              });
+            onMoveSentence={() => setMoveOpen(true)}
+            onJumpTo={() => setJumpOpen(true)}
+            onMediaGallery={() => navigate({ to: "/media" })}
+            onChat={() => {
+              setPendingChatThreadId(null);
+              setChatStartInList(true);
+              setChatOpen(true);
             }}
-            moveMode={pinkMode}
-            onMoveJump={() => {
-              if (pinkMode === "move") setMoveOpen(true);
-              else setJumpOpen(true);
-            }}
-            onMoveJumpLongPress={() => {
-              setPinkMode((m) => {
-                const next = m === "move" ? "jump" : "move";
-                toast(next === "move" ? "↕️ Move sentence" : "🔃 Jump to", { id: "pink-mode" });
-                return next;
-              });
-            }}
-            grayMode={grayMode}
-            onGrayTap={() => {
-              if (grayMode === "media") {
-                navigate({ to: "/media" });
-              } else {
-                setPendingChatThreadId(null);
-                setChatStartInList(true);
-                setChatOpen(true);
-              }
-            }}
-            onGrayLongPress={() => {
-              setGrayMode((m) => {
-                const next = m === "media" ? "chat" : "media";
-                toast(next === "media" ? "🖼️ Media gallery" : "💬 Chat", { id: "gray-mode" });
-                return next;
-              });
-            }}
-            grayBadge={grayMode === "media" ? unseenCount : chatUnreadCount}
+            grayBadge={unseenCount}
+
           />
         </section>
       )}

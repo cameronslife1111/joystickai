@@ -187,10 +187,11 @@ const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number 
   { color: "red", label: "Delete sentence", col: 1, row: 1 },
   { color: "yellow", label: "Open the menu", col: 2, row: 2 },
   { color: "green", label: "Next document", col: 4, row: 2 },
-  { color: "orange", label: "Pinned document / Search", col: 5, row: 1 },
+  { color: "orange", label: "Pinned document", col: 5, row: 1 },
   { color: "purple", label: "Next sentence", col: 3, row: 3 },
-  { color: "pink", label: "Move sentence / Jump to", col: 1, row: 3 },
-  { color: "gray", label: "Media gallery / Chat", col: 5, row: 3 },
+  { color: "pink", label: "Move sentence", col: 1, row: 3 },
+  { color: "gray", label: "Media gallery", col: 5, row: 3 },
+
 ];
 
 function MeetTheOrbs() {
