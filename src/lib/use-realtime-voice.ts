@@ -45,6 +45,8 @@ export function useRealtimeVoice({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const busyRef = useRef(false);
+  /** iOS audio-session ownership token held for the whole call. */
+  const sessionTokenRef = useRef<number | null>(null);
 
   const cbRef = useRef({ onUserText, onAssistantText, onError });
   cbRef.current = { onUserText, onAssistantText, onError };
