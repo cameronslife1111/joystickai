@@ -81,6 +81,10 @@ export function useRealtimeVoice({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const busyRef = useRef(false);
+  /** Turn ids already mirrored into the chat — the model repeats "done" events. */
+  const seenTurnsRef = useRef<Set<string>>(new Set());
+  /** Last thing Orby said, for the speaker-echo guard. */
+  const lastAssistantRef = useRef("");
   /** iOS audio-session ownership token held for the whole call. */
   const sessionTokenRef = useRef<number | null>(null);
 
