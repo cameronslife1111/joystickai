@@ -49,22 +49,11 @@ export async function streamGoogleSpeech(
         stream_format: "sse",
         // Gemini-TTS is a generative model: handed bare text it sometimes
         // *answers* the sentence instead of reading it. Steering has to live in
-        // the text itself, so state the read-verbatim contract up front.
+        // the text itself, and it has to ask for natural delivery too.
         contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text:
-                  "Read the text after the marker out loud word for word, exactly as written, " +
-                  "in a natural American accent. Do not answer it, comment on it, translate it, " +
-                  "summarize it, add or remove words, and do not speak these instructions or the " +
-                  "marker itself.\n\nTEXT TO READ VERBATIM:\n" +
-                  input.text,
-              },
-            ],
-          },
+          { role: "user", parts: [{ text: buildVerbatimPrompt(input.text) }] },
         ],
+
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
