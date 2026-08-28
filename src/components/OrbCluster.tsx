@@ -191,16 +191,15 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
-  orangeMode,
-  onOrangeTap,
-  onOrangeLongPress,
-  moveMode,
-  onMoveJump,
-  onMoveJumpLongPress,
-  grayMode,
-  onGrayTap,
-  onGrayLongPress,
+  onMenuLongPress,
+  onPinnedDoc,
+  onPinnedDocLongPress,
+  onMoveSentence,
+  onJumpTo,
+  onMediaGallery,
+  onChat,
   grayBadge,
+
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
