@@ -2914,8 +2914,24 @@ function AppPage() {
                 return next;
               });
             }}
-            onMediaGallery={() => navigate({ to: "/media" })}
-            mediaBadge={unseenCount}
+            grayMode={grayMode}
+            onGrayTap={() => {
+              if (grayMode === "media") {
+                navigate({ to: "/media" });
+              } else {
+                setPendingChatThreadId(null);
+                setChatStartInList(true);
+                setChatOpen(true);
+              }
+            }}
+            onGrayLongPress={() => {
+              setGrayMode((m) => {
+                const next = m === "media" ? "chat" : "media";
+                toast(next === "media" ? "🖼️ Media gallery" : "💬 Chat", { id: "gray-mode" });
+                return next;
+              });
+            }}
+            grayBadge={grayMode === "media" ? unseenCount : chatUnreadCount}
           />
         </section>
       )}
