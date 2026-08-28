@@ -2879,11 +2879,12 @@ function AppPage() {
 
       {!editing && (
         <section className="relative flex shrink-0 items-center justify-center pb-4">
-          {/* Six smiley orbs around a transparent center pad:
-              blue = prev, purple = next, yellow = menu, green = next doc,
-              red = delete, orange = pinned doc (hold = pick a new pin),
-              pink = move sentence / jump to (hold = switch), gray = media gallery;
+          {/* Eight orbs around a transparent center pad:
+              blue = prev, purple = next, yellow = menu (hold = New idea),
+              green = next doc, red = delete, orange = pinned doc (hold = search),
+              pink = move sentence (hold = jump to), gray = media gallery (hold = chat);
               center tap = edit, hold = record. */}
+
           <OrbCluster
             recording={recording}
             centerRef={centerRef}
