@@ -34,6 +34,8 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
+  /** Blue orb hold: toggle the list-cycling lock (slot 22). */
+  onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
   onMenuLongPress: () => void;
   /** Orange orb tap: open the pinned document. */
@@ -191,6 +193,7 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
+  onPrevLongPress,
   onMenuLongPress,
   onPinnedDoc,
   onPinnedDocLongPress,
@@ -220,8 +223,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-blue"
         Icon={ArrowUp}
-        label="Previous sentence"
+        label="Previous sentence (hold to lock/unlock list)"
         onPress={onPrev}
+        onLongPress={onPrevLongPress}
         buttonRef={setButton("prev")}
         placement={{ gridColumn: 3, gridRow: 1 }}
       />
