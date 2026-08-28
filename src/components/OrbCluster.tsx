@@ -260,14 +260,10 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
-        Icon={orangeMode === "pin" ? Pin : Search}
-        label={
-          orangeMode === "pin"
-            ? "Open pinned document (hold for Search)"
-            : "Search docs (hold for Pinned document)"
-        }
-        onPress={onOrangeTap}
-        onLongPress={onOrangeLongPress}
+        Icon={Pin}
+        label="Open pinned document (hold to search docs)"
+        onPress={onPinnedDoc}
+        onLongPress={onPinnedDocLongPress}
         placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb
@@ -280,27 +276,22 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-pink"
-        {...(moveMode === "move" ? { Icon: ArrowUpDown } : { glyph: "J" })}
-        label={
-          moveMode === "move"
-            ? "Move sentence (hold to switch to Jump to)"
-            : "Jump to (hold to switch to Move sentence)"
-        }
-        onPress={onMoveJump}
-        onLongPress={onMoveJumpLongPress}
+        Icon={ArrowUpDown}
+        label="Move sentence (hold to jump to)"
+        onPress={onMoveSentence}
+        onLongPress={onJumpTo}
         placement={{ gridColumn: 1, gridRow: 3 }}
       />
       <ClusterOrb
         orbClass="glow-orb-gray"
-        Icon={grayMode === "media" ? Image : MessageSquare}
-        label={
-          grayMode === "media"
-            ? "Media gallery (hold for Chat)"
-            : "Chat (hold for Media gallery)"
-        }
+        Icon={Image}
+        label="Media gallery (hold for chat)"
         badge={grayBadge}
-        onPress={onGrayTap}
-        onLongPress={onGrayLongPress}
+        onPress={onMediaGallery}
+        onLongPress={onChat}
+        placement={{ gridColumn: 5, gridRow: 3 }}
+      />
+
         placement={{ gridColumn: 5, gridRow: 3 }}
       />
     </div>
