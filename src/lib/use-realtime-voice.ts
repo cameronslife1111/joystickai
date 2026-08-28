@@ -9,6 +9,42 @@ import { beginIosRecordingSession, endIosRecordingSession } from "@/lib/audio-se
 
 export type CallState = "idle" | "connecting" | "live";
 
+const MIC_CONSTRAINTS: MediaStreamConstraints = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+};
+
+/** True for the iOS "category is not compatible with audio capture" family. */
+function isSessionCategoryError(error: unknown): boolean {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  const message = ((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  return (
+    name === "InvalidStateError" ||
+    name === "AbortError" ||
+    message.includes("audio session") ||
+    message.includes("not compatible") ||
+    message.includes("interrupt")
+  );
+}
+
+/**
+ * Open the mic, re-asserting the recording audio session once if iOS rejects
+ * the first attempt because playback still owned the category.
+ */
+async function acquireMic(reassertSession: () => void): Promise<MediaStream> {
+  const mediaDevices = navigator.mediaDevices;
+  if (!mediaDevices?.getUserMedia) {
+    throw new Error("Microphone capture is not supported in this browser");
+  }
+  try {
+    return await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+  } catch (error) {
+    if (!isSessionCategoryError(error)) throw error;
+    reassertSession();
+    await new Promise((r) => setTimeout(r, 250));
+    return await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+  }
+}
+
 type Options = {
   /** Recent conversation text handed to the model as call context. */
   buildContext: () => string;
