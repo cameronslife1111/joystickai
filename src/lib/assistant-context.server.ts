@@ -149,7 +149,7 @@ export async function buildSharedContext(
 
   let memoryBlock = "";
   try {
-    const memory = await buildPlanMemory(supabase, input.threadId ?? null, {
+    const memory = await buildPlanMemory(supabase, input.threadId ?? undefined, {
       inlineDocs: true,
       excludeDocIds: documentIds,
     });
