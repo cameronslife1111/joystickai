@@ -27,7 +27,24 @@ export async function streamGoogleSpeech(
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-tts",
         stream_format: "sse",
-        contents: [{ role: "user", parts: [{ text: input.text }] }],
+        // Gemini-TTS is a generative model: handed bare text it sometimes
+        // *answers* the sentence instead of reading it. Steering has to live in
+        // the text itself, so state the read-verbatim contract up front.
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text:
+                  "Read the text after the marker out loud word for word, exactly as written, " +
+                  "in a natural American accent. Do not answer it, comment on it, translate it, " +
+                  "summarize it, add or remove words, and do not speak these instructions or the " +
+                  "marker itself.\n\nTEXT TO READ VERBATIM:\n" +
+                  input.text,
+              },
+            ],
+          },
+        ],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
