@@ -2898,51 +2898,22 @@ function AppPage() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
-            orangeMode={orangeMode}
-            onOrangeTap={() => {
-              if (orangeMode === "pin") void openPinnedDocument();
-              else {
-                setSearchQuery("");
-                setSearchOpen(true);
-              }
+            onMenuLongPress={() => openNewIdea()}
+            onPinnedDoc={() => void openPinnedDocument()}
+            onPinnedDocLongPress={() => {
+              setSearchQuery("");
+              setSearchOpen(true);
             }}
-            onOrangeLongPress={() => {
-              setOrangeMode((m) => {
-                const next = m === "pin" ? "search" : "pin";
-                toast(next === "pin" ? "📌 Pinned document" : "🔍 Search docs", { id: "orange-mode" });
-                return next;
-              });
+            onMoveSentence={() => setMoveOpen(true)}
+            onJumpTo={() => setJumpOpen(true)}
+            onMediaGallery={() => navigate({ to: "/media" })}
+            onChat={() => {
+              setPendingChatThreadId(null);
+              setChatStartInList(true);
+              setChatOpen(true);
             }}
-            moveMode={pinkMode}
-            onMoveJump={() => {
-              if (pinkMode === "move") setMoveOpen(true);
-              else setJumpOpen(true);
-            }}
-            onMoveJumpLongPress={() => {
-              setPinkMode((m) => {
-                const next = m === "move" ? "jump" : "move";
-                toast(next === "move" ? "↕️ Move sentence" : "🔃 Jump to", { id: "pink-mode" });
-                return next;
-              });
-            }}
-            grayMode={grayMode}
-            onGrayTap={() => {
-              if (grayMode === "media") {
-                navigate({ to: "/media" });
-              } else {
-                setPendingChatThreadId(null);
-                setChatStartInList(true);
-                setChatOpen(true);
-              }
-            }}
-            onGrayLongPress={() => {
-              setGrayMode((m) => {
-                const next = m === "media" ? "chat" : "media";
-                toast(next === "media" ? "🖼️ Media gallery" : "💬 Chat", { id: "gray-mode" });
-                return next;
-              });
-            }}
-            grayBadge={grayMode === "media" ? unseenCount : chatUnreadCount}
+            grayBadge={unseenCount}
+
           />
         </section>
       )}
