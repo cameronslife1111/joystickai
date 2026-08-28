@@ -5,6 +5,8 @@ import { generateText as aiSdkGenerateText } from "ai";
 import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
 import { toPlainText } from "./plain-text";
+import { DOC_RULES, ORBY_BASE_RULES } from "./assistant-instructions";
+
 import {
   ACTION_GROUPS,
   type ChatCapabilities,
