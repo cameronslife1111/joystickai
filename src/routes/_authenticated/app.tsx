@@ -2890,6 +2890,7 @@ function AppPage() {
             centerRef={centerRef}
             pressRef={orbPressRef}
             onPrev={() => void onSwipeUp()}
+            onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
