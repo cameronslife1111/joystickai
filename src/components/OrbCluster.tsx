@@ -1,17 +1,17 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * The home-screen control cluster: six small glowing orbs with smiley faces
- * arranged around a transparent, pressable center pad.
+ * The home-screen control cluster: eight small glowing icon orbs arranged
+ * around a transparent, pressable center pad.
  *
  *   Layout (grid):
- *                    blue · previous
- *   red · delete   yellow · menu   [center]   green · next doc   orange · pinned doc
- *                    purple · next
+ *   red · delete      [ ]     blue · previous      [ ]      orange · pinned doc
+ *   [ ]            yellow · menu   [center]   green · next doc            [ ]
+ *   pink · move/jump  [ ]     purple · next        [ ]      gray · media/chat
  *
  * The center pad is intentionally empty/transparent so the app background
  * shows through; gestures (tap = edit, long-press = record) are attached by
@@ -44,10 +44,14 @@ interface OrbClusterProps {
   onMoveJump: () => void;
   /** Pink orb hold: toggle between Move sentence and Jump to. */
   onMoveJumpLongPress: () => void;
-  /** Gray orb tap: open the media gallery. */
-  onMediaGallery: () => void;
-  /** Unseen media count shown on the gray orb. */
-  mediaBadge?: number;
+  /** Gray orb mode: "media" = Media gallery, "chat" = Chat dialog. */
+  grayMode: "media" | "chat";
+  /** Gray orb tap: run the action for the current mode. */
+  onGrayTap: () => void;
+  /** Gray orb hold: toggle between Media gallery and Chat. */
+  onGrayLongPress: () => void;
+  /** Badge count shown on the gray orb (media unseen or chat unread). */
+  grayBadge?: number;
 }
 
 /** Short, soundless jiggle played on the pressed orb. */
