@@ -45,6 +45,28 @@ async function acquireMic(reassertSession: () => void): Promise<MediaStream> {
   }
 }
 
+function normalizeSpeech(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * True when a "user" transcript is really the speaker feeding Orby's own voice
+ * back into the mic — the cause of Orby replying to herself.
+ */
+function isSelfEcho(userText: string, assistantText: string): boolean {
+  const u = normalizeSpeech(userText);
+  const a = normalizeSpeech(assistantText);
+  if (!u || !a || u.length < 6) return false;
+  if (a.includes(u)) return true;
+  const words = u.split(" ");
+  const hits = words.filter((w) => w.length > 2 && a.includes(w)).length;
+  return words.length >= 4 && hits / words.length >= 0.9;
+}
+
 type Options = {
   /** Recent conversation text handed to the model as call context. */
   buildContext: () => string;
