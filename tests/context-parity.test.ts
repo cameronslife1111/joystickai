@@ -44,6 +44,10 @@ function fakeSupabase(db: {
           rows = rows.filter((r) => r[col] === val);
           return api;
         },
+        in: (col: string, vals: unknown[]) => {
+          rows = rows.filter((r) => vals.includes(r[col]));
+          return api;
+        },
         order: (col: string, opts?: { ascending?: boolean }) => {
           const dir = opts?.ascending === false ? -1 : 1;
           rows = [...rows].sort((a, b) => (a[col] > b[col] ? dir : a[col] < b[col] ? -dir : 0));
