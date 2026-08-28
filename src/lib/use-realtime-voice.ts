@@ -135,6 +135,8 @@ export function useRealtimeVoice({
     const sessionToken = sessionTokenRef.current;
     sessionTokenRef.current = null;
     endIosRecordingSession(sessionToken);
+    seenTurnsRef.current.clear();
+    lastAssistantRef.current = "";
     setSpeaking(false);
     setState("idle");
   }, []);
