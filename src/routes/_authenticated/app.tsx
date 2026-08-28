@@ -132,6 +132,8 @@ function AppPage() {
   const [moveOpen, setMoveOpen] = useState(false);
   // Pink orb mode: tap opens Move sentence or Jump to; long press toggles.
   const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
+  // Gray orb mode: tap opens Media gallery or Chat; long press toggles.
+  const [grayMode, setGrayMode] = useState<"media" | "chat">("media");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
@@ -2912,8 +2914,24 @@ function AppPage() {
                 return next;
               });
             }}
-            onMediaGallery={() => navigate({ to: "/media" })}
-            mediaBadge={unseenCount}
+            grayMode={grayMode}
+            onGrayTap={() => {
+              if (grayMode === "media") {
+                navigate({ to: "/media" });
+              } else {
+                setPendingChatThreadId(null);
+                setChatStartInList(true);
+                setChatOpen(true);
+              }
+            }}
+            onGrayLongPress={() => {
+              setGrayMode((m) => {
+                const next = m === "media" ? "chat" : "media";
+                toast(next === "media" ? "🖼️ Media gallery" : "💬 Chat", { id: "gray-mode" });
+                return next;
+              });
+            }}
+            grayBadge={grayMode === "media" ? unseenCount : chatUnreadCount}
           />
         </section>
       )}

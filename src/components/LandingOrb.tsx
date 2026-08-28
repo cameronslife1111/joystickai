@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**

@@ -190,7 +190,7 @@ const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number 
   { color: "orange", label: "Pinned document", col: 5, row: 1 },
   { color: "purple", label: "Next sentence", col: 3, row: 3 },
   { color: "pink", label: "Move sentence / Jump to", col: 1, row: 3 },
-  { color: "gray", label: "Media gallery", col: 5, row: 3 },
+  { color: "gray", label: "Media gallery / Chat", col: 5, row: 3 },
 ];
 
 function MeetTheOrbs() {
