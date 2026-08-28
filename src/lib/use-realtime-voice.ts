@@ -199,10 +199,27 @@ export function useRealtimeVoice({
         }
         const type: string = evt?.type ?? "";
 
+        // Only ever mirror a given turn once: the model emits repeat and
+        // legacy-named "done" events, which otherwise read as extra turns.
+        const once = (key: string) => {
+          if (!key) return true;
+          if (seenTurnsRef.current.has(key)) return false;
+          seenTurnsRef.current.add(key);
+          if (seenTurnsRef.current.size > 200) {
+            seenTurnsRef.current = new Set([...seenTurnsRef.current].slice(-100));
+          }
+          return true;
+        };
+
         // User's finished speech.
         if (type === "conversation.item.input_audio_transcription.completed") {
           const t = (evt.transcript ?? "").trim();
-          if (t) cbRef.current.onUserText(t);
+          if (!t) return;
+          if (!once(`user:${evt.item_id ?? t}`)) return;
+          // Speaker bleed: this is Orby's own sentence coming back through the
+          // mic. Mirroring it would make her answer herself.
+          if (isSelfEcho(t, lastAssistantRef.current)) return;
+          cbRef.current.onUserText(t);
           return;
         }
         // Orby's finished spoken reply (event name varies by model version).
@@ -211,8 +228,11 @@ export function useRealtimeVoice({
           type === "response.audio_transcript.done"
         ) {
           const t = (evt.transcript ?? "").trim();
-          if (t) cbRef.current.onAssistantText(t);
           setSpeaking(false);
+          if (!t) return;
+          if (!once(`assistant:${evt.item_id ?? evt.response_id ?? t}`)) return;
+          lastAssistantRef.current = t;
+          cbRef.current.onAssistantText(t);
           return;
         }
         if (type === "response.created") setSpeaking(true);
