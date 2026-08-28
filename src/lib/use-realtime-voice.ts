@@ -68,10 +68,15 @@ export function useRealtimeVoice({
       audioRef.current.remove();
       audioRef.current = null;
     }
-    requestIosMixableSession();
+    // Only hand the mixable/ambient category back once every mic track is
+    // stopped, so speech can mix with music again after the call.
+    const sessionToken = sessionTokenRef.current;
+    sessionTokenRef.current = null;
+    endIosRecordingSession(sessionToken);
     setSpeaking(false);
     setState("idle");
   }, []);
+
 
   const start = useCallback(async () => {
     if (busyRef.current || pcRef.current) return;
