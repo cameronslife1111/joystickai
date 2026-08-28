@@ -34,10 +34,12 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
-  /** Orange orb tap: open the pinned document. */
-  onPinnedDoc: () => void;
-  /** Orange orb hold: choose a new document to pin. */
-  onPinnedDocLongPress: () => void;
+  /** Orange orb mode: "pin" = pinned document, "search" = Search docs. */
+  orangeMode: "pin" | "search";
+  /** Orange orb tap: run the action for the current mode. */
+  onOrangeTap: () => void;
+  /** Orange orb hold: toggle between Pinned document and Search docs. */
+  onOrangeLongPress: () => void;
   /** Pink orb mode: "move" = Move sentence sheet, "jump" = Jump to sheet. */
   moveMode: "move" | "jump";
   /** Pink orb tap: open the sheet for the current mode. */
