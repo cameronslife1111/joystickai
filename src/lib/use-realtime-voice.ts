@@ -131,7 +131,12 @@ export function useRealtimeVoice({
         sessionTokenRef.current = beginIosRecordingSession();
       }
       const stream = await acquireMic(() => {
+        const previous = sessionTokenRef.current;
         sessionTokenRef.current = beginIosRecordingSession();
+        // Drop the superseded token so teardown can restore mixable playback.
+        if (previous !== null && previous !== sessionTokenRef.current) {
+          endIosRecordingSession(previous);
+        }
       });
       streamRef.current = stream;
 
