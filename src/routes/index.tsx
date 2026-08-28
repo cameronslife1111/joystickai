@@ -184,11 +184,13 @@ function SentenceCycler() {
 
 const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number }> = [
   { color: "blue", label: "Previous sentence", col: 3, row: 1 },
-  { color: "red", label: "Delete sentence", col: 1, row: 2 },
+  { color: "red", label: "Delete sentence", col: 1, row: 1 },
   { color: "yellow", label: "Open the menu", col: 2, row: 2 },
   { color: "green", label: "Next document", col: 4, row: 2 },
-  { color: "orange", label: "Pinned document", col: 5, row: 2 },
+  { color: "orange", label: "Pinned document", col: 5, row: 1 },
   { color: "purple", label: "Next sentence", col: 3, row: 3 },
+  { color: "pink", label: "Move sentence / Jump to", col: 1, row: 3 },
+  { color: "gray", label: "Media gallery", col: 5, row: 3 },
 ];
 
 function MeetTheOrbs() {
@@ -207,7 +209,7 @@ function MeetTheOrbs() {
           The controls
         </p>
         <h2 className="mt-4 text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          Meet the six orbs.
+          Meet the orbs.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-base text-slate-400">
           Everything Orby does is one press away. No menus to dig through, no gestures to memorize.

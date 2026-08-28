@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, FileText, Menu, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * float and an optional scroll parallax drift.
  */
 
-export type OrbColor = "blue" | "purple" | "yellow" | "green" | "red" | "orange";
+export type OrbColor = "blue" | "purple" | "yellow" | "green" | "red" | "orange" | "pink" | "gray";
 
 /** Literal class names so Tailwind's scanner always keeps the utilities. */
 const COLOR_CLASS: Record<OrbColor, string> = {
@@ -19,6 +19,8 @@ const COLOR_CLASS: Record<OrbColor, string> = {
   green: "glow-orb-green",
   red: "glow-orb-red",
   orange: "glow-orb-orange",
+  pink: "glow-orb-pink",
+  gray: "glow-orb-gray",
 };
 
 const COLOR_ICON: Record<OrbColor, LucideIcon> = {
@@ -28,6 +30,8 @@ const COLOR_ICON: Record<OrbColor, LucideIcon> = {
   green: FileText,
   red: Trash2,
   orange: Pin,
+  pink: ArrowUpDown,
+  gray: Image,
 };
 
 /** Approximate hex per orb color, for dots/glows outside the orb itself. */
@@ -38,6 +42,8 @@ export const ORB_HEX: Record<OrbColor, string> = {
   green: "#4ade80",
   red: "#f87171",
   orange: "#fb923c",
+  pink: "#f472b6",
+  gray: "#94a3b8",
 };
 
 interface LandingOrbProps {
