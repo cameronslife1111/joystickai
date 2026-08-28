@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Search, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,10 +34,12 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
-  /** Orange orb tap: open the pinned document. */
-  onPinnedDoc: () => void;
-  /** Orange orb hold: choose a new document to pin. */
-  onPinnedDocLongPress: () => void;
+  /** Orange orb mode: "pin" = pinned document, "search" = Search docs. */
+  orangeMode: "pin" | "search";
+  /** Orange orb tap: run the action for the current mode. */
+  onOrangeTap: () => void;
+  /** Orange orb hold: toggle between Pinned document and Search docs. */
+  onOrangeLongPress: () => void;
   /** Pink orb mode: "move" = Move sentence sheet, "jump" = Jump to sheet. */
   moveMode: "move" | "jump";
   /** Pink orb tap: open the sheet for the current mode. */
@@ -192,8 +194,9 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onDelete,
-  onPinnedDoc,
-  onPinnedDocLongPress,
+  orangeMode,
+  onOrangeTap,
+  onOrangeLongPress,
   moveMode,
   onMoveJump,
   onMoveJumpLongPress,
@@ -259,10 +262,14 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-orange"
-        Icon={Pin}
-        label="Open pinned document (hold to pin another)"
-        onPress={onPinnedDoc}
-        onLongPress={onPinnedDocLongPress}
+        Icon={orangeMode === "pin" ? Pin : Search}
+        label={
+          orangeMode === "pin"
+            ? "Open pinned document (hold for Search)"
+            : "Search docs (hold for Pinned document)"
+        }
+        onPress={onOrangeTap}
+        onLongPress={onOrangeLongPress}
         placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb

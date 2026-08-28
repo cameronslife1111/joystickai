@@ -134,6 +134,7 @@ function AppPage() {
   const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
   // Gray orb mode: tap opens Media gallery or Chat; long press toggles.
   const [grayMode, setGrayMode] = useState<"media" | "chat">("media");
+  const [orangeMode, setOrangeMode] = useState<"pin" | "search">("pin");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
@@ -2897,10 +2898,20 @@ function AppPage() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
-            onPinnedDoc={() => void openPinnedDocument()}
-            onPinnedDocLongPress={() => {
-              setPinPickerQuery("");
-              setPinPickerOpen(true);
+            orangeMode={orangeMode}
+            onOrangeTap={() => {
+              if (orangeMode === "pin") void openPinnedDocument();
+              else {
+                setSearchQuery("");
+                setSearchOpen(true);
+              }
+            }}
+            onOrangeLongPress={() => {
+              setOrangeMode((m) => {
+                const next = m === "pin" ? "search" : "pin";
+                toast(next === "pin" ? "📌 Pinned document" : "🔍 Search docs", { id: "orange-mode" });
+                return next;
+              });
             }}
             moveMode={pinkMode}
             onMoveJump={() => {

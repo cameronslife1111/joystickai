@@ -465,6 +465,10 @@
 /* Small flanking glowing-orb buttons */
 @utility glow-orb {
   position: relative;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   width: var(--orb-size, 44px);
   height: var(--orb-size, 44px);
   border-radius: 9999px;
