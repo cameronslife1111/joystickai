@@ -132,6 +132,8 @@ function AppPage() {
   const [moveOpen, setMoveOpen] = useState(false);
   // Pink orb mode: tap opens Move sentence or Jump to; long press toggles.
   const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
+  // Gray orb mode: tap opens Media gallery or Chat; long press toggles.
+  const [grayMode, setGrayMode] = useState<"media" | "chat">("media");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
