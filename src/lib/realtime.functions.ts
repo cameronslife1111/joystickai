@@ -138,7 +138,14 @@ export const createRealtimeSession = createServerFn({ method: "POST" })
           audio: {
             input: {
               transcription: { model: "gpt-4o-mini-transcribe" },
-              turn_detection: { type: "semantic_vad", interrupt_response: true },
+              // Near-field reduction keeps speaker bleed and room noise from
+              // opening a turn (which made Orby reply to herself).
+              noise_reduction: { type: "near_field" },
+              turn_detection: {
+                type: "semantic_vad",
+                eagerness: "auto",
+                interrupt_response: true,
+              },
             },
             output: { voice: REALTIME_VOICE },
           },
