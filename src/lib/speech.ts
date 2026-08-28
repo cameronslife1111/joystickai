@@ -398,7 +398,7 @@ function scheduleSamples(
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Sound is off — return before touching tokens, network, or audio so the
   // user is never billed for speech while muted.
-  if (!speechEnabled) return false;
+  if (!speechEnabled || speechSuppressed) return false;
   const clean = cleanForSpeech(text ?? "");
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
 
