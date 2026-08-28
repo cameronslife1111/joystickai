@@ -239,8 +239,8 @@ export function OrbCluster({
         onPress={onMenu}
         onLongPress={onMenuLongPress}
         buttonRef={setButton("menu")}
-
         placement={{ gridColumn: 2, gridRow: 2 }}
+
       />
       <div
         ref={centerRef}
