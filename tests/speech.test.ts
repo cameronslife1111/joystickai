@@ -71,11 +71,14 @@ describe("hosted sentence speech", () => {
     expect(speakText("hello world")).toBe(true);
   });
 
-  test("exposes four supported Google voices with a valid default", () => {
-    expect(TTS_VOICES.map((voice) => voice.id)).toEqual(["Charon", "Fenrir", "Kore", "Aoede"]);
+  test("exposes the expanded US voice library with a valid default", () => {
+    expect(TTS_VOICES.length).toBeGreaterThanOrEqual(20);
+    expect(TTS_VOICES.filter((v) => v.gender === "female").length).toBeGreaterThanOrEqual(10);
+    expect(TTS_VOICES.filter((v) => v.gender === "male").length).toBeGreaterThanOrEqual(10);
     expect(isTtsVoice(DEFAULT_TTS_VOICE)).toBe(true);
     expect(isTtsVoice("not-a-voice")).toBe(false);
   });
+
 
   test("removes emoji and normalizes whitespace without dropping latin letters", () => {
     expect(cleanForSpeech("🐝  hello   world  🟢")).toBe("hello world");

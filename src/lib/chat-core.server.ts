@@ -5,6 +5,8 @@ import { generateText as aiSdkGenerateText } from "ai";
 import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
 import { toPlainText } from "./plain-text";
+import { DOC_RULES, ORBY_BASE_RULES } from "./assistant-instructions";
+
 import {
   ACTION_GROUPS,
   type ChatCapabilities,
@@ -17,41 +19,12 @@ async function buildContext(
   contextDocumentIds: string[],
 ): Promise<string> {
   if (!contextDocumentIds.length) return "";
-  const parts: string[] = [];
-  for (const docId of contextDocumentIds) {
-    const { data: doc } = await supabase
-      .from("documents")
-      .select("title")
-      .eq("id", docId)
-      .single();
-
-    // Pull the COMPLETE document. The Data API caps a single query at ~1000
-    // rows, so paginate until every sentence is fetched — otherwise long
-    // documents are silently truncated to their beginning.
-    const PAGE = 1000;
-    const contents: string[] = [];
-    let from = 0;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const { data: rows, error } = await supabase
-        .from("sentences")
-        .select("content")
-        .eq("document_id", docId)
-        .order("order_index", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error) break;
-      const batch = rows ?? [];
-      for (const r of batch) contents.push(r.content);
-      if (batch.length < PAGE) break;
-      from += PAGE;
-    }
-    const joined = contents.join(" ").trim();
-    if (joined) {
-      parts.push(`[document: "${doc?.title ?? "Untitled"}"]\n${joined}`);
-    }
-  }
-  return parts.join("\n\n");
+  // Same builder the hands-free voice path uses, so both see identical text.
+  const { buildDocumentBlock } = await import("./assistant-context.server");
+  const { text } = await buildDocumentBlock(supabase, contextDocumentIds);
+  return text;
 }
+
 
 async function runWebSearch(
   query: string,
@@ -306,18 +279,14 @@ export async function runChatTurn(
   const model = provider("gpt-5.6-sol");
 
   const system =
-    "You are Orby, a warm, helpful chat assistant inside a writing app. " +
-    "Have a natural back-and-forth conversation. Be clear and useful. " +
-    "Reply in PLAIN TEXT ONLY. Never use markdown: no asterisks, no underscores, no backticks, no '#' headings, no bullet points or dashes as list markers. " +
+    ORBY_BASE_RULES +
+    " Reply in PLAIN TEXT ONLY. Never use markdown: no asterisks, no underscores, no backticks, no '#' headings, no bullet points or dashes as list markers. " +
     "You may use numbered lists (1. 2. 3.) when a list genuinely helps, separate paragraphs with a blank line, always use normal punctuation, and emojis are welcome. " +
-
-    "You work like a capable employee: you can kick off plans that edit documents and generate media, " +
-    "and you always come back to this conversation afterwards. Keep momentum — reference what you already " +
-    "delivered, and offer the natural next step when it's helpful.\n\n" +
-    (contextText
-      ? "The user has attached one or more documents as reference. Their full content is appended to the end of the user's latest message. Treat the attached documents as authoritative reference, use their complete content, and refer to them by title when helpful.\n\n"
-      : "") +
+    "You can kick off plans that edit documents and generate media, and you always come back to this " +
+    "conversation afterwards.\n\n" +
+    (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
+
 
   // Attach documents LAST — after whatever the user typed. The block is
   // appended to the end of the latest user message so the model reads the
