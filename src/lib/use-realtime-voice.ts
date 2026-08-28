@@ -5,9 +5,45 @@ import {
   composeRealtimeInstructions,
   createRealtimeSession,
 } from "@/lib/realtime.functions";
-import { requestIosMixableSession } from "@/lib/audio-session";
+import { beginIosRecordingSession, endIosRecordingSession } from "@/lib/audio-session";
 
 export type CallState = "idle" | "connecting" | "live";
+
+const MIC_CONSTRAINTS: MediaStreamConstraints = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+};
+
+/** True for the iOS "category is not compatible with audio capture" family. */
+function isSessionCategoryError(error: unknown): boolean {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  const message = ((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  return (
+    name === "InvalidStateError" ||
+    name === "AbortError" ||
+    message.includes("audio session") ||
+    message.includes("not compatible") ||
+    message.includes("interrupt")
+  );
+}
+
+/**
+ * Open the mic, re-asserting the recording audio session once if iOS rejects
+ * the first attempt because playback still owned the category.
+ */
+async function acquireMic(reassertSession: () => void): Promise<MediaStream> {
+  const mediaDevices = navigator.mediaDevices;
+  if (!mediaDevices?.getUserMedia) {
+    throw new Error("Microphone capture is not supported in this browser");
+  }
+  try {
+    return await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+  } catch (error) {
+    if (!isSessionCategoryError(error)) throw error;
+    reassertSession();
+    await new Promise((r) => setTimeout(r, 250));
+    return await mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+  }
+}
 
 type Options = {
   /** Recent conversation text handed to the model as call context. */
@@ -45,6 +81,8 @@ export function useRealtimeVoice({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const busyRef = useRef(false);
+  /** iOS audio-session ownership token held for the whole call. */
+  const sessionTokenRef = useRef<number | null>(null);
 
   const cbRef = useRef({ onUserText, onAssistantText, onError });
   cbRef.current = { onUserText, onAssistantText, onError };
@@ -66,10 +104,15 @@ export function useRealtimeVoice({
       audioRef.current.remove();
       audioRef.current = null;
     }
-    requestIosMixableSession();
+    // Only hand the mixable/ambient category back once every mic track is
+    // stopped, so speech can mix with music again after the call.
+    const sessionToken = sessionTokenRef.current;
+    sessionTokenRef.current = null;
+    endIosRecordingSession(sessionToken);
     setSpeaking(false);
     setState("idle");
   }, []);
+
 
   const start = useCallback(async () => {
     if (busyRef.current || pcRef.current) return;
@@ -80,8 +123,20 @@ export function useRealtimeVoice({
         data: { context: buildContext(), documentIds: buildDocumentIds() },
       });
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      // iOS refuses audio capture while the page sits in the mixable "ambient"
+      // category speech playback puts it in ("audio session category is not
+      // compatible with audio capture"). Take ownership of a play-and-record
+      // session before opening the mic and keep it for the whole call.
+      if (sessionTokenRef.current === null) {
+        sessionTokenRef.current = beginIosRecordingSession();
+      }
+      const stream = await acquireMic(() => {
+        const previous = sessionTokenRef.current;
+        sessionTokenRef.current = beginIosRecordingSession();
+        // Drop the superseded token so teardown can restore mixable playback.
+        if (previous !== null && previous !== sessionTokenRef.current) {
+          endIosRecordingSession(previous);
+        }
       });
       streamRef.current = stream;
 
