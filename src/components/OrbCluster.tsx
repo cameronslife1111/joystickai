@@ -34,6 +34,8 @@ interface OrbClusterProps {
   onMenu: () => void;
   onNextDoc: () => void;
   onDelete: () => void;
+  /** Blue orb hold: toggle the list-cycling lock (slot 22). */
+  onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
   onMenuLongPress: () => void;
   /** Orange orb tap: open the pinned document. */
