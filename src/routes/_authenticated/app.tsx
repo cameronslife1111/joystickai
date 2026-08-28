@@ -130,11 +130,6 @@ function AppPage() {
   const [newDocText, setNewDocText] = useState("");
   const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  // Pink orb mode: tap opens Move sentence or Jump to; long press toggles.
-  const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
-  // Gray orb mode: tap opens Media gallery or Chat; long press toggles.
-  const [grayMode, setGrayMode] = useState<"media" | "chat">("media");
-  const [orangeMode, setOrangeMode] = useState<"pin" | "search">("pin");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
