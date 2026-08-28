@@ -130,6 +130,8 @@ function AppPage() {
   const [newDocText, setNewDocText] = useState("");
   const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  // Pink orb mode: tap opens Move sentence or Jump to; long press toggles.
+  const [pinkMode, setPinkMode] = useState<"move" | "jump">("move");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentOpen, setRecentOpen] = useState(false);
@@ -2881,7 +2883,8 @@ function AppPage() {
         <section className="relative flex shrink-0 items-center justify-center pb-4">
           {/* Six smiley orbs around a transparent center pad:
               blue = prev, purple = next, yellow = menu, green = next doc,
-              red = delete, orange = pinned doc (hold = pick a new pin);
+              red = delete, orange = pinned doc (hold = pick a new pin),
+              pink = move sentence / jump to (hold = switch), gray = media gallery;
               center tap = edit, hold = record. */}
           <OrbCluster
             recording={recording}
@@ -2897,6 +2900,20 @@ function AppPage() {
               setPinPickerQuery("");
               setPinPickerOpen(true);
             }}
+            moveMode={pinkMode}
+            onMoveJump={() => {
+              if (pinkMode === "move") setMoveOpen(true);
+              else setJumpOpen(true);
+            }}
+            onMoveJumpLongPress={() => {
+              setPinkMode((m) => {
+                const next = m === "move" ? "jump" : "move";
+                toast(next === "move" ? "↕️ Move sentence" : "🔃 Jump to", { id: "pink-mode" });
+                return next;
+              });
+            }}
+            onMediaGallery={() => navigate({ to: "/media" })}
+            mediaBadge={unseenCount}
           />
         </section>
       )}

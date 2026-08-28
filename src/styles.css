@@ -506,6 +506,41 @@
 @utility glow-orb-yellow {
   --glow-orb-color: oklch(0.84 0.16 95);
 }
+@utility glow-orb-pink {
+  --glow-orb-color: oklch(0.75 0.19 350);
+}
+@utility glow-orb-gray {
+  --glow-orb-color: oklch(0.72 0.02 260);
+}
+
+/* Letter glyph used in place of an icon (pink orb in "Jump to" mode) */
+.glow-orb-glyph {
+  font-size: 54%;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--foreground);
+  opacity: 0.9;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px color-mix(in oklab, var(--background) 60%, transparent));
+}
+
+/* Small count badge on an orb (unseen media) */
+.glow-orb-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background: var(--destructive);
+  color: var(--destructive-foreground, white);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+}
 
 @keyframes glow-orb-pulse {
   0%, 100% { opacity: 0.85; transform: scale(1); }

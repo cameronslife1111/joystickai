@@ -11,13 +11,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from six little glowing orbs.",
+          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
       },
       { property: "og:title", content: "Orby — Focus more in a busy world, one sentence at a time" },
       {
         property: "og:description",
         content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from six little glowing orbs.",
+          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -96,7 +96,7 @@ function Hero() {
       <Reveal delay="240ms">
         <p className="mx-auto mt-6 max-w-xl text-base text-slate-400 md:text-lg">
           Orby reads your documents to you one sentence at a time, listens when you speak, and runs
-          multi-step plans — all through six little glowing orbs.
+          multi-step plans — all through eight little glowing orbs.
         </p>
       </Reveal>
       <Reveal delay="360ms">
@@ -184,11 +184,13 @@ function SentenceCycler() {
 
 const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number }> = [
   { color: "blue", label: "Previous sentence", col: 3, row: 1 },
-  { color: "red", label: "Delete sentence", col: 1, row: 2 },
+  { color: "red", label: "Delete sentence", col: 1, row: 1 },
   { color: "yellow", label: "Open the menu", col: 2, row: 2 },
   { color: "green", label: "Next document", col: 4, row: 2 },
-  { color: "orange", label: "Pinned document", col: 5, row: 2 },
+  { color: "orange", label: "Pinned document", col: 5, row: 1 },
   { color: "purple", label: "Next sentence", col: 3, row: 3 },
+  { color: "pink", label: "Move sentence / Jump to", col: 1, row: 3 },
+  { color: "gray", label: "Media gallery", col: 5, row: 3 },
 ];
 
 function MeetTheOrbs() {
@@ -207,7 +209,7 @@ function MeetTheOrbs() {
           The controls
         </p>
         <h2 className="mt-4 text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          Meet the six orbs.
+          Meet the orbs.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-base text-slate-400">
           Everything Orby does is one press away. No menus to dig through, no gestures to memorize.

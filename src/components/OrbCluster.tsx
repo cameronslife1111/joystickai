@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, FileText, Menu, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,6 +38,16 @@ interface OrbClusterProps {
   onPinnedDoc: () => void;
   /** Orange orb hold: choose a new document to pin. */
   onPinnedDocLongPress: () => void;
+  /** Pink orb mode: "move" = Move sentence sheet, "jump" = Jump to sheet. */
+  moveMode: "move" | "jump";
+  /** Pink orb tap: open the sheet for the current mode. */
+  onMoveJump: () => void;
+  /** Pink orb hold: toggle between Move sentence and Jump to. */
+  onMoveJumpLongPress: () => void;
+  /** Gray orb tap: open the media gallery. */
+  onMediaGallery: () => void;
+  /** Unseen media count shown on the gray orb. */
+  mediaBadge?: number;
 }
 
 /** Short, soundless jiggle played on the pressed orb. */
@@ -70,7 +80,10 @@ const LONG_PRESS_MS = 500;
 interface ClusterOrbProps {
   /** Full literal class (e.g. "glow-orb-blue") so Tailwind's scanner sees it. */
   orbClass: string;
-  Icon: LucideIcon;
+  Icon?: LucideIcon;
+  /** Rendered instead of an icon (e.g. the letter "J"). */
+  glyph?: string;
+  badge?: number;
   label: string;
   onPress: () => void;
   /** Optional hold action; when it fires, the tap action is suppressed. */
@@ -82,6 +95,8 @@ interface ClusterOrbProps {
 function ClusterOrb({
   orbClass,
   Icon,
+  glyph,
+  badge,
   label,
   onPress,
   onLongPress,
@@ -150,7 +165,16 @@ function ClusterOrb({
       className={cn("glow-orb", orbClass)}
       style={placement}
     >
-      <Icon className="glow-orb-icon" aria-hidden="true" focusable="false" strokeWidth={2.6} />
+      {Icon ? (
+        <Icon className="glow-orb-icon" aria-hidden="true" focusable="false" strokeWidth={2.6} />
+      ) : (
+        <span className="glow-orb-glyph" aria-hidden="true">
+          {glyph}
+        </span>
+      )}
+      {badge && badge > 0 ? (
+        <span className="glow-orb-badge">{badge > 99 ? "99+" : badge}</span>
+      ) : null}
     </button>
   );
 }
@@ -166,6 +190,11 @@ export function OrbCluster({
   onDelete,
   onPinnedDoc,
   onPinnedDocLongPress,
+  moveMode,
+  onMoveJump,
+  onMoveJumpLongPress,
+  onMediaGallery,
+  mediaBadge,
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
@@ -196,7 +225,7 @@ export function OrbCluster({
         Icon={Trash2}
         label="Delete sentence"
         onPress={onDelete}
-        placement={{ gridColumn: 1, gridRow: 2 }}
+        placement={{ gridColumn: 1, gridRow: 1 }}
       />
       <ClusterOrb
         orbClass="glow-orb-yellow"
@@ -228,7 +257,7 @@ export function OrbCluster({
         label="Open pinned document (hold to pin another)"
         onPress={onPinnedDoc}
         onLongPress={onPinnedDocLongPress}
-        placement={{ gridColumn: 5, gridRow: 2 }}
+        placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb
         orbClass="glow-orb-purple"
@@ -237,6 +266,26 @@ export function OrbCluster({
         onPress={onNext}
         buttonRef={setButton("next")}
         placement={{ gridColumn: 3, gridRow: 3 }}
+      />
+      <ClusterOrb
+        orbClass="glow-orb-pink"
+        {...(moveMode === "move" ? { Icon: ArrowUpDown } : { glyph: "J" })}
+        label={
+          moveMode === "move"
+            ? "Move sentence (hold to switch to Jump to)"
+            : "Jump to (hold to switch to Move sentence)"
+        }
+        onPress={onMoveJump}
+        onLongPress={onMoveJumpLongPress}
+        placement={{ gridColumn: 1, gridRow: 3 }}
+      />
+      <ClusterOrb
+        orbClass="glow-orb-gray"
+        Icon={Image}
+        label="Media gallery"
+        badge={mediaBadge}
+        onPress={onMediaGallery}
+        placement={{ gridColumn: 5, gridRow: 3 }}
       />
     </div>
   );
