@@ -5,7 +5,7 @@ import {
   composeRealtimeInstructions,
   createRealtimeSession,
 } from "@/lib/realtime.functions";
-import { requestIosMixableSession } from "@/lib/audio-session";
+import { beginIosRecordingSession, endIosRecordingSession } from "@/lib/audio-session";
 
 export type CallState = "idle" | "connecting" | "live";
 
