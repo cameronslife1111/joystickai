@@ -38,7 +38,7 @@ export const aiContinue = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       "You are Orby, a focused writing companion. The user speaks one short voice prompt at a time. " +
@@ -78,7 +78,7 @@ export const askAi = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       "You are Orby, a focused thinking companion. Answer the user's text directly and usefully. " +
@@ -130,7 +130,7 @@ export const generateText = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       "You are Orby, a focused writing companion. The user gives you a prompt and optional reference documents. " +
@@ -223,7 +223,7 @@ export const analyzeImage = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       "You are Orby, a focused writing companion. The user provides an image and optional context. " +

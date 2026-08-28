@@ -42,7 +42,7 @@ export const generateThreadTitle = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.6-terra");
+    const model = provider("gpt-5.6-sol");
 
     const { text } = await aiSdkGenerateText({
       model,

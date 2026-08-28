@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const PLANNER_PROVIDER = Deno.env.get("PLANNER_PROVIDER") ?? "openai";
-const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.5";
+const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-sol";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

@@ -24,7 +24,7 @@ export const rewriteMediaPrompt = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
     const provider = createOpenAiProvider(apiKey);
-    const model = provider("gpt-5.5");
+    const model = provider("gpt-5.6-sol");
 
     const system =
       data.mode === "edit"
