@@ -291,9 +291,6 @@ export function OrbCluster({
         onLongPress={onChat}
         placement={{ gridColumn: 5, gridRow: 3 }}
       />
-
-        placement={{ gridColumn: 5, gridRow: 3 }}
-      />
     </div>
   );
 }
