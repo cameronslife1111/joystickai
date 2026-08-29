@@ -855,6 +855,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             : [],
           threadId,
           capabilities: capsUsed,
+          autoCapabilities: override?.auto === true,
         },
       });
 
