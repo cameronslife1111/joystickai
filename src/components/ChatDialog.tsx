@@ -559,10 +559,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [activeThreadId]);
 
-  // Capability checkboxes never carry across threads or dialog sessions.
+  // Capability checkboxes are sticky per thread: load whatever this chat has
+  // saved, and keep it until the user unchecks it.
   useEffect(() => {
-    setPendingCaps(NO_CAPS);
-  }, [activeThreadId, open]);
+    setPendingCaps(activeThread?.capabilities ?? NO_CAPS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId, activeThread?.capabilities]);
 
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
