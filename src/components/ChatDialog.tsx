@@ -873,6 +873,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
         const mergedCaps = { ...decided } as ChatCapabilities;
         for (const g of ACTION_TOOL_GROUPS) if (capsUsed[g]) mergedCaps[g] = true;
+        // "Planning" alone still needs somewhere to put the work — document
+        // tools are the baseline so the planner is never left with no tools.
+        if (!ACTION_TOOL_GROUPS.some((g) => mergedCaps[g])) mergedCaps.document_editing = true;
         const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => mergedCaps[g]);
         const { data: planRow, error: planErr } = await supabase
           .from("plans")
