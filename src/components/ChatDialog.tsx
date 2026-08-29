@@ -776,18 +776,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     caps?: ChatCapabilities;
     threadId?: string;
     docIds?: string[];
-  }) => {
+  }): Promise<boolean> => {
     const text = (override?.text ?? input).trim();
     const threadId = override?.threadId ?? activeThreadId;
-    if (!text || !userId || !threadId) return;
-    if (busyThreadIds.has(threadId)) return;
+    if (!text || !userId || !threadId) return false;
+    if (busyThreadIds.has(threadId)) return false;
     // While a hands-free call is live this is a text-only conversation.
     const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
     if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
-      return;
+      return false;
     }
+
 
     markBusy(threadId);
     if (!override?.text) setInput("");
