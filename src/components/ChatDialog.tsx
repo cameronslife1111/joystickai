@@ -301,9 +301,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
   const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
-    const titles = assets.map((a) => a.title.trim()).filter(Boolean);
+    const titles = assets
+      .map((a) => a.title.replace(/["“”]/g, "").trim())
+      .filter(Boolean);
     if (!titles.length) return;
-    const insert = titles.join(", ");
+    const insert = titles.map((t) => `"${t}"`).join(", ");
     setInput((prev) => {
       const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
       // Pad with spaces so the titles don't fuse with neighboring words.
