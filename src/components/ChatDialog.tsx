@@ -776,18 +776,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     caps?: ChatCapabilities;
     threadId?: string;
     docIds?: string[];
-  }) => {
+  }): Promise<boolean> => {
     const text = (override?.text ?? input).trim();
     const threadId = override?.threadId ?? activeThreadId;
-    if (!text || !userId || !threadId) return;
-    if (busyThreadIds.has(threadId)) return;
+    if (!text || !userId || !threadId) return false;
+    if (busyThreadIds.has(threadId)) return false;
     // While a hands-free call is live this is a text-only conversation.
     const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
     if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
-      return;
+      return false;
     }
+
 
     markBusy(threadId);
     if (!override?.text) setInput("");
@@ -936,9 +937,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           }
         })();
       }
+      return true;
     } catch (err) {
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
       toast.error(err instanceof Error ? err.message : "Chat failed");
+      return false;
     } finally {
       markIdle(threadId);
       if (threadId === activeThreadId) {
@@ -946,6 +949,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       }
     }
   };
+
+  /**
+   * Always points at the current render's `handleSend`. Programmatic callers
+   * (🟣 Delegate) must go through this — a captured closure would still be
+   * holding the first render's state (no user id yet) and silently no-op.
+   */
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
 
   // 🟣 Delegate (menu slot 15 / purple orb hold): fresh thread + attached doc,
   // Orby analyses the step and proposes one plan for review. Once per tap.
@@ -962,13 +973,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           isSubstep: res.isSubstep,
           parentTask: res.parentTask,
         });
-        setDelegateAnalyzing(false);
-        await handleSend({
+        const ok = await handleSendRef.current?.({
           text: prompt,
           caps: { ...DEFAULT_CAPS },
           threadId,
           docIds: [documentId],
         });
+        setDelegateAnalyzing(false);
+        if (!ok) toast.error("Couldn't delegate that step");
       } catch (err) {
         setDelegateAnalyzing(false);
         toast.error(err instanceof Error ? err.message : "Couldn't delegate that step");
@@ -977,6 +989,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [analyzeStep],
   );
+
 
   useEffect(() => {
     if (!open || !delegate || !userId) return;
