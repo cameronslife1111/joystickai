@@ -794,6 +794,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const handleSend = async (override?: {
     text?: string;
     caps?: ChatCapabilities;
+    /** Delegate only: let Orby pick its own capabilities for this send. */
+    auto?: boolean;
     threadId?: string;
     docIds?: string[];
   }): Promise<boolean> => {
