@@ -8,6 +8,13 @@
       "when": 1787953722325,
       "tag": "0000_widen_tts_voice_allowed",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788025233310,
+      "tag": "0001_plans_review_in_chat",
+      "breakpoints": true
     }
   ]
 }
