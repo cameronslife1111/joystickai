@@ -1672,7 +1672,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         }}
         onSaved={() => {
           setInput("");
-          setPendingCaps(NO_CAPS);
           setPickedImages([]);
           refetchSchedules();
           toast.success("Orby will send that later");
