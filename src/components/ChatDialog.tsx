@@ -1791,6 +1791,9 @@ type PlanRow = {
   current_step: number;
   total_steps: number;
   steps: PlanStep[] | null;
+  user_request?: string;
+  review_in_chat?: boolean | null;
+  proposed_capabilities?: Record<string, boolean> | null;
 };
 
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
