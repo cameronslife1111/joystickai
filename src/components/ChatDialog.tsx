@@ -473,7 +473,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (!userId) return null;
     const { data, error } = await supabase
       .from("chat_threads")
-      .insert({ user_id: userId, title, capabilities: DEFAULT_CAPS })
+      .insert({ user_id: userId, title, capabilities: NO_CAPS })
       .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
       .single();
     if (error || !data) {
