@@ -228,14 +228,20 @@ async function classifyTurn(
 }
 
 /**
- * Run one chat turn. Classifies the latest message using the enabled
- * capabilities and either answers directly (conversation, web search, image
- * analysis) or reports that the request should become an auto-running plan.
+ * Run one chat turn. Orby classifies the latest message itself and either
+ * answers directly (conversation, web search, image analysis) or reports that
+ * the request should become a plan — along with the capabilities that plan
+ * needs, so the user never has to toggle them.
  */
 export async function runChatTurn(
   supabase: any,
   data: ChatTurnInput,
-): Promise<{ route: ChatRoute; text?: string }> {
+): Promise<{
+  route: ChatRoute;
+  text?: string;
+  capabilities?: ChatCapabilities;
+  rationale?: string;
+}> {
   
   const caps = data.capabilities;
   const contextText = await buildContext(supabase, data.contextDocumentIds);
@@ -350,25 +356,16 @@ export async function runChatTurn(
     .slice(-12)
     .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
     .join("\n");
-  let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
-
-  // Attached-documents safety net: when the user has documents attached but
-  // did NOT switch on any action capability for this message, only let the
-  // request become a plan if they clearly asked to CHANGE something. When the
-  // user did tick an action capability, that IS the intent — never override it.
-  const actionCapsOn = ACTION_GROUPS.some((g) => caps[g]);
-  if (route === "plan" && contextText && !actionCapsOn) {
-    const wantsAction =
-      /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
-        latestText,
-      );
-    if (!wantsAction) route = "chat";
-  }
-
+  const decision = await classifyTurn(model, latestText, recent, caps, memory.digest);
+  const route = decision.route;
 
   if (route === "plan") {
-    // The client creates and auto-runs the plan; nothing to answer here.
-    return { route: "plan" };
+    // The client creates the plan and shows it for review in the chat.
+    return {
+      route: "plan",
+      capabilities: decision.capabilities,
+      rationale: decision.rationale,
+    };
   }
 
   if (route === "web") {
