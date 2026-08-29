@@ -284,14 +284,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
-  /** Live document context for the delegate card (thread, doc, sentences). */
-  const delegateDocRef = useRef<{
-    threadId: string;
-    documentId: string;
-    title: string;
-    sentences: string[];
-    index: number;
-  } | null>(null);
   /** True while 🟣 Delegate is analysing the step, before the plan appears. */
   const [delegateAnalyzing, setDelegateAnalyzing] = useState(false);
   const analyzeStep = useServerFn(analyzeDelegateStep);
@@ -1803,7 +1795,15 @@ type PlanRow = {
 
 const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
 
-function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoSpeak?: boolean }) {
+function PlanProgressCard({
+  planId,
+  autoSpeak = false,
+  onSteer,
+}: {
+  planId: string;
+  autoSpeak?: boolean;
+  onSteer?: (text: string) => void;
+}) {
   const announcedRef = useRef(false);
   const qc = useQueryClient();
   const [stopping, setStopping] = useState(false);
@@ -1816,7 +1816,9 @@ function PlanProgressCard({ planId, autoSpeak = false }: { planId: string; autoS
     queryFn: async (): Promise<PlanRow | null> => {
       const { data } = await supabase
         .from("plans")
-        .select("id, status, plan_summary, result_summary, error_message, current_step, total_steps, steps")
+        .select(
+          "id, status, plan_summary, result_summary, error_message, current_step, total_steps, steps, user_request, review_in_chat, proposed_capabilities",
+        )
         .eq("id", planId)
         .maybeSingle();
       return (data as any) ?? null;
