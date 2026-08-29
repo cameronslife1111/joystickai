@@ -356,7 +356,14 @@ export async function runChatTurn(
     .slice(-12)
     .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
     .join("\n");
-  const decision = await classifyTurn(model, latestText, recent, caps, memory.digest);
+  const decision = await classifyTurn(
+    model,
+    latestText,
+    recent,
+    caps,
+    memory.digest,
+    data.autoCapabilities === true,
+  );
   const route = decision.route;
 
   if (route === "plan") {
