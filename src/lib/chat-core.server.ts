@@ -146,8 +146,12 @@ async function classifyTurn(
   recent: string,
   caps: ChatCapabilities,
   memoryDigest = "",
+  auto = false,
 ): Promise<{ route: ChatRoute; capabilities: ChatCapabilities; rationale: string }> {
   const userOn = ACTION_GROUPS.filter((g) => caps[g]);
+  // Manual mode: the user's checkboxes decide what is even possible.
+  const planAllowed = auto || userOn.length > 0;
+  const webAllowed = auto || caps.web_search;
 
   const system =
     "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
