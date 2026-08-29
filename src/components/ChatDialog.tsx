@@ -206,7 +206,7 @@ function planActionCue(plan: { plan_summary: string | null; steps: PlanStep[] | 
 }
 
 function normalizeCaps(raw: any): ChatCapabilities {
-  return { ...DEFAULT_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
+  return { ...NO_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
