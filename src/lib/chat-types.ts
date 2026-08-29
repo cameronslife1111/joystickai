@@ -32,6 +32,12 @@ export const chatTurnSchema = z.object({
   imageUrls: z.array(z.string().url()).max(6).default([]),
   threadId: z.string().uuid().optional(),
   capabilities: capabilitiesSchema.default({ ...ALL_CAPS_ON }),
+  /**
+   * When true (🟣 Delegate), Orby picks its own capabilities and may route to a
+   * plan on its own. When false (regular chat), only the capabilities the user
+   * checked are used and a plan requires one of them.
+   */
+  autoCapabilities: z.boolean().default(false),
 });
 
 export type ChatCapabilities = z.infer<typeof capabilitiesSchema>;
