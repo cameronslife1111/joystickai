@@ -1859,6 +1859,25 @@ function PlanProgressCard({
 
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const running = !PLAN_DONE.has(plan.status);
+
+  // A plan Orby proposed inside the chat waits here for approval / a note.
+  if (plan.status === "proposed" && (plan as any).review_in_chat) {
+    return (
+      <PlanReviewCard
+        plan={{
+          id: plan.id,
+          plan_summary: plan.plan_summary,
+          user_request: (plan as any).user_request ?? "",
+          steps,
+          proposed_capabilities: ((plan as any).proposed_capabilities ?? null) as Record<
+            string,
+            boolean
+          > | null,
+        }}
+      />
+    );
+  }
+
   const headerLabel =
     plan.status === "composing"
       ? "Planning…"
@@ -1932,6 +1951,9 @@ function PlanProgressCard({
       )}
       {plan.status === "failed" && plan.error_message && (
         <p className="mt-2 whitespace-pre-wrap text-xs text-destructive">{plan.error_message}</p>
+      )}
+      {(plan.status === "failed" || plan.status === "cancelled") && onSteer && (
+        <PlanSteerBox onSend={onSteer} />
       )}
     </div>
   );
