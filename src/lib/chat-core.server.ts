@@ -209,21 +209,33 @@ async function classifyTurn(
         .filter((c) => (KNOWN as readonly string[]).includes(c)),
     );
 
-    // Union: never drop a capability the user ticked.
-    const merged: ChatCapabilities = {
-      ...caps,
-      web_search: caps.web_search || wanted.has("web_search"),
-      planning: caps.planning || wanted.has("planning"),
-      document_editing: caps.document_editing || wanted.has("document_editing"),
-      image_generation: caps.image_generation || wanted.has("image_generation"),
-      video_generation: caps.video_generation || wanted.has("video_generation"),
-      scheduling: caps.scheduling || wanted.has("scheduling"),
-    };
+    // Auto mode (Delegate): union — never drop a capability the user ticked,
+    // and let Orby switch more on. Manual mode: exactly what the user ticked.
+    const merged: ChatCapabilities = auto
+      ? {
+          ...caps,
+          web_search: caps.web_search || wanted.has("web_search"),
+          planning: caps.planning || wanted.has("planning"),
+          document_editing: caps.document_editing || wanted.has("document_editing"),
+          image_generation: caps.image_generation || wanted.has("image_generation"),
+          video_generation: caps.video_generation || wanted.has("video_generation"),
+          scheduling: caps.scheduling || wanted.has("scheduling"),
+        }
+      : { ...caps };
+
+    // Manual mode: the checkboxes are the gate — clamp routes the user didn't
+    // switch on back to a plain text answer.
+    if (!auto) {
+      if (route === "plan" && !planAllowed) route = "chat";
+      if (route === "web" && !webAllowed) route = "chat";
+    }
+
     // A plan needs at least one action capability to be runnable at all.
-    if (route === "plan" && !ACTION_GROUPS.some((g) => merged[g])) {
+    if (auto && route === "plan" && !ACTION_GROUPS.some((g) => merged[g])) {
       merged.planning = true;
       merged.document_editing = true;
     }
+
 
     const rationale = typeof parsed?.rationale === "string" ? parsed.rationale.trim().slice(0, 400) : "";
     return { route, capabilities: merged, rationale };
