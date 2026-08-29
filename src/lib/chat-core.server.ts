@@ -135,58 +135,49 @@ function tryParseJson<T = any>(raw: string): T | null {
 
 
 /**
- * Decide how to handle the latest user message given the thread's enabled
- * capabilities. Returns one of: "chat" (normal conversation), "web" (web
- * search), or "plan" (an action that should become an auto-running plan).
+ * Decide how to handle the latest user message AND which capabilities the work
+ * would need. Orby decides for itself: capabilities the user ticked are always
+ * kept, and Orby may switch on more when a step needs them. It never removes a
+ * capability the user asked for.
  */
-async function classifyRoute(
+async function classifyTurn(
   model: any,
   latestText: string,
   recent: string,
   caps: ChatCapabilities,
   memoryDigest = "",
-): Promise<ChatRoute> {
-  const actionEnabled = ACTION_GROUPS.some((g) => caps[g]);
-  // Nothing actionable and no web search → always chat.
-  if (!actionEnabled && !caps.web_search) return "chat";
-
-  const enabled: string[] = [];
-  if (caps.web_search) enabled.push("web_search (look up current/factual info online)");
-  if (caps.document_editing) enabled.push("document_editing (create/rename docs, add/edit/move/mark sentences)");
-  if (caps.image_generation) enabled.push("image_generation (create/edit/remix images to the gallery)");
-  if (caps.video_generation) enabled.push("video_generation (make videos to the gallery)");
-  if (caps.planning) enabled.push("planning (multi-step tasks combining the above)");
+): Promise<{ route: ChatRoute; capabilities: ChatCapabilities; rationale: string }> {
+  const userOn = ACTION_GROUPS.filter((g) => caps[g]);
 
   const system =
-    "You are the strict intent router for Orby, a writing assistant. Decide how to handle the user's latest message. " +
-    "Return STRICT JSON only: {\"route\":\"chat\"|\"web\"|\"plan\"}.\n\n" +
-    (actionEnabled
-      ? "IMPORTANT CONTEXT: the user JUST deliberately switched ON action capabilities for THIS message only (these checkboxes are one-shot and clear after every send). That is a strong signal of intent to have Orby DO the work now, continuing whatever the conversation has been about. Default to \"plan\" unless the message is plainly just a question or comment seeking a text answer (\"what do you think\", \"how does this work\", \"which one is better\").\n" +
-        "Short follow-ups like \"ok do it\", \"go ahead\", \"make those\", \"yes\", \"start\" ARE \"plan\" here — the work is whatever the recent conversation just agreed on.\n\n"
-      : "DEFAULT TO \"chat\". Only escalate to \"web\" or \"plan\" when the user's intent is unmistakable.\n\n") +
+    "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
+    "Decide how to handle the user's latest message, and decide which of your capabilities the work would need.\n\n" +
+    "Return STRICT JSON only:\n" +
+    '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search"],"rationale":"one plain-text sentence"}\n\n' +
     "Routes:\n" +
-    "- chat: normal conversation, questions, explanations, brainstorming, opinions, and writing help — including reading, summarizing, analyzing, or answering questions ABOUT attached documents.\n" +
-    (caps.web_search
-      ? "- web: the user explicitly wants current, real-world, or factual info that requires looking it up online (news, prices, live facts, 'search for', 'look up', 'what's the latest').\n"
+    "- chat: conversation, questions, explanations, opinions, brainstorming, and anything that only needs a text answer — including reading, summarizing, or analyzing attached documents.\n" +
+    "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
+    "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
+    "CRITICAL RULES:\n" +
+    "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n" +
+    "2. Only choose \"chat\" when the message plainly wants a text answer and asks for no change or creation.\n" +
+    "3. Follow-ups matter: after a plan has run, \"keep going\", \"now add X\", \"do the same for the other doc\" are a NEW \"plan\". Merely ASKING about what a plan did is \"chat\".\n" +
+    "4. Short confirmations (\"ok do it\", \"go ahead\", \"yes\", \"start\") are \"plan\" when the conversation just agreed on work to do.\n" +
+    "5. capabilities: list every capability the work genuinely needs, and nothing else. For \"plan\", always include \"planning\" when there is more than one step. For \"chat\" return an empty list. For \"web\" return [\"web_search\"].\n" +
+    "6. rationale: one short plain-text sentence naming the task you detected. No markdown.\n" +
+    (userOn.length
+      ? `The user explicitly switched these on for this message, so they are definitely wanted: ${userOn.join(", ")}.\n`
       : "") +
-    (actionEnabled
-      ? "- plan: Orby should DO something in the user's workspace — edit/organize/create documents, generate images or videos, schedule work — either because the message says so or because the conversation has been building toward it and the user has now enabled those capabilities.\n"
-      : "") +
-    "\nCRITICAL RULES:\n" +
-    (actionEnabled
-      ? "1. The user turning these capabilities on for this single message IS intent. Prefer \"plan\" whenever an actionable reading of the message (in light of the conversation) is reasonable.\n"
-      : "1. A capability being ENABLED is only permission — it is NOT intent. Never choose \"plan\" or \"web\" just because a toggle is on.\n") +
-    (actionEnabled
-      ? "2. Only choose \"chat\" if the message clearly asks for a text answer and does not ask for any change or creation.\n"
-      : "2. Discussing, asking about, quoting, or wanting a text response about an attached document is ALWAYS \"chat\", never \"plan\". Only choose \"plan\" if the user commands a CHANGE to the document or asks to create media.\n") +
-    (actionEnabled
-      ? "3. If you are unsure, choose \"plan\".\n"
-      : "3. If you are unsure, or the message is a question/statement without a clear command, choose \"chat\".\n") +
-    "4. Follow-ups matter: if a previous plan already ran in this conversation and the user now says something like \"keep going\", \"now add X to it\", \"do the same for the other doc\", that is a NEW \"plan\" (when planning-type capabilities are enabled) — the target is whatever that earlier plan produced. But merely ASKING about what a previous plan did is still \"chat\".\n" +
-    (memoryDigest ? `\nPlan history in this conversation: ${memoryDigest}\n` : "") +
-    `Only these capabilities are ENABLED: ${enabled.join("; ") || "none"}. ` +
-    "Never choose a route whose capability is disabled — fall back to chat instead.";
+    (memoryDigest ? `\nPlan history in this conversation: ${memoryDigest}\n` : "");
 
+  const KNOWN = [
+    "planning",
+    "document_editing",
+    "image_generation",
+    "video_generation",
+    "scheduling",
+    "web_search",
+  ] as const;
 
   try {
     const { text } = await aiSdkGenerateText({
@@ -201,27 +192,56 @@ async function classifyRoute(
         },
       ],
     });
-    const parsed = tryParseJson<{ route?: string }>(text);
+    const parsed = tryParseJson<{ route?: string; capabilities?: unknown; rationale?: unknown }>(text);
     let route = (parsed?.route ?? "chat") as ChatRoute;
-    if (route === "web" && !caps.web_search) route = "chat";
-    if (route === "plan" && !actionEnabled) route = "chat";
     if (route !== "chat" && route !== "web" && route !== "plan") route = "chat";
-    return route;
+
+    const wanted = new Set(
+      (Array.isArray(parsed?.capabilities) ? parsed!.capabilities : [])
+        .filter((c: unknown): c is string => typeof c === "string")
+        .map((c) => c.trim().toLowerCase())
+        .filter((c) => (KNOWN as readonly string[]).includes(c)),
+    );
+
+    // Union: never drop a capability the user ticked.
+    const merged: ChatCapabilities = {
+      ...caps,
+      web_search: caps.web_search || wanted.has("web_search"),
+      planning: caps.planning || wanted.has("planning"),
+      document_editing: caps.document_editing || wanted.has("document_editing"),
+      image_generation: caps.image_generation || wanted.has("image_generation"),
+      video_generation: caps.video_generation || wanted.has("video_generation"),
+      scheduling: caps.scheduling || wanted.has("scheduling"),
+    };
+    // A plan needs at least one action capability to be runnable at all.
+    if (route === "plan" && !ACTION_GROUPS.some((g) => merged[g])) {
+      merged.planning = true;
+      merged.document_editing = true;
+    }
+
+    const rationale = typeof parsed?.rationale === "string" ? parsed.rationale.trim().slice(0, 400) : "";
+    return { route, capabilities: merged, rationale };
   } catch (e) {
-    console.warn("[chat classifyRoute] failed", e);
-    return "chat";
+    console.warn("[chat classifyTurn] failed", e);
+    return { route: "chat", capabilities: caps, rationale: "" };
   }
 }
 
 /**
- * Run one chat turn. Classifies the latest message using the enabled
- * capabilities and either answers directly (conversation, web search, image
- * analysis) or reports that the request should become an auto-running plan.
+ * Run one chat turn. Orby classifies the latest message itself and either
+ * answers directly (conversation, web search, image analysis) or reports that
+ * the request should become a plan — along with the capabilities that plan
+ * needs, so the user never has to toggle them.
  */
 export async function runChatTurn(
   supabase: any,
   data: ChatTurnInput,
-): Promise<{ route: ChatRoute; text?: string }> {
+): Promise<{
+  route: ChatRoute;
+  text?: string;
+  capabilities?: ChatCapabilities;
+  rationale?: string;
+}> {
   
   const caps = data.capabilities;
   const contextText = await buildContext(supabase, data.contextDocumentIds);
@@ -336,25 +356,16 @@ export async function runChatTurn(
     .slice(-12)
     .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
     .join("\n");
-  let route = await classifyRoute(model, latestText, recent, caps, memory.digest);
-
-  // Attached-documents safety net: when the user has documents attached but
-  // did NOT switch on any action capability for this message, only let the
-  // request become a plan if they clearly asked to CHANGE something. When the
-  // user did tick an action capability, that IS the intent — never override it.
-  const actionCapsOn = ACTION_GROUPS.some((g) => caps[g]);
-  if (route === "plan" && contextText && !actionCapsOn) {
-    const wantsAction =
-      /\b(edit|rewrite|revise|update|change|add|append|insert|delete|remove|replace|organi[sz]e|reorder|move|rename|create|generate|make|produce|draw|render|remix|summari[sz]e into|turn (this|it) into|convert)\b/i.test(
-        latestText,
-      );
-    if (!wantsAction) route = "chat";
-  }
-
+  const decision = await classifyTurn(model, latestText, recent, caps, memory.digest);
+  const route = decision.route;
 
   if (route === "plan") {
-    // The client creates and auto-runs the plan; nothing to answer here.
-    return { route: "plan" };
+    // The client creates the plan and shows it for review in the chat.
+    return {
+      route: "plan",
+      capabilities: decision.capabilities,
+      rationale: decision.rationale,
+    };
   }
 
   if (route === "web") {

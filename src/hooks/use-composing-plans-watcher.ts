@@ -41,13 +41,14 @@ export function useComposingPlansWatcher(
       const ids = Array.from(tracking.current);
       const { data: rows } = await supabase
         .from("plans")
-        .select("id, status, steps")
+        .select("id, status, steps, review_in_chat")
         .in("id", ids);
 
       const { toast } = await import("sonner");
       for (const row of rows ?? []) {
         if (row.status === "composing") continue;
         tracking.current.delete(row.id);
+        if ((row as any).review_in_chat) continue; // reviewed in its chat card
         if (notified.current.has(row.id)) continue;
         notified.current.add(row.id);
 

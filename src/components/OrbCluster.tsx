@@ -38,6 +38,8 @@ interface OrbClusterProps {
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
   onMenuLongPress: () => void;
+  /** Purple orb hold: delegate the current step to Orby (menu slot 15). */
+  onNextLongPress: () => void;
   /** Orange orb tap: open the pinned document. */
   onPinnedDoc: () => void;
   /** Orange orb hold: open Search docs. */
@@ -195,6 +197,7 @@ export function OrbCluster({
   onDelete,
   onPrevLongPress,
   onMenuLongPress,
+  onNextLongPress,
   onPinnedDoc,
   onPinnedDocLongPress,
   onMoveSentence,
@@ -273,8 +276,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-purple"
         Icon={ArrowDown}
-        label="Next sentence"
+        label="Next sentence (hold to delegate)"
         onPress={onNext}
+        onLongPress={onNextLongPress}
         buttonRef={setButton("next")}
         placement={{ gridColumn: 3, gridRow: 3 }}
       />

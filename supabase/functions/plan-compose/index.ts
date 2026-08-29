@@ -158,7 +158,13 @@ If the user's request is impossible, ambiguous, or would require deletion, respo
   "explanation": "<one short sentence explaining why>"
 }
 
+WORDING CONTRACT (the user reads this before approving):
+- "summary" must name the task you detected in one plain sentence (for a step inside a document, say whether it is a substep of a bigger task and what that parent task is).
+- "explanation" must list one short line per capability you will use, each in the form "Orby will use <capability> to <do Y> and put the output in <Z>".
+- Every step "description" must also read as "Orby will use <capability> to <do Y> and put the output in <Z>".
+
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
+
 
 
 function buildLovablePrompt(plan: any, failedStep: any | null, errorMessage: string): string {
@@ -784,7 +790,12 @@ Deno.serve(async (req) => {
     // Scheduled plans (those originating from a plan_schedule) auto-approve so
     // they run without a manual approval step — matching how regular plans
     // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
-    const isScheduled = (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
+    // Plans flagged review_in_chat are approved by the user in their chat
+    // review card, so they must always finish at 'proposed'.
+    const reviewInChat = !!(plan as any).review_in_chat;
+    const isScheduled =
+      !reviewInChat && (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
+
 
     // Never revive a plan the user stopped mid-compose: skip the write if the
     // plan was cancelled while we were composing.

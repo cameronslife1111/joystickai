@@ -427,9 +427,11 @@ export type Database = {
           origin_document_id: string | null
           origin_sentence_index: number | null
           plan_summary: string | null
+          proposed_capabilities: Json
           result_summary: string | null
           retry_count: number
           retry_note: string | null
+          review_in_chat: boolean
           schedule_id: string | null
           scheduled_for: string | null
           status: string
@@ -461,9 +463,11 @@ export type Database = {
           origin_document_id?: string | null
           origin_sentence_index?: number | null
           plan_summary?: string | null
+          proposed_capabilities?: Json
           result_summary?: string | null
           retry_count?: number
           retry_note?: string | null
+          review_in_chat?: boolean
           schedule_id?: string | null
           scheduled_for?: string | null
           status: string
@@ -495,9 +499,11 @@ export type Database = {
           origin_document_id?: string | null
           origin_sentence_index?: number | null
           plan_summary?: string | null
+          proposed_capabilities?: Json
           result_summary?: string | null
           retry_count?: number
           retry_note?: string | null
+          review_in_chat?: boolean
           schedule_id?: string | null
           scheduled_for?: string | null
           status?: string

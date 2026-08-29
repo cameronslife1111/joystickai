@@ -3,7 +3,7 @@ import { generateText as aiSdkGenerateText } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
-import { chatTurnSchema, type ChatRoute } from "./chat-types";
+import { chatTurnSchema, type ChatCapabilities, type ChatRoute } from "./chat-types";
 
 export { ACTION_GROUPS, normalizeCapabilities, ALL_CAPS_ON } from "./chat-types";
 export type { ChatCapabilities } from "./chat-types";
@@ -20,10 +20,21 @@ export type { ChatCapabilities } from "./chat-types";
 export const sendChatMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => chatTurnSchema.parse(input))
-  .handler(async ({ data, context }): Promise<{ route: ChatRoute; text?: string }> => {
-    const { runChatTurn } = await import("./chat-core.server");
-    return await runChatTurn(context.supabase, data);
-  });
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{
+      route: ChatRoute;
+      text?: string;
+      capabilities?: ChatCapabilities;
+      rationale?: string;
+    }> => {
+      const { runChatTurn } = await import("./chat-core.server");
+      return await runChatTurn(context.supabase, data);
+    },
+  );
+
 
 
 /**
