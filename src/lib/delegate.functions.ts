@@ -4,9 +4,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createOpenAiProvider } from "./ai-gateway";
 import {
-  DELEGATE_SUGGEST_SYSTEM,
-  buildDelegateSuggestUserPrompt,
-  type DelegateSuggestion,
+  DELEGATE_ANALYZE_SYSTEM,
+  buildDelegateAnalyzeUserPrompt,
 } from "./delegate-prompt";
 
 const inputSchema = z.object({
@@ -15,10 +14,9 @@ const inputSchema = z.object({
 });
 
 const outSchema = z.object({
+  is_substep: z.boolean().default(false),
+  parent_task: z.string().default(""),
   task_context: z.string().default(""),
-  suggestions: z
-    .array(z.object({ title: z.string().min(1), detail: z.string().default("") }))
-    .min(1),
 });
 
 function stripFence(raw: string): string {
@@ -28,10 +26,10 @@ function stripFence(raw: string): string {
 }
 
 /**
- * 🟣 Delegate (menu slot 15): propose 5 concrete tasks Orby could do for the
- * part of the document the user is standing on.
+ * 🟣 Delegate: analyse the line the user is standing on — is it a substep of a
+ * bigger task or a standalone task, and what is the task to carry out.
  */
-export const suggestDelegateTasks = createServerFn({ method: "POST" })
+export const analyzeDelegateStep = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(
@@ -43,7 +41,8 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
       sentences: string[];
       index: number;
       taskContext: string;
-      suggestions: DelegateSuggestion[];
+      isSubstep: boolean;
+      parentTask: string;
     }> => {
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -69,11 +68,11 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
       const provider = createOpenAiProvider(apiKey);
       const { text } = await generateText({
         model: provider("gpt-5.6-sol"),
-        system: DELEGATE_SUGGEST_SYSTEM,
+        system: DELEGATE_ANALYZE_SYSTEM,
         messages: [
           {
             role: "user",
-            content: buildDelegateSuggestUserPrompt({ title: doc.title, sentences, index }),
+            content: buildDelegateAnalyzeUserPrompt({ title: doc.title, sentences, index }),
           },
         ],
       });
@@ -82,7 +81,7 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
       try {
         parsed = outSchema.parse(JSON.parse(stripFence(text ?? "")));
       } catch {
-        throw new Error("Couldn't read Orby's suggestions — try again");
+        parsed = { is_substep: false, parent_task: "", task_context: "" };
       }
 
       return {
@@ -90,7 +89,8 @@ export const suggestDelegateTasks = createServerFn({ method: "POST" })
         sentences,
         index,
         taskContext: parsed.task_context ?? "",
-        suggestions: parsed.suggestions.slice(0, 5),
+        isSubstep: !!parsed.is_substep,
+        parentTask: parsed.parent_task ?? "",
       };
     },
   );
