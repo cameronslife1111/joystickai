@@ -146,8 +146,12 @@ async function classifyTurn(
   recent: string,
   caps: ChatCapabilities,
   memoryDigest = "",
+  auto = false,
 ): Promise<{ route: ChatRoute; capabilities: ChatCapabilities; rationale: string }> {
   const userOn = ACTION_GROUPS.filter((g) => caps[g]);
+  // Manual mode: the user's checkboxes decide what is even possible.
+  const planAllowed = auto || userOn.length > 0;
+  const webAllowed = auto || caps.web_search;
 
   const system =
     "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
@@ -159,7 +163,9 @@ async function classifyTurn(
     "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
     "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
     "CRITICAL RULES:\n" +
-    "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n" +
+    (auto
+      ? "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n"
+      : `1. Only these routes are available for this message: ${["chat", webAllowed ? "web" : null, planAllowed ? "plan" : null].filter(Boolean).join(", ")}. Never return a route outside that list — when the work you'd want is unavailable, answer as "chat".\n`) +
     "2. Only choose \"chat\" when the message plainly wants a text answer and asks for no change or creation.\n" +
     "3. Follow-ups matter: after a plan has run, \"keep going\", \"now add X\", \"do the same for the other doc\" are a NEW \"plan\". Merely ASKING about what a plan did is \"chat\".\n" +
     "4. Short confirmations (\"ok do it\", \"go ahead\", \"yes\", \"start\") are \"plan\" when the conversation just agreed on work to do.\n" +
@@ -203,21 +209,33 @@ async function classifyTurn(
         .filter((c) => (KNOWN as readonly string[]).includes(c)),
     );
 
-    // Union: never drop a capability the user ticked.
-    const merged: ChatCapabilities = {
-      ...caps,
-      web_search: caps.web_search || wanted.has("web_search"),
-      planning: caps.planning || wanted.has("planning"),
-      document_editing: caps.document_editing || wanted.has("document_editing"),
-      image_generation: caps.image_generation || wanted.has("image_generation"),
-      video_generation: caps.video_generation || wanted.has("video_generation"),
-      scheduling: caps.scheduling || wanted.has("scheduling"),
-    };
+    // Auto mode (Delegate): union — never drop a capability the user ticked,
+    // and let Orby switch more on. Manual mode: exactly what the user ticked.
+    const merged: ChatCapabilities = auto
+      ? {
+          ...caps,
+          web_search: caps.web_search || wanted.has("web_search"),
+          planning: caps.planning || wanted.has("planning"),
+          document_editing: caps.document_editing || wanted.has("document_editing"),
+          image_generation: caps.image_generation || wanted.has("image_generation"),
+          video_generation: caps.video_generation || wanted.has("video_generation"),
+          scheduling: caps.scheduling || wanted.has("scheduling"),
+        }
+      : { ...caps };
+
+    // Manual mode: the checkboxes are the gate — clamp routes the user didn't
+    // switch on back to a plain text answer.
+    if (!auto) {
+      if (route === "plan" && !planAllowed) route = "chat";
+      if (route === "web" && !webAllowed) route = "chat";
+    }
+
     // A plan needs at least one action capability to be runnable at all.
-    if (route === "plan" && !ACTION_GROUPS.some((g) => merged[g])) {
+    if (auto && route === "plan" && !ACTION_GROUPS.some((g) => merged[g])) {
       merged.planning = true;
       merged.document_editing = true;
     }
+
 
     const rationale = typeof parsed?.rationale === "string" ? parsed.rationale.trim().slice(0, 400) : "";
     return { route, capabilities: merged, rationale };
@@ -356,7 +374,14 @@ export async function runChatTurn(
     .slice(-12)
     .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
     .join("\n");
-  const decision = await classifyTurn(model, latestText, recent, caps, memory.digest);
+  const decision = await classifyTurn(
+    model,
+    latestText,
+    recent,
+    caps,
+    memory.digest,
+    data.autoCapabilities === true,
+  );
   const route = decision.route;
 
   if (route === "plan") {

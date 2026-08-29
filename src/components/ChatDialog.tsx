@@ -206,7 +206,7 @@ function planActionCue(plan: { plan_summary: string | null; steps: PlanStep[] | 
 }
 
 function normalizeCaps(raw: any): ChatCapabilities {
-  return { ...DEFAULT_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
+  return { ...NO_CAPS, ...(raw && typeof raw === "object" ? raw : {}) };
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -243,7 +243,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  /** One-shot capability checkboxes — reset after every send / thread switch. */
+  /** Sticky capability checkboxes — saved per thread until the user unchecks. */
   const [pendingCaps, setPendingCaps] = useState<ChatCapabilities>(NO_CAPS);
   const [busyThreadIds, setBusyThreadIds] = useState<Set<string>>(new Set());
   const markBusy = (id: string) =>
@@ -301,9 +301,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
   const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
-    const titles = assets.map((a) => a.title.trim()).filter(Boolean);
+    const titles = assets
+      .map((a) => a.title.replace(/["“”]/g, "").trim())
+      .filter(Boolean);
     if (!titles.length) return;
-    const insert = titles.join(", ");
+    const insert = titles.map((t) => `"${t}"`).join(", ");
     setInput((prev) => {
       const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
       // Pad with spaces so the titles don't fuse with neighboring words.
@@ -471,7 +473,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (!userId) return null;
     const { data, error } = await supabase
       .from("chat_threads")
-      .insert({ user_id: userId, title, capabilities: DEFAULT_CAPS })
+      .insert({ user_id: userId, title, capabilities: NO_CAPS })
       .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
       .single();
     if (error || !data) {
@@ -557,10 +559,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [activeThreadId]);
 
-  // Capability checkboxes never carry across threads or dialog sessions.
+  // Capability checkboxes are sticky per thread: load whatever this chat has
+  // saved, and keep it until the user unchecks it.
   useEffect(() => {
-    setPendingCaps(NO_CAPS);
-  }, [activeThreadId, open]);
+    setPendingCaps(activeThread?.capabilities ?? NO_CAPS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId, activeThread?.capabilities]);
 
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
@@ -712,7 +716,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
 
   const setCap = (key: keyof ChatCapabilities, value: boolean) => {
-    setPendingCaps((cur) => ({ ...cur, [key]: value }));
+    setPendingCaps((cur) => {
+      const next = { ...cur, [key]: value };
+      if (activeThreadId) void updateThread(activeThreadId, { capabilities: next });
+      return next;
+    });
+  };
+
+  /** Clear all — unchecks every capability for this chat and persists it. */
+  const clearCaps = () => {
+    setPendingCaps(NO_CAPS);
+    if (activeThreadId) void updateThread(activeThreadId, { capabilities: { ...NO_CAPS } });
   };
 
   const setContextDocIds = (ids: string[]) => {
@@ -780,6 +794,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const handleSend = async (override?: {
     text?: string;
     caps?: ChatCapabilities;
+    /** Delegate only: let Orby pick its own capabilities for this send. */
+    auto?: boolean;
     threadId?: string;
     docIds?: string[];
   }): Promise<boolean> => {
@@ -798,9 +814,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     markBusy(threadId);
     if (!override?.text) setInput("");
-    // Capability checkboxes are one-shot: this send uses `capsUsed` (captured
-    // from this render) and the boxes immediately return to unchecked.
-    setPendingCaps(NO_CAPS);
+    // Capability checkboxes are sticky — they stay on until the user unchecks.
+
 
 
     const optimisticUser: ChatRow = {
@@ -842,6 +857,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             : [],
           threadId,
           capabilities: capsUsed,
+          autoCapabilities: override?.auto === true,
         },
       });
 
@@ -857,6 +873,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
         const mergedCaps = { ...decided } as ChatCapabilities;
         for (const g of ACTION_TOOL_GROUPS) if (capsUsed[g]) mergedCaps[g] = true;
+        // "Planning" alone still needs somewhere to put the work — document
+        // tools are the baseline so the planner is never left with no tools.
+        if (!ACTION_TOOL_GROUPS.some((g) => mergedCaps[g])) mergedCaps.document_editing = true;
         const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => mergedCaps[g]);
         const { data: planRow, error: planErr } = await supabase
           .from("plans")
@@ -982,6 +1001,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const ok = await handleSendRef.current?.({
           text: prompt,
           caps: { ...DEFAULT_CAPS },
+          auto: true,
           threadId,
           docIds: [documentId],
         });
@@ -1079,7 +1099,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       {enabledCapCount > 0 && (
                         <button
                           type="button"
-                          onClick={() => setPendingCaps(NO_CAPS)}
+                          onClick={clearCaps}
                           className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
                         >
                           Clear all
@@ -1655,7 +1675,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         }}
         onSaved={() => {
           setInput("");
-          setPendingCaps(NO_CAPS);
           setPickedImages([]);
           refetchSchedules();
           toast.success("Orby will send that later");
