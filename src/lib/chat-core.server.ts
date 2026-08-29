@@ -163,7 +163,9 @@ async function classifyTurn(
     "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
     "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
     "CRITICAL RULES:\n" +
-    "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n" +
+    (auto
+      ? "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n"
+      : `1. Only these routes are available for this message: ${["chat", webAllowed ? "web" : null, planAllowed ? "plan" : null].filter(Boolean).join(", ")}. Never return a route outside that list — when the work you'd want is unavailable, answer as "chat".\n`) +
     "2. Only choose \"chat\" when the message plainly wants a text answer and asks for no change or creation.\n" +
     "3. Follow-ups matter: after a plan has run, \"keep going\", \"now add X\", \"do the same for the other doc\" are a NEW \"plan\". Merely ASKING about what a plan did is \"chat\".\n" +
     "4. Short confirmations (\"ok do it\", \"go ahead\", \"yes\", \"start\") are \"plan\" when the conversation just agreed on work to do.\n" +
