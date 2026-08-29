@@ -499,8 +499,14 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       bootstrappedRef.current = false;
       return;
     }
-    // 🟣 Delegate owns the bootstrap: it creates its own fresh thread.
-    if (delegate && delegateRef.current !== delegate.id) return;
+    // 🟣 Delegate owns the bootstrap for this session: it creates and selects
+    // its own fresh thread. Mark bootstrap done so the "restore last chat"
+    // pass can never flip us back to an older Delegate thread.
+    if (delegate) {
+      bootstrappedRef.current = true;
+      setDrawerOpen(false);
+      return;
+    }
     // Slot 11 opens the chat picker first so the user chooses where to go.
     if (!bootstrappedRef.current) setDrawerOpen(!!startInThreadList && !openThreadId);
     if (bootstrappedRef.current || !userId) return;
