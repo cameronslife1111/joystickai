@@ -998,6 +998,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         const ok = await handleSendRef.current?.({
           text: prompt,
           caps: { ...DEFAULT_CAPS },
+          auto: true,
           threadId,
           docIds: [documentId],
         });
