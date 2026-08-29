@@ -2901,6 +2901,7 @@ function AppPageInner() {
             onPrev={() => void onSwipeUp()}
             onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}
+            onNextLongPress={handleDelegate}
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onDelete={() => void deleteCurrent()}
