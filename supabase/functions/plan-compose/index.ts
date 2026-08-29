@@ -158,7 +158,13 @@ If the user's request is impossible, ambiguous, or would require deletion, respo
   "explanation": "<one short sentence explaining why>"
 }
 
+WORDING CONTRACT (the user reads this before approving):
+- "summary" must name the task you detected in one plain sentence (for a step inside a document, say whether it is a substep of a bigger task and what that parent task is).
+- "explanation" must list one short line per capability you will use, each in the form "Orby will use <capability> to <do Y> and put the output in <Z>".
+- Every step "description" must also read as "Orby will use <capability> to <do Y> and put the output in <Z>".
+
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
+
 
 
 function buildLovablePrompt(plan: any, failedStep: any | null, errorMessage: string): string {
