@@ -716,7 +716,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
 
   const setCap = (key: keyof ChatCapabilities, value: boolean) => {
-    setPendingCaps((cur) => ({ ...cur, [key]: value }));
+    setPendingCaps((cur) => {
+      const next = { ...cur, [key]: value };
+      if (activeThreadId) void updateThread(activeThreadId, { capabilities: next });
+      return next;
+    });
+  };
+
+  /** Clear all — unchecks every capability for this chat and persists it. */
+  const clearCaps = () => {
+    setPendingCaps(NO_CAPS);
+    if (activeThreadId) void updateThread(activeThreadId, { capabilities: { ...NO_CAPS } });
   };
 
   const setContextDocIds = (ids: string[]) => {
