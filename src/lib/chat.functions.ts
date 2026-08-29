@@ -30,9 +30,11 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       capabilities?: ChatCapabilities;
       rationale?: string;
     }> => {
-    const { runChatTurn } = await import("./chat-core.server");
-    return await runChatTurn(context.supabase, data);
-  });
+      const { runChatTurn } = await import("./chat-core.server");
+      return await runChatTurn(context.supabase, data);
+    },
+  );
+
 
 
 /**
