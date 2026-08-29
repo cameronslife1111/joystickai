@@ -1096,7 +1096,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       {enabledCapCount > 0 && (
                         <button
                           type="button"
-                          onClick={() => setPendingCaps(NO_CAPS)}
+                          onClick={clearCaps}
                           className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
                         >
                           Clear all
