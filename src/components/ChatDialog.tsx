@@ -812,9 +812,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     markBusy(threadId);
     if (!override?.text) setInput("");
-    // Capability checkboxes are one-shot: this send uses `capsUsed` (captured
-    // from this render) and the boxes immediately return to unchecked.
-    setPendingCaps(NO_CAPS);
+    // Capability checkboxes are sticky — they stay on until the user unchecks.
+
 
 
     const optimisticUser: ChatRow = {
