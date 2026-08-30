@@ -140,23 +140,41 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
       </ol>
 
       {noteOpen && (
-        <div className="mb-2 flex items-end gap-1">
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Any changes? e.g. don't use video, put the output in a new document…"
-            rows={2}
-            className="min-h-[52px] flex-1 text-sm"
-          />
-          <DictateButton onText={(t) => setNote((cur) => (cur ? `${cur} ${t}` : t))} />
-          <Button
-            size="icon"
-            disabled={!note.trim() || busy !== null}
-            onClick={() => void sendNote()}
-            aria-label="Send note and replan"
-          >
-            {busy === "note" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+        <div className="mb-2 flex flex-col gap-1.5">
+          <div className="flex items-end gap-1">
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Any changes? e.g. don't use video, put the output in a new document…"
+              rows={2}
+              className="min-h-[52px] flex-1 text-sm"
+            />
+            <DictateButton onText={(t) => setNote((cur) => (cur ? `${cur} ${t}` : t))} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              className="h-8 gap-1"
+              disabled={!note.trim() || busy !== null}
+              onClick={() => void sendNote(true)}
+            >
+              {busy === "note" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              Approve with notes
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!note.trim() || busy !== null}
+              onClick={() => void sendNote(false)}
+            >
+              Rewrite &amp; show me again
+            </Button>
+          </div>
         </div>
       )}
 
