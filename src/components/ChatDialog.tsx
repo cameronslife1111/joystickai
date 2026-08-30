@@ -68,6 +68,8 @@ import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
 import { PlanReviewCard, PlanSteerBox } from "./PlanReviewCard";
+import { ChatMediaRow, quotedTitles } from "./ChatMedia";
+import { extractArtifacts } from "@/lib/plan-memory";
 import { analyzeDelegateStep } from "@/lib/delegate.functions";
 import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 
