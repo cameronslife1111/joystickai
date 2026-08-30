@@ -67,6 +67,8 @@ export function useComposingPlansWatcher(
           continue;
         }
 
+        if (inChat) continue; // reviewed inside its chat card
+
         if (row.status === "proposed" || row.status === "failed") {
           // Waiting for approval, a refusal, or a failure → open for review.
           const isFail = row.status === "failed";
