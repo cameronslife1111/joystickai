@@ -1191,21 +1191,23 @@ function AppPageInner() {
    * Returns false when the thread no longer exists so callers can fall
    * through to normal navigation.
    */
-  // Status of the linked chat thread: "working" (🟡) while a plan is active or
-  // the assistant hasn't replied yet; "done" (🟢) otherwise.
+  // Status of the linked chat thread: "approval" (🟣) when a plan is proposed,
+  // "working" (🟡) while a plan is active or the assistant hasn't replied yet,
+  // "done" (🟢) otherwise.
   const linkedThreadId = currentSentence?.linked_thread_id ?? null;
   const { data: linkedThreadStatus = "done" } = useQuery({
     queryKey: ["linked_thread_status", linkedThreadId],
     enabled: !!linkedThreadId,
     refetchInterval: 5000,
-    queryFn: async (): Promise<"working" | "done"> => {
-      const ACTIVE = ["composing", "proposed", "approved", "running", "awaiting_media", "retrying"];
+    queryFn: async (): Promise<"approval" | "working" | "done"> => {
       const { data: plans } = await supabase
         .from("plans")
         .select("status")
         .eq("thread_id", linkedThreadId!)
         .order("created_at", { ascending: false })
         .limit(5);
+      if (plans?.some((p) => p.status === "proposed")) return "approval";
+      const ACTIVE = ["composing", "approved", "running", "awaiting_media", "retrying"];
       if (plans?.some((p) => ACTIVE.includes(p.status ?? ""))) return "working";
       const { data: lastMsg } = await supabase
         .from("chat_messages")
