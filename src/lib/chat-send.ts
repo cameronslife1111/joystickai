@@ -149,9 +149,15 @@ export async function createChatThread(
   userId: string,
   title = "New chat",
 ): Promise<{ id: string; title: string }> {
+  const autoIds = await fetchAutoAttachDocIds(userId);
   const { data, error } = await supabase
     .from("chat_threads")
-    .insert({ user_id: userId, title, capabilities: CHAT_DEFAULT_CAPS })
+    .insert({
+      user_id: userId,
+      title,
+      capabilities: CHAT_DEFAULT_CAPS,
+      attached_document_ids: autoIds,
+    })
     .select("id, title")
     .single();
   if (error || !data) throw new Error(error?.message || "Couldn't create the chat");
