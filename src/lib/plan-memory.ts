@@ -143,9 +143,17 @@ export async function buildPlanMemory(
   if (orderedMediaIds.length) {
     const { data: media } = await supabase
       .from("media_assets")
-      .select("id, title, kind")
+      .select("id, title, kind, generation_params")
       .in("id", orderedMediaIds.slice(0, 40));
-    for (const m of media ?? []) mediaTitles.set(m.id, `${m.title ?? "Untitled"}${m.kind ? ` (${m.kind})` : ""}`);
+    for (const m of media ?? []) {
+      // Carry the prompt that made the asset, so a follow-up like "make the
+      // sky more orange" can be planned as an edit of that exact item.
+      const prompt = (m as any)?.generation_params?.user_text ?? (m as any)?.generation_params?.prompt ?? null;
+      mediaTitles.set(
+        m.id,
+        `${m.title ?? "Untitled"}${m.kind ? ` (${m.kind})` : ""}${prompt ? ` — made from: ${clip(String(prompt), 200)}` : ""}`,
+      );
+    }
   }
 
   const planBlocks = perPlan.map(({ plan, artifacts }, i) => {

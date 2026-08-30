@@ -787,14 +787,17 @@ Deno.serve(async (req) => {
     const summary = typeof parsed.summary === "string" ? parsed.summary : "";
     const explanation = typeof parsed.explanation === "string" ? parsed.explanation : null;
 
-    // Scheduled plans (those originating from a plan_schedule) auto-approve so
-    // they run without a manual approval step — matching how regular plans
-    // behave. Refusals (no steps) still go to 'proposed' so the user sees them.
-    // Plans flagged review_in_chat are approved by the user in their chat
-    // review card, so they must always finish at 'proposed'.
-    const reviewInChat = !!(plan as any).review_in_chat;
-    const isScheduled =
-      !reviewInChat && (!!(plan as any).schedule_id || !!(plan as any).thread_id) && steps.length > 0;
+    // NOTHING the user started runs without their approval. Only two cases
+    // skip the review card:
+    //  - scheduled runs (they fire while the app is closed),
+    //  - a replan the user already approved ("approve with notes"), flagged
+    //    with auto_approve_after_compose.
+    // Refusals (no steps) always go to 'proposed' so the user sees them.
+    const autoApprove =
+      (!!(plan as any).schedule_id || !!(plan as any).auto_approve_after_compose) &&
+      steps.length > 0;
+    const isScheduled = autoApprove;
+
 
 
     // Never revive a plan the user stopped mid-compose: skip the write if the
@@ -804,6 +807,7 @@ Deno.serve(async (req) => {
       .update({
         status: isScheduled ? "approved" : "proposed",
         ...(isScheduled ? { approved_at: new Date().toISOString() } : {}),
+        auto_approve_after_compose: false,
         plan_summary: explanation ? `${summary}\n\n${explanation}` : summary,
         steps,
         total_steps: steps.length,

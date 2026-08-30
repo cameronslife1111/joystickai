@@ -5,12 +5,13 @@ import { useQueryClient } from "@tanstack/react-query";
 const TICK_MS = 1500;
 
 /**
- * Watches the current user's `composing` plans in the background. When one
- * transitions to `proposed` with steps, it is auto-approved and kicked off
- * immediately — no user action required. A "Plan started" toast confirms it,
- * with an optional "View" action (calls `onViewPlan`). Refusals (proposed with
- * no steps) and failures fire a toast that opens the plan for review
- * (`onReviewPlan`).
+ * Watches the current user's `composing` plans in the background. Nothing the
+ * user started is ever auto-approved: a plan that finishes composing waits for
+ * approval, and the toast opens it for review (`onReviewPlan`). The only plans
+ * that arrive already `approved` are scheduled runs and replans the user
+ * already approved with notes — those are kicked off here and confirmed with a
+ * "Plan started" toast (`onViewPlan`). Plans flagged `review_in_chat` are
+ * reviewed inside their chat card, so they are skipped entirely.
  */
 export function useComposingPlansWatcher(
   userId: string | undefined | null,
@@ -48,18 +49,14 @@ export function useComposingPlansWatcher(
       for (const row of rows ?? []) {
         if (row.status === "composing") continue;
         tracking.current.delete(row.id);
-        if ((row as any).review_in_chat) continue; // reviewed in its chat card
         if (notified.current.has(row.id)) continue;
         notified.current.add(row.id);
 
         const steps = Array.isArray((row as any).steps) ? (row as any).steps : [];
+        const inChat = !!(row as any).review_in_chat;
 
-        if (row.status === "proposed" && steps.length > 0) {
-          // Real proposal → auto-approve and run immediately.
-          await supabase
-            .from("plans")
-            .update({ status: "approved", approved_at: new Date().toISOString() })
-            .eq("id", row.id);
+        if (row.status === "approved") {
+          // Already approved by the user (or a schedule) → start it.
           void supabase.functions.invoke("plan-step", { body: { plan_id: row.id } });
           toast.success("Plan started — running in the background", {
             duration: 6000,
@@ -70,17 +67,28 @@ export function useComposingPlansWatcher(
           continue;
         }
 
+        if (inChat) continue; // reviewed inside its chat card
+
         if (row.status === "proposed" || row.status === "failed") {
-          // Refusal (no steps) or failure → let the user review the details.
+          // Waiting for approval, a refusal, or a failure → open for review.
           const isFail = row.status === "failed";
+          const refused = row.status === "proposed" && steps.length === 0;
           (isFail ? toast.error : toast)(
-            isFail ? "Planning failed — tap for details" : "Couldn't plan that — tap to review",
+            isFail
+              ? "Planning failed — tap for details"
+              : refused
+                ? "Couldn't plan that — tap to review"
+                : "Plan ready — tap to approve it",
             {
               duration: Infinity,
-              action: { label: isFail ? "Details" : "Review", onClick: () => reviewRef.current(row.id) },
+              action: {
+                label: isFail ? "Details" : refused ? "Review" : "Approve",
+                onClick: () => reviewRef.current(row.id),
+              },
             },
           );
           qc.invalidateQueries({ queryKey: ["plans"] });
+          qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
         }
       }
     };

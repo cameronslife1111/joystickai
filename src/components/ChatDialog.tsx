@@ -68,6 +68,8 @@ import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
 import { PlanReviewCard, PlanSteerBox } from "./PlanReviewCard";
+import { ChatMediaRow, quotedTitles } from "./ChatMedia";
+import { extractArtifacts } from "@/lib/plan-memory";
 import { analyzeDelegateStep } from "@/lib/delegate.functions";
 import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 
@@ -1212,6 +1214,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         }
                       >
                         <span className="whitespace-pre-wrap">{m.content}</span>
+                        <ChatMediaRow titles={quotedTitles(m.content)} className="mt-2" />
                       </div>
                       <div className="mt-1 flex items-center gap-1">
                         <button
@@ -1900,6 +1903,8 @@ function PlanProgressCard({
 
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const running = !PLAN_DONE.has(plan.status);
+  const planMediaIds = extractArtifacts(steps).mediaIds;
+
 
   // A plan Orby proposed inside the chat waits here for approval / a note.
   if (plan.status === "proposed" && (plan as any).review_in_chat) {
@@ -1990,6 +1995,8 @@ function PlanProgressCard({
       {plan.status === "completed" && plan.result_summary && (
         <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/80">{plan.result_summary}</p>
       )}
+      {/* Anything this plan made or touched, shown right here in the chat. */}
+      {planMediaIds.length > 0 && <ChatMediaRow ids={planMediaIds} className="mt-2" />}
       {plan.status === "failed" && plan.error_message && (
         <p className="mt-2 whitespace-pre-wrap text-xs text-destructive">{plan.error_message}</p>
       )}

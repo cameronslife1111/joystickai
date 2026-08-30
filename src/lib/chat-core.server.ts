@@ -322,6 +322,10 @@ export async function runChatTurn(
     "You may use numbered lists (1. 2. 3.) when a list genuinely helps, separate paragraphs with a blank line, always use normal punctuation, and emojis are welcome. " +
     "You can kick off plans that edit documents and generate media, and you always come back to this " +
     "conversation afterwards.\n\n" +
+    "MEDIA IN THE CHAT: images, videos and audio you or the user reference appear inline in this chat. " +
+    "When you mention one, write its title in double quotes exactly as listed — that is what makes it show up. " +
+    "When the user asks to change something about a media item that already exists (\"make the sky more orange\", " +
+    "\"same image but at night\"), that is a NEW plan that edits or regenerates that exact asset by id — never treat it as chit-chat.\n\n" +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
 
