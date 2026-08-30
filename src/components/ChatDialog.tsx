@@ -62,6 +62,7 @@ import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { useHandsFree } from "@/lib/hands-free";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
+import { useAutoAttachDocs } from "@/lib/use-auto-attach-docs";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toPlainText } from "@/lib/plain-text";
