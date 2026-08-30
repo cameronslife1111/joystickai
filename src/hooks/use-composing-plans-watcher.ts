@@ -55,12 +55,8 @@ export function useComposingPlansWatcher(
 
         const steps = Array.isArray((row as any).steps) ? (row as any).steps : [];
 
-        if (row.status === "proposed" && steps.length > 0) {
-          // Real proposal → auto-approve and run immediately.
-          await supabase
-            .from("plans")
-            .update({ status: "approved", approved_at: new Date().toISOString() })
-            .eq("id", row.id);
+        if (row.status === "approved") {
+          // Already approved by the user (or a schedule) → start it.
           void supabase.functions.invoke("plan-step", { body: { plan_id: row.id } });
           toast.success("Plan started — running in the background", {
             duration: 6000,
@@ -72,16 +68,25 @@ export function useComposingPlansWatcher(
         }
 
         if (row.status === "proposed" || row.status === "failed") {
-          // Refusal (no steps) or failure → let the user review the details.
+          // Waiting for approval, a refusal, or a failure → open for review.
           const isFail = row.status === "failed";
+          const refused = row.status === "proposed" && steps.length === 0;
           (isFail ? toast.error : toast)(
-            isFail ? "Planning failed — tap for details" : "Couldn't plan that — tap to review",
+            isFail
+              ? "Planning failed — tap for details"
+              : refused
+                ? "Couldn't plan that — tap to review"
+                : "Plan ready — tap to approve it",
             {
               duration: Infinity,
-              action: { label: isFail ? "Details" : "Review", onClick: () => reviewRef.current(row.id) },
+              action: {
+                label: isFail ? "Details" : refused ? "Review" : "Approve",
+                onClick: () => reviewRef.current(row.id),
+              },
             },
           );
           qc.invalidateQueries({ queryKey: ["plans"] });
+          qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
         }
       }
     };
