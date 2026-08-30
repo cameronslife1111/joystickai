@@ -263,6 +263,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   const [pickedImages, setPickedImages] = useState<MediaAsset[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
+  /** Chats list → 📎 Auto-attach: default documents for every new chat. */
+  const [autoAttachOpen, setAutoAttachOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
