@@ -59,6 +59,34 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
     onApproved?.();
   };
 
+  /**
+   * Rewrite the plan with the user's note. `autoRun` = "approve with notes":
+   * the rewritten plan runs by itself; otherwise it comes back for review.
+   */
+  const replanWithNote = async (autoRun: boolean) => {
+    if (!planId || !note.trim()) return;
+    const { error } = await supabase
+      .from("plans")
+      .update({
+        status: "composing",
+        user_request: `${plan?.user_request ?? ""}\n\nNOTE FROM ME: ${note.trim()}`,
+        steps: null,
+        current_step: 0,
+        total_steps: 0,
+        auto_approve_after_compose: autoRun,
+      })
+      .eq("id", planId);
+    if (error) {
+      toast.error(`Couldn't send that note: ${error.message}`);
+      return;
+    }
+    void supabase.functions.invoke("plan-compose", { body: { plan_id: planId } });
+    setNote("");
+    setNoteOpen(false);
+    toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
+    if (autoRun) onOpenChange(false);
+  };
+
   const status = plan?.status;
   const steps: any[] = Array.isArray(plan?.steps) ? plan.steps : [];
   const refused = status === "proposed" && steps.length === 0;
