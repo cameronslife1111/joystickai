@@ -1037,7 +1037,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       if (!t) return;
       setDrawerOpen(false);
       setActiveThreadId(t.id);
-      await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
+      await updateThread(t.id, {
+        attached_document_ids: Array.from(new Set([delegate.documentId, ...autoAttachIds])),
+      });
       await runDelegate(t.id, delegate.documentId, delegate.index);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
