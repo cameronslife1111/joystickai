@@ -1691,6 +1691,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onConfirm={setContextDocIds}
       />
 
+      {/* Documents attached automatically to every new chat. */}
+      <DocumentPickerSheet
+        open={autoAttachOpen}
+        onOpenChange={setAutoAttachOpen}
+        initialSelectedIds={autoAttachIds}
+        onConfirm={(ids) => {
+          void saveAutoAttach(ids)
+            .then(() =>
+              toast.success(
+                ids.length === 0
+                  ? "New chats will start with no documents"
+                  : `${ids.length} document${ids.length === 1 ? "" : "s"} auto-attached to new chats`,
+              ),
+            )
+            .catch((e) =>
+              toast.error(e instanceof Error ? e.message : "Couldn't save auto-attach"),
+            );
+        }}
+      />
+
+
       {/* Schedule the message currently in the composer, in this thread. */}
       <ScheduleEditorDialog
         open={scheduleOpen}
