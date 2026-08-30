@@ -29,7 +29,7 @@ import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { Input } from "@/components/ui/input";
-import { Link as LinkIcon, MessageSquare } from "lucide-react";
+import { Link as LinkIcon } from "lucide-react";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
@@ -1191,6 +1191,34 @@ function AppPageInner() {
    * Returns false when the thread no longer exists so callers can fall
    * through to normal navigation.
    */
+  // Status of the linked chat thread: "working" (🟡) while a plan is active or
+  // the assistant hasn't replied yet; "done" (🟢) otherwise.
+  const linkedThreadId = currentSentence?.linked_thread_id ?? null;
+  const { data: linkedThreadStatus = "done" } = useQuery({
+    queryKey: ["linked_thread_status", linkedThreadId],
+    enabled: !!linkedThreadId,
+    refetchInterval: 5000,
+    queryFn: async (): Promise<"working" | "done"> => {
+      const ACTIVE = ["composing", "proposed", "approved", "running", "awaiting_media", "retrying"];
+      const { data: plans } = await supabase
+        .from("plans")
+        .select("status")
+        .eq("thread_id", linkedThreadId!)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (plans?.some((p) => ACTIVE.includes(p.status ?? ""))) return "working";
+      const { data: lastMsg } = await supabase
+        .from("chat_messages")
+        .select("role")
+        .eq("thread_id", linkedThreadId!)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastMsg && lastMsg.role === "user") return "working";
+      return "done";
+    },
+  });
+
   const openLinkedChat = useCallback(async (): Promise<boolean> => {
     if (editingRef.current) return true; // editor open — block navigation
     const threadId = currentSentence?.linked_thread_id;
@@ -2880,7 +2908,9 @@ function AppPageInner() {
             className="flex max-w-[80vw] items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
             style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
           >
-            <MessageSquare className="h-3 w-3 shrink-0" />
+            <span className="shrink-0 text-[10px] leading-none" aria-label={linkedThreadStatus === "working" ? "Chat still working" : "Chat done"}>
+              {linkedThreadStatus === "working" ? "🟡" : "🟢"}
+            </span>
             <span className="truncate">Linked chat</span>
           </button>
         </div>
