@@ -5,12 +5,13 @@ import { useQueryClient } from "@tanstack/react-query";
 const TICK_MS = 1500;
 
 /**
- * Watches the current user's `composing` plans in the background. When one
- * transitions to `proposed` with steps, it is auto-approved and kicked off
- * immediately — no user action required. A "Plan started" toast confirms it,
- * with an optional "View" action (calls `onViewPlan`). Refusals (proposed with
- * no steps) and failures fire a toast that opens the plan for review
- * (`onReviewPlan`).
+ * Watches the current user's `composing` plans in the background. Nothing the
+ * user started is ever auto-approved: a plan that finishes composing waits for
+ * approval, and the toast opens it for review (`onReviewPlan`). The only plans
+ * that arrive already `approved` are scheduled runs and replans the user
+ * already approved with notes — those are kicked off here and confirmed with a
+ * "Plan started" toast (`onViewPlan`). Plans flagged `review_in_chat` are
+ * reviewed inside their chat card, so they are skipped entirely.
  */
 export function useComposingPlansWatcher(
   userId: string | undefined | null,
