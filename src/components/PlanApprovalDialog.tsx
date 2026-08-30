@@ -17,6 +17,8 @@ interface Props {
 
 export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: Props) {
   const qc = useQueryClient();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState("");
 
   const { data: plan, refetch } = useQuery({
     queryKey: ["plan", planId],
