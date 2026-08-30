@@ -1990,6 +1990,8 @@ function PlanProgressCard({
       {plan.status === "completed" && plan.result_summary && (
         <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/80">{plan.result_summary}</p>
       )}
+      {/* Anything this plan made or touched, shown right here in the chat. */}
+      {planMediaIds.length > 0 && <ChatMediaRow ids={planMediaIds} className="mt-2" />}
       {plan.status === "failed" && plan.error_message && (
         <p className="mt-2 whitespace-pre-wrap text-xs text-destructive">{plan.error_message}</p>
       )}
