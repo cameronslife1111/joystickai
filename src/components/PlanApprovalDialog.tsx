@@ -144,15 +144,52 @@ export function PlanApprovalDialog({ open, onOpenChange, planId, onApproved }: P
           )}
         </div>
 
-        <div className="shrink-0 flex justify-end gap-2 border-t border-border bg-background px-6 py-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
-          <button onClick={cancel} className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
-            {refused || failed ? "Close" : "Cancel"}
-          </button>
-          {status === "proposed" && steps.length > 0 && (
-            <button onClick={approve} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              Approve and Run
-            </button>
+        <div className="shrink-0 border-t border-border bg-background px-6 py-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+          {noteOpen && status === "proposed" && steps.length > 0 && (
+            <div className="mb-2 space-y-2">
+              <div className="flex items-end gap-1">
+                <Textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="What should change? e.g. skip the video, put the output in a new document…"
+                  rows={2}
+                  className="min-h-[52px] flex-1 text-sm"
+                />
+                <DictateButton onText={(t) => setNote((cur) => (cur ? `${cur} ${t}` : t))} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={!note.trim()} onClick={() => void replanWithNote(true)}>
+                  Approve with notes
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!note.trim()}
+                  onClick={() => void replanWithNote(false)}
+                >
+                  Rewrite &amp; show me again
+                </Button>
+              </div>
+            </div>
           )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button onClick={cancel} className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
+              {refused || failed ? "Close" : "Cancel"}
+            </button>
+            {status === "proposed" && steps.length > 0 && (
+              <button
+                onClick={() => setNoteOpen((o) => !o)}
+                className="rounded-md border border-border px-4 py-2 text-sm"
+              >
+                Add a note
+              </button>
+            )}
+            {status === "proposed" && steps.length > 0 && (
+              <button onClick={approve} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+                Approve and Run
+              </button>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
