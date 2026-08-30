@@ -1900,6 +1900,8 @@ function PlanProgressCard({
 
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const running = !PLAN_DONE.has(plan.status);
+  const planMediaIds = extractArtifacts(steps).mediaIds;
+
 
   // A plan Orby proposed inside the chat waits here for approval / a note.
   if (plan.status === "proposed" && (plan as any).review_in_chat) {
