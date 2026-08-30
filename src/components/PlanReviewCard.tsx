@@ -62,7 +62,11 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
     toast.success("Plan started — running in the background");
   };
 
-  const sendNote = async () => {
+  /**
+   * Rewrite the plan with the user's note. `autoRun` = "approve with notes":
+   * the rewritten plan starts by itself. Otherwise it comes back for review.
+   */
+  const sendNote = async (autoRun: boolean) => {
     const text = note.trim();
     if (!text) return;
     setBusy("note");
@@ -74,6 +78,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
         steps: null,
         current_step: 0,
         total_steps: 0,
+        auto_approve_after_compose: autoRun,
       })
       .eq("id", plan.id);
     if (error) {
@@ -86,6 +91,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
     });
     setNote("");
     setNoteOpen(false);
+    toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
   };
 
   const cancel = async () => {
