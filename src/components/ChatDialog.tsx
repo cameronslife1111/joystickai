@@ -473,6 +473,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     markThreadRead(activeThreadId);
   }, [open, drawerOpen, activeThreadId, threads, markThreadRead]);
 
+  const { ids: autoAttachIds, save: saveAutoAttach } = useAutoAttachDocs(userId ?? null);
+
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
     const { data, error } = await supabase
