@@ -22,6 +22,13 @@
       "when": 1788051100270,
       "tag": "0002_plans_auto_approve_after_compose",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788052155980,
+      "tag": "0003_add_auto_attach_document_ids",
+      "breakpoints": true
     }
   ]
 }

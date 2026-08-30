@@ -62,6 +62,7 @@ import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { useHandsFree } from "@/lib/hands-free";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
+import { useAutoAttachDocs } from "@/lib/use-auto-attach-docs";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { toPlainText } from "@/lib/plain-text";
@@ -263,6 +264,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   const [pickedImages, setPickedImages] = useState<MediaAsset[]>([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
+  /** Chats list → 📎 Auto-attach: default documents for every new chat. */
+  const [autoAttachOpen, setAutoAttachOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -471,11 +474,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     markThreadRead(activeThreadId);
   }, [open, drawerOpen, activeThreadId, threads, markThreadRead]);
 
+  const { ids: autoAttachIds, save: saveAutoAttach } = useAutoAttachDocs(userId ?? null);
+
   const createThread = async (title = "New chat"): Promise<Thread | null> => {
     if (!userId) return null;
     const { data, error } = await supabase
       .from("chat_threads")
-      .insert({ user_id: userId, title, capabilities: NO_CAPS })
+      .insert({
+        user_id: userId,
+        title,
+        capabilities: NO_CAPS,
+        attached_document_ids: autoAttachIds,
+      })
       .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
       .single();
     if (error || !data) {
@@ -1028,7 +1038,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       if (!t) return;
       setDrawerOpen(false);
       setActiveThreadId(t.id);
-      await updateThread(t.id, { attached_document_ids: [delegate.documentId] });
+      await updateThread(t.id, {
+        attached_document_ids: Array.from(new Set([delegate.documentId, ...autoAttachIds])),
+      });
       await runDelegate(t.id, delegate.documentId, delegate.index);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1511,9 +1523,24 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </span>
                   )}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> New
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAutoAttachOpen(true)}
+                    aria-label="Auto-attach documents to new chats"
+                  >
+                    <Paperclip className="mr-1 h-3.5 w-3.5" /> Auto
+                    {autoAttachIds.length > 0 && (
+                      <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        {autoAttachIds.length}
+                      </span>
+                    )}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
+                    <Plus className="mr-1 h-3.5 w-3.5" /> New
+                  </Button>
+                </div>
               </div>
               <div className="border-b border-foreground/10 px-3 pb-3">
                 <div className="relative">
@@ -1663,6 +1690,27 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
       />
+
+      {/* Documents attached automatically to every new chat. */}
+      <DocumentPickerSheet
+        open={autoAttachOpen}
+        onOpenChange={setAutoAttachOpen}
+        initialSelectedIds={autoAttachIds}
+        onConfirm={(ids) => {
+          void saveAutoAttach(ids)
+            .then(() =>
+              toast.success(
+                ids.length === 0
+                  ? "New chats will start with no documents"
+                  : `${ids.length} document${ids.length === 1 ? "" : "s"} auto-attached to new chats`,
+              ),
+            )
+            .catch((e) =>
+              toast.error(e instanceof Error ? e.message : "Couldn't save auto-attach"),
+            );
+        }}
+      />
+
 
       {/* Schedule the message currently in the composer, in this thread. */}
       <ScheduleEditorDialog
