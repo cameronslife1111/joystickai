@@ -2910,8 +2910,17 @@ function AppPageInner() {
             className="flex max-w-[80vw] items-center gap-1.5 rounded-full border border-primary/40 bg-card/80 px-3 py-1.5 text-xs text-primary backdrop-blur transition active:scale-95 hover:bg-primary/15"
             style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
           >
-            <span className="shrink-0 text-[10px] leading-none" aria-label={linkedThreadStatus === "working" ? "Chat still working" : "Chat done"}>
-              {linkedThreadStatus === "working" ? "🟡" : "🟢"}
+            <span
+              className="shrink-0 text-[10px] leading-none"
+              aria-label={
+                linkedThreadStatus === "approval"
+                  ? "Plan needs approval"
+                  : linkedThreadStatus === "working"
+                    ? "Chat still working"
+                    : "Chat done"
+              }
+            >
+              {linkedThreadStatus === "approval" ? "🟣" : linkedThreadStatus === "working" ? "🟡" : "🟢"}
             </span>
             <span className="truncate">Linked chat</span>
           </button>
