@@ -1523,9 +1523,24 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </span>
                   )}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> New
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAutoAttachOpen(true)}
+                    aria-label="Auto-attach documents to new chats"
+                  >
+                    <Paperclip className="mr-1 h-3.5 w-3.5" /> Auto
+                    {autoAttachIds.length > 0 && (
+                      <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        {autoAttachIds.length}
+                      </span>
+                    )}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void handleNewThread()}>
+                    <Plus className="mr-1 h-3.5 w-3.5" /> New
+                  </Button>
+                </div>
               </div>
               <div className="border-b border-foreground/10 px-3 pb-3">
                 <div className="relative">
