@@ -15,6 +15,13 @@
       "when": 1788025233310,
       "tag": "0001_plans_review_in_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788051100270,
+      "tag": "0002_plans_auto_approve_after_compose",
+      "breakpoints": true
     }
   ]
 }
