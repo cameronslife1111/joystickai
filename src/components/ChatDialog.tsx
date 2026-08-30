@@ -1212,6 +1212,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         }
                       >
                         <span className="whitespace-pre-wrap">{m.content}</span>
+                        <ChatMediaRow titles={quotedTitles(m.content)} className="mt-2" />
                       </div>
                       <div className="mt-1 flex items-center gap-1">
                         <button
