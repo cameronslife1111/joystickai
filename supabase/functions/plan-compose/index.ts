@@ -807,6 +807,7 @@ Deno.serve(async (req) => {
       .update({
         status: isScheduled ? "approved" : "proposed",
         ...(isScheduled ? { approved_at: new Date().toISOString() } : {}),
+        auto_approve_after_compose: false,
         plan_summary: explanation ? `${summary}\n\n${explanation}` : summary,
         steps,
         total_steps: steps.length,
