@@ -49,11 +49,11 @@ export function useComposingPlansWatcher(
       for (const row of rows ?? []) {
         if (row.status === "composing") continue;
         tracking.current.delete(row.id);
-        if ((row as any).review_in_chat) continue; // reviewed in its chat card
         if (notified.current.has(row.id)) continue;
         notified.current.add(row.id);
 
         const steps = Array.isArray((row as any).steps) ? (row as any).steps : [];
+        const inChat = !!(row as any).review_in_chat;
 
         if (row.status === "approved") {
           // Already approved by the user (or a schedule) → start it.
