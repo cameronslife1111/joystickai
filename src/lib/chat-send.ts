@@ -4,6 +4,7 @@ import {
   type ChatCapabilities,
   type ChatRoute,
 } from "@/lib/chat-types";
+import { fetchAutoAttachDocIds } from "@/lib/use-auto-attach-docs";
 
 /** Action capabilities that map onto plan tool groups (mirrors ChatDialog). */
 const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
