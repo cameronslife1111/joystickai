@@ -33,6 +33,8 @@ interface OrbClusterProps {
   onNext: () => void;
   onMenu: () => void;
   onNextDoc: () => void;
+  /** Green orb hold: open the Link this sentence popup (slot 18). */
+  onNextDocLongPress: () => void;
   onDelete: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
@@ -194,6 +196,7 @@ export function OrbCluster({
   onNext,
   onMenu,
   onNextDoc,
+  onNextDocLongPress,
   onDelete,
   onPrevLongPress,
   onMenuLongPress,
@@ -205,7 +208,6 @@ export function OrbCluster({
   onMediaGallery,
   onChat,
   grayBadge,
-
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
@@ -260,8 +262,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-green"
         Icon={FileText}
-        label="Next document"
+        label="Next document (hold to link this sentence)"
         onPress={onNextDoc}
+        onLongPress={onNextDocLongPress}
         buttonRef={setButton("nextDoc")}
         placement={{ gridColumn: 4, gridRow: 2 }}
       />
