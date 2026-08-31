@@ -56,7 +56,10 @@ let speechEnabled = false;
 
 export function setSpeechEnabled(on: boolean) {
   speechEnabled = on;
-  if (!on) cancelSpeech();
+  if (!on) {
+    cancelSpeech();
+    cancelPrewarm();
+  }
 }
 
 export function isSpeechEnabled(): boolean {
@@ -69,7 +72,10 @@ let speechSuppressed = false;
 
 export function setSpeechSuppressed(on: boolean) {
   speechSuppressed = on;
-  if (on) cancelSpeech();
+  if (on) {
+    cancelSpeech();
+    cancelPrewarm();
+  }
 }
 
 export function isSpeechSuppressed(): boolean {
@@ -77,8 +83,10 @@ export function isSpeechSuppressed(): boolean {
 }
 
 export function setSpeechVoice(voice: TtsVoice) {
+  if (voice !== selectedVoice) cancelPrewarm();
   selectedVoice = voice;
 }
+
 
 // Reuse the sign-in token across rapid sentences instead of paying a storage
 // round-trip per speak call; re-fetch only when it is about to expire.
