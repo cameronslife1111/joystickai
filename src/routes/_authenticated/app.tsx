@@ -3046,8 +3046,11 @@ function AppPageInner() {
         onOpenChange={setSoundSettingsOpen}
         enabled={!muted}
         voice={ttsVoice}
+        prefetch={ttsPrefetch}
         onEnabledChange={(enabled) => void saveMuted(!enabled)}
         onVoiceChange={(voice) => void saveTtsVoice(voice)}
+        onPrefetchChange={(depth) => void saveTtsPrefetch(depth)}
+
         onPreview={(voice) => {
           setSpeechVoice(voice);
           speakText("This is Orby speaking with your selected voice.");
