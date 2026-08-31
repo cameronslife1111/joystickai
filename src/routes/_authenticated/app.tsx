@@ -716,7 +716,7 @@ function AppPageInner() {
     if (docs.length < 2 || !activeDocId) return null;
     const idx = docs.findIndex((d) => d.id === activeDocId);
     return idx >= 0 ? docs[(idx + 1) % docs.length].id : null;
-  }, [docs, favorites, activeDocId, favIdxTick]);
+  }, [docs, favorites, activeDocId]);
 
   // Warm the sentence lists of the documents the green orb (and the orange
   // pinned-doc orb) can land on, so those jumps resolve from cache and paint +
