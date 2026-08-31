@@ -585,6 +585,20 @@ function AppPageInner() {
     if (error) toast.error(error.message);
   }, [qc, favorites]);
 
+  const saveTtsPrefetch = useCallback(async (next: number) => {
+    const clamped = Math.max(0, Math.min(2, Math.round(next)));
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_prefetch: clamped }));
+    if (clamped === 0) cancelPrewarm();
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { error } = await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, tts_prefetch: clamped, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+    if (error) toast.error(error.message);
+  }, [qc, favorites]);
+
+
   const saveLastFavoriteSlot = useCallback(async (slot: number) => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
