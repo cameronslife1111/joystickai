@@ -119,17 +119,18 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-// Decoded PCM for the last few spoken sentences, so Repeat / auto-repeat start
-// instantly with no network and no extra AI credits. Only sentences the user
-// already heard are cached — nothing is pre-generated.
-const REPLAY_CACHE_LIMIT = 12;
+// Decoded PCM for recently used sentences, so Repeat, back-navigation and
+// pre-warmed neighbours start instantly with no network and no extra AI
+// credits. Clips are also persisted (see speech-clip-store) so a sentence is
+// only ever generated once per voice.
+const REPLAY_CACHE_LIMIT = 80;
 const replayCache = new Map<string, Float32Array<ArrayBuffer>>();
 
 function replayKey(text: string, voice: string) {
-  return `${voice}::${text}`;
+  return `${voice}@${SPEECH_RATE}::${text}`;
 }
 
-function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
+function rememberClip(key: string, samples: Float32Array<ArrayBuffer>, persist = true) {
   replayCache.delete(key);
   replayCache.set(key, samples);
   while (replayCache.size > REPLAY_CACHE_LIMIT) {
@@ -137,14 +138,27 @@ function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
     if (oldest === undefined) break;
     replayCache.delete(oldest);
   }
+  if (persist) void saveStoredClip(key, samples).catch(() => {});
+}
+
+/** Memory first, then the persistent store. */
+async function lookupClip(key: string): Promise<Float32Array<ArrayBuffer> | null> {
+  const inMemory = replayCache.get(key);
+  if (inMemory) return inMemory;
+  const stored = await loadStoredClip(key).catch(() => null);
+  if (stored) rememberClip(key, stored, false);
+  return stored;
 }
 
 /** Test hook: drop cached tokens, replay clips, and the playback context. */
 export function resetSpeechCaches() {
   tokenCache = null;
   replayCache.clear();
+  cancelPrewarm();
+  resetClipStore();
   discardPlaybackContext();
 }
+
 
 /**
  * Mark the current playback engine as untrustworthy. The next speak call
