@@ -703,6 +703,10 @@ function AppPageInner() {
    * The document the green orb (next document) will open next, following the
    * exact same favorites-cycle / all-docs-cycle rules as the press handler.
    */
+  // Bumped when a neighbouring document's sentence list lands in cache, so the
+  // speech prewarm effect can resolve its landing sentence.
+  const [warmTick, setWarmTick] = useState(0);
+
   const nextDocTargetId = useMemo(() => {
     if (!docs || docs.length === 0) return null;
     const order = favorites
@@ -752,7 +756,7 @@ function AppPageInner() {
           return data ?? [];
         },
         staleTime: 30_000,
-      });
+      }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
     }
   }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
 
@@ -826,6 +830,7 @@ function AppPageInner() {
     nextDocTargetId,
     pinnedDocId,
     cachedLandingSentence,
+    warmTick,
   ]);
 
 
