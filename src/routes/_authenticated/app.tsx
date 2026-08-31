@@ -752,6 +752,37 @@ function AppPageInner() {
   // speakText never reaches the network, so muted users are never charged.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
+  // ---- Speech prewarm -----------------------------------------------------
+  // Generate the audio for the sentences the reader is about to reach so the
+  // next orb press plays from cache with no network wait. Direction-aware:
+  // moving forward warms ahead, moving backward warms behind. Clips are
+  // persisted, so a sentence is only ever generated once per voice.
+  const lastWarmIdxRef = useRef<number>(0);
+  const warmDirectionRef = useRef<1 | -1>(1);
+
+  useEffect(() => {
+    if (currentIdx !== lastWarmIdxRef.current) {
+      warmDirectionRef.current = currentIdx > lastWarmIdxRef.current ? 1 : -1;
+      lastWarmIdxRef.current = currentIdx;
+    }
+    if (muted || ttsPrefetch <= 0) return;
+    if (!sentences || sentences.length < 2) return;
+    const direction = warmDirectionRef.current;
+    const targets: string[] = [];
+    for (let step = 1; step <= ttsPrefetch; step += 1) {
+      const ahead = sentences[currentIdx + direction * step];
+      if (ahead?.content) targets.push(ahead.content);
+    }
+    const behind = sentences[currentIdx - direction];
+    if (behind?.content) targets.push(behind.content);
+    if (targets.length === 0) return;
+    // Let the sentence the user is actually waiting on grab the bandwidth
+    // first; a newer press cancels this before it ever runs.
+    const id = setTimeout(() => prewarmSentences(targets), 400);
+    return () => clearTimeout(id);
+  }, [sentences, currentIdx, muted, ttsPrefetch, ttsVoice]);
+
+
   // Strip emoji and pictographic symbols, but preserve digits, letters,
   // punctuation, and whitespace.
   const stripEmoji = (s: string) =>
