@@ -2,6 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_TTS_VOICE, type TtsVoice } from "@/lib/tts-voices";
 import { assertMixableSessionWithRetries, requestIosMixableSession } from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
+import { loadStoredClip, resetClipStore, saveStoredClip } from "@/lib/speech-clip-store";
+
 
 type SpeakOpts = {
   rate?: number;
