@@ -10,10 +10,13 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   enabled: boolean;
   voice: TtsVoice;
+  prefetch: number;
   onEnabledChange: (enabled: boolean) => void;
   onVoiceChange: (voice: TtsVoice) => void;
+  onPrefetchChange: (depth: number) => void;
   onPreview: (voice: TtsVoice) => void;
 };
+
 
 export function SoundSettingsDialog({
   open,
