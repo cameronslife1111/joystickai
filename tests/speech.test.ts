@@ -3,7 +3,9 @@ import {
   cleanForSpeech,
   handleAppForeground,
   isSpeechEnabled,
+  cancelPrewarm,
   markPlaybackContextStale,
+  prewarmSentences,
   recoverPlaybackContext,
   resetSpeechCaches,
   setSpeechEnabled,
@@ -198,5 +200,55 @@ describe("hosted sentence speech", () => {
     const second = await recoverPlaybackContext();
     expect(second).not.toBe(first);
     expect(second!.state).toBe("running");
+  });
+});
+
+describe("speech prewarm", () => {
+  test("prewarming makes no network request while Sound is off", async () => {
+    setSpeechEnabled(false);
+    resetSpeechCaches();
+    let fetched = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      fetched = true;
+      return Promise.reject(new Error("network must not be touched while muted"));
+    }) as typeof fetch;
+    try {
+      prewarmSentences(["one sentence", "another sentence"]);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fetched).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("cancelling a prewarm queue is safe and repeatable", () => {
+    setSpeechEnabled(true);
+    prewarmSentences(["queued text"]);
+    expect(() => {
+      cancelPrewarm();
+      cancelPrewarm();
+    }).not.toThrow();
+    setSpeechEnabled(false);
+  });
+
+  test("prewarming ignores empty and emoji-only text", async () => {
+    setSpeechEnabled(true);
+    resetSpeechCaches();
+    let calls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      calls += 1;
+      return Promise.reject(new Error("no network in test"));
+    }) as typeof fetch;
+    try {
+      prewarmSentences(["   ", "🙂🙂"]);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(calls).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      cancelPrewarm();
+      setSpeechEnabled(false);
+    }
   });
 });
