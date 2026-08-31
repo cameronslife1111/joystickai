@@ -699,33 +699,45 @@ function AppPageInner() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
-  // Warm the sentence lists of the documents a swipe-right (and swipe-left in
-  // the all-docs fallback) can land on, so those jumps resolve from cache and
-  // paint + speak instantly instead of waiting on a round-trip.
+  /**
+   * The document the green orb (next document) will open next, following the
+   * exact same favorites-cycle / all-docs-cycle rules as the press handler.
+   */
+  const nextDocTargetId = useMemo(() => {
+    if (!docs || docs.length === 0) return null;
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (order.length > 0) {
+      const cur = favIdxRef.current;
+      const pos = order.findIndex((s) => s.i > cur);
+      return (pos === -1 ? order[0] : order[pos]).id;
+    }
+    if (docs.length < 2 || !activeDocId) return null;
+    const idx = docs.findIndex((d) => d.id === activeDocId);
+    return idx >= 0 ? docs[(idx + 1) % docs.length].id : null;
+  }, [docs, favorites, activeDocId, favIdxTick]);
+
+  // Warm the sentence lists of the documents the green orb (and the orange
+  // pinned-doc orb) can land on, so those jumps resolve from cache and paint +
+  // speak instantly instead of waiting on a round-trip.
   useEffect(() => {
     if (!docs || docs.length === 0 || !activeDocId) return;
-    const filled = favorites.filter(
-      (id): id is string => !!id && docs.some((d) => d.id === id),
-    );
     const targets: string[] = [];
-    if (filled.length > 0) {
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (nextDocTargetId) targets.push(nextDocTargetId);
+    if (order.length > 0) {
       const cur = favIdxRef.current;
-      const order = favorites
-        .map((id, i) => ({ id, i }))
-        .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
-      const pos = order.findIndex((s) => s.i > cur);
-      const next = pos === -1 ? order[0] : order[pos];
       const prevList = order.filter((s) => s.i < cur);
       const prev = prevList.length > 0 ? prevList[prevList.length - 1] : order[order.length - 1];
-      if (next) targets.push(next.id);
       if (prev) targets.push(prev.id);
     } else if (docs.length > 1) {
       const idx = docs.findIndex((d) => d.id === activeDocId);
-      if (idx >= 0) {
-        targets.push(docs[(idx + 1) % docs.length].id);
-        targets.push(docs[(idx - 1 + docs.length) % docs.length].id);
-      }
+      if (idx >= 0) targets.push(docs[(idx - 1 + docs.length) % docs.length].id);
     }
+    if (pinnedDocId && docs.some((d) => d.id === pinnedDocId)) targets.push(pinnedDocId);
     for (const id of targets) {
       if (!id || id === activeDocId) continue;
       void qc.prefetchQuery({
@@ -742,7 +754,8 @@ function AppPageInner() {
         staleTime: 30_000,
       });
     }
-  }, [docs, favorites, activeDocId, qc]);
+  }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
+
 
 
   // Keep mutedRef in sync with persisted preference.
