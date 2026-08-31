@@ -699,33 +699,49 @@ function AppPageInner() {
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
 
-  // Warm the sentence lists of the documents a swipe-right (and swipe-left in
-  // the all-docs fallback) can land on, so those jumps resolve from cache and
-  // paint + speak instantly instead of waiting on a round-trip.
+  /**
+   * The document the green orb (next document) will open next, following the
+   * exact same favorites-cycle / all-docs-cycle rules as the press handler.
+   */
+  // Bumped when a neighbouring document's sentence list lands in cache, so the
+  // speech prewarm effect can resolve its landing sentence.
+  const [warmTick, setWarmTick] = useState(0);
+
+  const nextDocTargetId = useMemo(() => {
+    if (!docs || docs.length === 0) return null;
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (order.length > 0) {
+      const cur = favIdxRef.current;
+      const pos = order.findIndex((s) => s.i > cur);
+      return (pos === -1 ? order[0] : order[pos]).id;
+    }
+    if (docs.length < 2 || !activeDocId) return null;
+    const idx = docs.findIndex((d) => d.id === activeDocId);
+    return idx >= 0 ? docs[(idx + 1) % docs.length].id : null;
+  }, [docs, favorites, activeDocId]);
+
+  // Warm the sentence lists of the documents the green orb (and the orange
+  // pinned-doc orb) can land on, so those jumps resolve from cache and paint +
+  // speak instantly instead of waiting on a round-trip.
   useEffect(() => {
     if (!docs || docs.length === 0 || !activeDocId) return;
-    const filled = favorites.filter(
-      (id): id is string => !!id && docs.some((d) => d.id === id),
-    );
     const targets: string[] = [];
-    if (filled.length > 0) {
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (nextDocTargetId) targets.push(nextDocTargetId);
+    if (order.length > 0) {
       const cur = favIdxRef.current;
-      const order = favorites
-        .map((id, i) => ({ id, i }))
-        .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
-      const pos = order.findIndex((s) => s.i > cur);
-      const next = pos === -1 ? order[0] : order[pos];
       const prevList = order.filter((s) => s.i < cur);
       const prev = prevList.length > 0 ? prevList[prevList.length - 1] : order[order.length - 1];
-      if (next) targets.push(next.id);
       if (prev) targets.push(prev.id);
     } else if (docs.length > 1) {
       const idx = docs.findIndex((d) => d.id === activeDocId);
-      if (idx >= 0) {
-        targets.push(docs[(idx + 1) % docs.length].id);
-        targets.push(docs[(idx - 1 + docs.length) % docs.length].id);
-      }
+      if (idx >= 0) targets.push(docs[(idx - 1 + docs.length) % docs.length].id);
     }
+    if (pinnedDocId && docs.some((d) => d.id === pinnedDocId)) targets.push(pinnedDocId);
     for (const id of targets) {
       if (!id || id === activeDocId) continue;
       void qc.prefetchQuery({
@@ -740,9 +756,10 @@ function AppPageInner() {
           return data ?? [];
         },
         staleTime: 30_000,
-      });
+      }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
     }
-  }, [docs, favorites, activeDocId, qc]);
+  }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
+
 
 
   // Keep mutedRef in sync with persisted preference.
@@ -753,12 +770,25 @@ function AppPageInner() {
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
   // ---- Speech prewarm -----------------------------------------------------
-  // Generate the audio for the sentences the reader is about to reach so the
-  // next orb press plays from cache with no network wait. Direction-aware:
-  // moving forward warms ahead, moving backward warms behind. Clips are
-  // persisted, so a sentence is only ever generated once per voice.
+  // Generate the audio for every sentence one of the four most-used orbs can
+  // land on, so the press plays from cache with no network wait:
+  //   blue/purple → the previous and next sentence of this document
+  //   green       → the landing sentence of the next document in the cycle
+  //   orange      → the landing sentence of the pinned document
+  // Direction only decides queue order (likely direction first) and any extra
+  // lookahead. Clips are persisted, so a sentence is generated once per voice.
   const lastWarmIdxRef = useRef<number>(0);
   const warmDirectionRef = useRef<1 | -1>(1);
+
+  /** Resolve the sentence another document will open on, from cache only. */
+  const cachedLandingSentence = useCallback((docId: string | null): string | null => {
+    if (!docId || docId === activeDocId) return null;
+    const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
+    if (!list || list.length === 0) return null;
+    const serverIdx = docs?.find((d) => d.id === docId)?.current_sentence_index ?? 0;
+    const idx = Math.max(0, Math.min(savedIndexFor(docId, serverIdx), list.length - 1));
+    return list[idx]?.content ?? null;
+  }, [activeDocId, docs, qc, savedIndexFor]);
 
   useEffect(() => {
     if (currentIdx !== lastWarmIdxRef.current) {
@@ -766,21 +796,43 @@ function AppPageInner() {
       lastWarmIdxRef.current = currentIdx;
     }
     if (muted || ttsPrefetch <= 0) return;
-    if (!sentences || sentences.length < 2) return;
     const direction = warmDirectionRef.current;
     const targets: string[] = [];
-    for (let step = 1; step <= ttsPrefetch; step += 1) {
-      const ahead = sentences[currentIdx + direction * step];
-      if (ahead?.content) targets.push(ahead.content);
+    const push = (text?: string | null) => {
+      if (text && !targets.includes(text)) targets.push(text);
+    };
+
+    if (sentences && sentences.length > 1) {
+      // Both neighbours are always warmed; the likely direction goes first.
+      push(sentences[currentIdx + direction]?.content);
+      push(sentences[currentIdx - direction]?.content);
     }
-    const behind = sentences[currentIdx - direction];
-    if (behind?.content) targets.push(behind.content);
+    // Cross-document landing sentences (green orb, then orange orb).
+    push(cachedLandingSentence(nextDocTargetId));
+    push(cachedLandingSentence(pinnedDocId));
+    // Extra lookahead in the travelling direction.
+    if (sentences) {
+      for (let step = 2; step <= ttsPrefetch; step += 1) {
+        push(sentences[currentIdx + direction * step]?.content);
+      }
+    }
     if (targets.length === 0) return;
     // Let the sentence the user is actually waiting on grab the bandwidth
     // first; a newer press cancels this before it ever runs.
     const id = setTimeout(() => prewarmSentences(targets), 400);
     return () => clearTimeout(id);
-  }, [sentences, currentIdx, muted, ttsPrefetch, ttsVoice]);
+  }, [
+    sentences,
+    currentIdx,
+    muted,
+    ttsPrefetch,
+    ttsVoice,
+    nextDocTargetId,
+    pinnedDocId,
+    cachedLandingSentence,
+    warmTick,
+  ]);
+
 
 
   // Strip emoji and pictographic symbols, but preserve digits, letters,
