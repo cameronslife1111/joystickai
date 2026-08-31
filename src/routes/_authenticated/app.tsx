@@ -766,12 +766,25 @@ function AppPageInner() {
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
   // ---- Speech prewarm -----------------------------------------------------
-  // Generate the audio for the sentences the reader is about to reach so the
-  // next orb press plays from cache with no network wait. Direction-aware:
-  // moving forward warms ahead, moving backward warms behind. Clips are
-  // persisted, so a sentence is only ever generated once per voice.
+  // Generate the audio for every sentence one of the four most-used orbs can
+  // land on, so the press plays from cache with no network wait:
+  //   blue/purple → the previous and next sentence of this document
+  //   green       → the landing sentence of the next document in the cycle
+  //   orange      → the landing sentence of the pinned document
+  // Direction only decides queue order (likely direction first) and any extra
+  // lookahead. Clips are persisted, so a sentence is generated once per voice.
   const lastWarmIdxRef = useRef<number>(0);
   const warmDirectionRef = useRef<1 | -1>(1);
+
+  /** Resolve the sentence another document will open on, from cache only. */
+  const cachedLandingSentence = useCallback((docId: string | null): string | null => {
+    if (!docId || docId === activeDocId) return null;
+    const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
+    if (!list || list.length === 0) return null;
+    const serverIdx = docs?.find((d) => d.id === docId)?.current_sentence_index ?? 0;
+    const idx = Math.max(0, Math.min(savedIndexFor(docId, serverIdx), list.length - 1));
+    return list[idx]?.content ?? null;
+  }, [activeDocId, docs, qc, savedIndexFor]);
 
   useEffect(() => {
     if (currentIdx !== lastWarmIdxRef.current) {
@@ -779,21 +792,42 @@ function AppPageInner() {
       lastWarmIdxRef.current = currentIdx;
     }
     if (muted || ttsPrefetch <= 0) return;
-    if (!sentences || sentences.length < 2) return;
     const direction = warmDirectionRef.current;
     const targets: string[] = [];
-    for (let step = 1; step <= ttsPrefetch; step += 1) {
-      const ahead = sentences[currentIdx + direction * step];
-      if (ahead?.content) targets.push(ahead.content);
+    const push = (text?: string | null) => {
+      if (text && !targets.includes(text)) targets.push(text);
+    };
+
+    if (sentences && sentences.length > 1) {
+      // Both neighbours are always warmed; the likely direction goes first.
+      push(sentences[currentIdx + direction]?.content);
+      push(sentences[currentIdx - direction]?.content);
     }
-    const behind = sentences[currentIdx - direction];
-    if (behind?.content) targets.push(behind.content);
+    // Cross-document landing sentences (green orb, then orange orb).
+    push(cachedLandingSentence(nextDocTargetId));
+    push(cachedLandingSentence(pinnedDocId));
+    // Extra lookahead in the travelling direction.
+    if (sentences) {
+      for (let step = 2; step <= ttsPrefetch; step += 1) {
+        push(sentences[currentIdx + direction * step]?.content);
+      }
+    }
     if (targets.length === 0) return;
     // Let the sentence the user is actually waiting on grab the bandwidth
     // first; a newer press cancels this before it ever runs.
     const id = setTimeout(() => prewarmSentences(targets), 400);
     return () => clearTimeout(id);
-  }, [sentences, currentIdx, muted, ttsPrefetch, ttsVoice]);
+  }, [
+    sentences,
+    currentIdx,
+    muted,
+    ttsPrefetch,
+    ttsVoice,
+    nextDocTargetId,
+    pinnedDocId,
+    cachedLandingSentence,
+  ]);
+
 
 
   // Strip emoji and pictographic symbols, but preserve digits, letters,
