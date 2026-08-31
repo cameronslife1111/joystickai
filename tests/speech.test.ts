@@ -251,4 +251,36 @@ describe("speech prewarm", () => {
       setSpeechEnabled(false);
     }
   });
+
+  test("prewarms in the given order, and a newer queue supersedes the old one", async () => {
+    setSpeechEnabled(true);
+    resetSpeechCaches();
+    const seen: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((_url: string, init?: RequestInit) => {
+      try {
+        seen.push(JSON.parse(String(init?.body ?? "{}")).text);
+      } catch {
+        seen.push("?");
+      }
+      return Promise.reject(new Error("no network in test"));
+    }) as unknown as typeof fetch;
+    try {
+      // Neighbours first, then the cross-document landing sentences.
+      prewarmSentences(["next sentence", "previous sentence", "green doc landing"]);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(seen).toEqual(["next sentence", "previous sentence", "green doc landing"]);
+
+      // A newer press replaces whatever was still pending.
+      seen.length = 0;
+      prewarmSentences(["orange doc landing"]);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(seen).toEqual(["orange doc landing"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      cancelPrewarm();
+      setSpeechEnabled(false);
+    }
+  });
 });
+
