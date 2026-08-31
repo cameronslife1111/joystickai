@@ -8,7 +8,7 @@ import { OrbCluster, type OrbId } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences, cancelPrewarm } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
@@ -511,7 +511,8 @@ function AppPageInner() {
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
   const ttsVoice = prefs?.tts_voice ?? DEFAULT_TTS_VOICE;
-  const ttsPrefetch = prefs?.tts_prefetch ?? 2;
+  // Prefetch depth is fixed: whenever sound is on we always warm 2 ahead.
+  const ttsPrefetch = 2;
   const lockFavorites = prefs?.lock_favorites ?? false;
   const pinnedDocId = prefs?.pinned_document_id ?? null;
   const lockedDocId = prefs?.locked_document_id ?? null;
@@ -585,18 +586,6 @@ function AppPageInner() {
     if (error) toast.error(error.message);
   }, [qc, favorites]);
 
-  const saveTtsPrefetch = useCallback(async (next: number) => {
-    const clamped = Math.max(0, Math.min(2, Math.round(next)));
-    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_prefetch: clamped }));
-    if (clamped === 0) cancelPrewarm();
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const { error } = await supabase.from("user_preferences").upsert(
-      { user_id: u.user.id, tts_prefetch: clamped, favorites: favorites as any },
-      { onConflict: "user_id" },
-    );
-    if (error) toast.error(error.message);
-  }, [qc, favorites]);
 
 
   const saveLastFavoriteSlot = useCallback(async (slot: number) => {
@@ -3098,10 +3087,8 @@ function AppPageInner() {
         onOpenChange={setSoundSettingsOpen}
         enabled={!muted}
         voice={ttsVoice}
-        prefetch={ttsPrefetch}
         onEnabledChange={(enabled) => void saveMuted(!enabled)}
         onVoiceChange={(voice) => void saveTtsVoice(voice)}
-        onPrefetchChange={(depth) => void saveTtsPrefetch(depth)}
 
         onPreview={(voice) => {
           setSpeechVoice(voice);
