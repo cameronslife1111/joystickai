@@ -8,7 +8,7 @@ import { OrbCluster, type OrbId } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences, cancelPrewarm } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
