@@ -8,7 +8,7 @@ import { OrbCluster, type OrbId } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
-import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences, cancelPrewarm } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
@@ -495,24 +495,27 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, tts_voice, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
+        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
       const savedVoice = data?.tts_voice;
-      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
+      const savedPrefetch = Number((data as any)?.tts_prefetch);
+      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
   const ttsVoice = prefs?.tts_voice ?? DEFAULT_TTS_VOICE;
+  const ttsPrefetch = prefs?.tts_prefetch ?? 2;
   const lockFavorites = prefs?.lock_favorites ?? false;
   const pinnedDocId = prefs?.pinned_document_id ?? null;
   const lockedDocId = prefs?.locked_document_id ?? null;
+
 
 
   // Hydrate theme from saved preference once it loads.
@@ -581,6 +584,20 @@ function AppPageInner() {
     );
     if (error) toast.error(error.message);
   }, [qc, favorites]);
+
+  const saveTtsPrefetch = useCallback(async (next: number) => {
+    const clamped = Math.max(0, Math.min(2, Math.round(next)));
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_prefetch: clamped }));
+    if (clamped === 0) cancelPrewarm();
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { error } = await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, tts_prefetch: clamped, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+    if (error) toast.error(error.message);
+  }, [qc, favorites]);
+
 
   const saveLastFavoriteSlot = useCallback(async (slot: number) => {
     const { data: u } = await supabase.auth.getUser();
@@ -734,6 +751,37 @@ function AppPageInner() {
   // Keep the speech engine's master switch in sync: Sound off means
   // speakText never reaches the network, so muted users are never charged.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
+
+  // ---- Speech prewarm -----------------------------------------------------
+  // Generate the audio for the sentences the reader is about to reach so the
+  // next orb press plays from cache with no network wait. Direction-aware:
+  // moving forward warms ahead, moving backward warms behind. Clips are
+  // persisted, so a sentence is only ever generated once per voice.
+  const lastWarmIdxRef = useRef<number>(0);
+  const warmDirectionRef = useRef<1 | -1>(1);
+
+  useEffect(() => {
+    if (currentIdx !== lastWarmIdxRef.current) {
+      warmDirectionRef.current = currentIdx > lastWarmIdxRef.current ? 1 : -1;
+      lastWarmIdxRef.current = currentIdx;
+    }
+    if (muted || ttsPrefetch <= 0) return;
+    if (!sentences || sentences.length < 2) return;
+    const direction = warmDirectionRef.current;
+    const targets: string[] = [];
+    for (let step = 1; step <= ttsPrefetch; step += 1) {
+      const ahead = sentences[currentIdx + direction * step];
+      if (ahead?.content) targets.push(ahead.content);
+    }
+    const behind = sentences[currentIdx - direction];
+    if (behind?.content) targets.push(behind.content);
+    if (targets.length === 0) return;
+    // Let the sentence the user is actually waiting on grab the bandwidth
+    // first; a newer press cancels this before it ever runs.
+    const id = setTimeout(() => prewarmSentences(targets), 400);
+    return () => clearTimeout(id);
+  }, [sentences, currentIdx, muted, ttsPrefetch, ttsVoice]);
+
 
   // Strip emoji and pictographic symbols, but preserve digits, letters,
   // punctuation, and whitespace.
@@ -2998,8 +3046,11 @@ function AppPageInner() {
         onOpenChange={setSoundSettingsOpen}
         enabled={!muted}
         voice={ttsVoice}
+        prefetch={ttsPrefetch}
         onEnabledChange={(enabled) => void saveMuted(!enabled)}
         onVoiceChange={(voice) => void saveTtsVoice(voice)}
+        onPrefetchChange={(depth) => void saveTtsPrefetch(depth)}
+
         onPreview={(voice) => {
           setSpeechVoice(voice);
           speakText("This is Orby speaking with your selected voice.");

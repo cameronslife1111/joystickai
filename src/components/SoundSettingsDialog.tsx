@@ -10,18 +10,23 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   enabled: boolean;
   voice: TtsVoice;
+  prefetch: number;
   onEnabledChange: (enabled: boolean) => void;
   onVoiceChange: (voice: TtsVoice) => void;
+  onPrefetchChange: (depth: number) => void;
   onPreview: (voice: TtsVoice) => void;
 };
+
 
 export function SoundSettingsDialog({
   open,
   onOpenChange,
   enabled,
   voice,
+  prefetch,
   onEnabledChange,
   onVoiceChange,
+  onPrefetchChange,
   onPreview,
 }: Props) {
   return (
@@ -39,6 +44,34 @@ export function SoundSettingsDialog({
           </div>
           <Switch checked={enabled} onCheckedChange={onEnabledChange} aria-label="Read sentences aloud" />
         </div>
+
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-3">
+          <div className="font-medium">Prepare next sentences</div>
+          <div className="text-xs text-muted-foreground">
+            Generates upcoming sentences ahead of time so they start instantly. Higher uses a
+            little more credit.
+          </div>
+          <div className="mt-2 flex gap-2">
+            {[
+              { value: 0, label: "Off" },
+              { value: 1, label: "1 ahead" },
+              { value: 2, label: "2 ahead" },
+            ].map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={prefetch === option.value ? "default" : "outline"}
+                className="flex-1"
+                disabled={!enabled}
+                onClick={() => onPrefetchChange(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
 
         <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {(["female", "male"] as const).flatMap((group) => [

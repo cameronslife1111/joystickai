@@ -2,6 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_TTS_VOICE, type TtsVoice } from "@/lib/tts-voices";
 import { assertMixableSessionWithRetries, requestIosMixableSession } from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
+import { loadStoredClip, resetClipStore, saveStoredClip } from "@/lib/speech-clip-store";
+
 
 type SpeakOpts = {
   rate?: number;
@@ -54,7 +56,10 @@ let speechEnabled = false;
 
 export function setSpeechEnabled(on: boolean) {
   speechEnabled = on;
-  if (!on) cancelSpeech();
+  if (!on) {
+    cancelSpeech();
+    cancelPrewarm();
+  }
 }
 
 export function isSpeechEnabled(): boolean {
@@ -67,7 +72,10 @@ let speechSuppressed = false;
 
 export function setSpeechSuppressed(on: boolean) {
   speechSuppressed = on;
-  if (on) cancelSpeech();
+  if (on) {
+    cancelSpeech();
+    cancelPrewarm();
+  }
 }
 
 export function isSpeechSuppressed(): boolean {
@@ -75,8 +83,10 @@ export function isSpeechSuppressed(): boolean {
 }
 
 export function setSpeechVoice(voice: TtsVoice) {
+  if (voice !== selectedVoice) cancelPrewarm();
   selectedVoice = voice;
 }
+
 
 // Reuse the sign-in token across rapid sentences instead of paying a storage
 // round-trip per speak call; re-fetch only when it is about to expire.
@@ -119,17 +129,18 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-// Decoded PCM for the last few spoken sentences, so Repeat / auto-repeat start
-// instantly with no network and no extra AI credits. Only sentences the user
-// already heard are cached — nothing is pre-generated.
-const REPLAY_CACHE_LIMIT = 12;
+// Decoded PCM for recently used sentences, so Repeat, back-navigation and
+// pre-warmed neighbours start instantly with no network and no extra AI
+// credits. Clips are also persisted (see speech-clip-store) so a sentence is
+// only ever generated once per voice.
+const REPLAY_CACHE_LIMIT = 80;
 const replayCache = new Map<string, Float32Array<ArrayBuffer>>();
 
 function replayKey(text: string, voice: string) {
-  return `${voice}::${text}`;
+  return `${voice}@${SPEECH_RATE}::${text}`;
 }
 
-function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
+function rememberClip(key: string, samples: Float32Array<ArrayBuffer>, persist = true) {
   replayCache.delete(key);
   replayCache.set(key, samples);
   while (replayCache.size > REPLAY_CACHE_LIMIT) {
@@ -137,14 +148,27 @@ function rememberClip(key: string, samples: Float32Array<ArrayBuffer>) {
     if (oldest === undefined) break;
     replayCache.delete(oldest);
   }
+  if (persist) void saveStoredClip(key, samples).catch(() => {});
+}
+
+/** Memory first, then the persistent store. */
+async function lookupClip(key: string): Promise<Float32Array<ArrayBuffer> | null> {
+  const inMemory = replayCache.get(key);
+  if (inMemory) return inMemory;
+  const stored = await loadStoredClip(key).catch(() => null);
+  if (stored) rememberClip(key, stored, false);
+  return stored;
 }
 
 /** Test hook: drop cached tokens, replay clips, and the playback context. */
 export function resetSpeechCaches() {
   tokenCache = null;
   replayCache.clear();
+  cancelPrewarm();
+  resetClipStore();
   discardPlaybackContext();
 }
+
 
 /**
  * Mark the current playback engine as untrustworthy. The next speak call
@@ -394,6 +418,120 @@ function scheduleSamples(
   return startAt + audioBuffer.duration / SPEECH_RATE;
 }
 
+type ClipStream = {
+  /** Called with each decoded PCM chunk as it arrives (live playback path). */
+  onChunk?: (samples: Float32Array<ArrayBuffer>) => void;
+  /** Return true to abandon the request (superseded by a newer action). */
+  isStale?: () => boolean;
+};
+
+/**
+ * Request one sentence from hosted Google speech and decode its PCM.
+ * Shared by the live speak path (which plays chunks as they arrive) and the
+ * prewarm path (which only fills the cache). Returns null when the caller
+ * went stale mid-flight; throws with a user-facing message on failure.
+ */
+async function generateClip(
+  clean: string,
+  voice: TtsVoice,
+  signal: AbortSignal,
+  stream: ClipStream = {},
+): Promise<Float32Array<ArrayBuffer> | null> {
+  const stale = () => stream.isStale?.() === true;
+
+  let bearer = await getAccessToken();
+  if (!bearer) throw new Error("Please sign in to use speech.");
+  if (stale()) return null;
+
+  const requestSpeech = (tokenValue: string) =>
+    fetch("/api/public/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenValue}` },
+      body: JSON.stringify({ text: clean, voice }),
+      signal,
+    });
+
+  let response = await requestSpeech(bearer);
+
+  // Token rejected? Refresh the session once and retry — never wedge.
+  if (response.status === 401) {
+    const fresh = await refreshAccessToken();
+    if (fresh && !stale()) {
+      bearer = fresh;
+      response = await requestSpeech(bearer);
+    }
+  }
+
+  // One bounded retry for transient gateway failures (429 / 5xx),
+  // honoring Retry-After when the gateway sends one.
+  if (response.status === 429 || response.status >= 500) {
+    const retryAfter = Number(response.headers.get("retry-after"));
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter, 10) * 1_000
+      : 1_000;
+    await sleep(waitMs);
+    if (stale()) return null;
+    response = await requestSpeech(bearer);
+  }
+
+  if (!response.ok || !response.body) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? `Speech request failed (${response.status})`);
+  }
+
+  let pending = new Uint8Array(0);
+  let buffer = "";
+  let completed = false;
+  const captured: Float32Array<ArrayBuffer>[] = [];
+
+  const take = (incoming: Uint8Array) => {
+    const bytes = new Uint8Array(pending.length + incoming.length);
+    bytes.set(pending);
+    bytes.set(incoming, pending.length);
+    const usable = bytes.length - (bytes.length % 2);
+    pending = bytes.slice(usable);
+    if (usable === 0 || stale()) return;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, usable);
+    const samples = new Float32Array(usable / 2) as Float32Array<ArrayBuffer>;
+    for (let index = 0; index < samples.length; index += 1) {
+      samples[index] = view.getInt16(index * 2, true) / 32_768;
+    }
+    captured.push(samples);
+    stream.onChunk?.(samples);
+  };
+  const processEvent = (raw: string) => {
+    const dataLine = raw.split("\n").find((line) => line.startsWith("data:"));
+    if (!dataLine) return;
+    const payload = JSON.parse(dataLine.slice(5).trim()) as { type?: string; audio?: string };
+    if (payload.type === "speech.audio.delta" && payload.audio) take(decodeBase64(payload.audio));
+    if (payload.type === "speech.audio.done") completed = true;
+  };
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    events.forEach(processEvent);
+  }
+  if (buffer.trim()) processEvent(buffer);
+  if (stale()) return null;
+  if (!completed || captured.length === 0) {
+    throw new Error("Google speech returned no playable audio.");
+  }
+
+  const total = captured.reduce((n, chunk) => n + chunk.length, 0);
+  const merged = new Float32Array(total) as Float32Array<ArrayBuffer>;
+  let offset = 0;
+  for (const chunk of captured) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+}
+
 /** Stream one sentence from hosted Google speech and play its PCM chunks immediately. */
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Sound is off — return before touching tokens, network, or audio so the
@@ -403,11 +541,13 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
 
   cancelSpeech();
+  // The sentence the user is waiting on always gets the bandwidth first.
+  cancelPrewarm();
   reclaimAudioRoute();
   attachForegroundRecovery();
   const sequence = requestSequence;
   const key = replayKey(clean, selectedVoice);
-  const cached = replayCache.get(key) ?? null;
+  const cachedInMemory = replayCache.get(key) ?? null;
 
   const controller = new AbortController();
   activeRequest = controller;
@@ -430,7 +570,10 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (sequence !== requestSequence) return;
       if (!context) throw new Error("Audio playback is unavailable on this device.");
 
-      // Instant replay path: audio for this exact sentence + voice is already here.
+      // Instant path: audio for this exact sentence + voice is already here,
+      // either in memory or persisted from an earlier session / prewarm.
+      const cached = cachedInMemory ?? (await lookupClip(key));
+      if (sequence !== requestSequence) return;
       if (cached) {
         const endTime = scheduleSamples(context, cached, 0);
         clearTimeout(startWatchdog);
@@ -444,104 +587,25 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         return;
       }
 
-      let bearer = await getAccessToken();
-      if (!bearer) throw new Error("Please sign in to use speech.");
-      if (sequence !== requestSequence) return;
-
-      const requestSpeech = (tokenValue: string) =>
-        fetch("/api/public/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenValue}` },
-          body: JSON.stringify({ text: clean, voice: selectedVoice }),
-          signal: controller.signal,
-        });
-
-      let response = await requestSpeech(bearer);
-
-      // Token rejected? Refresh the session once and retry — never wedge.
-      if (response.status === 401) {
-        const fresh = await refreshAccessToken();
-        if (fresh && sequence === requestSequence) {
-          bearer = fresh;
-          response = await requestSpeech(bearer);
-        }
-      }
-
-      // One bounded retry for transient gateway failures (429 / 5xx),
-      // honoring Retry-After when the gateway sends one.
-      if (response.status === 429 || response.status >= 500) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
-          ? Math.min(retryAfter, 10) * 1_000
-          : 1_000;
-        await sleep(waitMs);
-        if (sequence !== requestSequence) return;
-        response = await requestSpeech(bearer);
-      }
-
-      if (!response.ok || !response.body) {
-        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(payload?.message ?? `Speech request failed (${response.status})`);
-      }
-
       let playhead = 0;
-      let pending = new Uint8Array(0);
-      let buffer = "";
-      let receivedAudio = false;
-      let completed = false;
       let assertedOnFirstChunk = false;
-      const captured: Float32Array[] = [];
-      const schedule = (incoming: Uint8Array) => {
-        const bytes = new Uint8Array(pending.length + incoming.length);
-        bytes.set(pending);
-        bytes.set(incoming, pending.length);
-        const usable = bytes.length - (bytes.length % 2);
-        pending = bytes.slice(usable);
-        if (usable === 0 || sequence !== requestSequence) return;
-        const view = new DataView(bytes.buffer, bytes.byteOffset, usable);
-        const samples = new Float32Array(usable / 2);
-        for (let index = 0; index < samples.length; index += 1) {
-          samples[index] = view.getInt16(index * 2, true) / 32_768;
-        }
-        if (!assertedOnFirstChunk) {
-          assertedOnFirstChunk = true;
-          clearTimeout(startWatchdog);
-          // Re-assert mixable once audio actually starts, catching any late
-          // audio-session flip the microphone left behind.
-          requestIosMixableSession();
-        }
-        playhead = scheduleSamples(context, samples, playhead);
-        captured.push(samples);
-        receivedAudio = true;
-      };
-      const processEvent = (raw: string) => {
-        const dataLine = raw.split("\n").find((line) => line.startsWith("data:"));
-        if (!dataLine) return;
-        const payload = JSON.parse(dataLine.slice(5).trim()) as { type?: string; audio?: string };
-        if (payload.type === "speech.audio.delta" && payload.audio) schedule(decodeBase64(payload.audio));
-        if (payload.type === "speech.audio.done") completed = true;
-      };
+      const merged = await generateClip(clean, selectedVoice, controller.signal, {
+        isStale: () => sequence !== requestSequence,
+        onChunk: (samples) => {
+          if (sequence !== requestSequence) return;
+          if (!assertedOnFirstChunk) {
+            assertedOnFirstChunk = true;
+            clearTimeout(startWatchdog);
+            // Re-assert mixable once audio actually starts, catching any late
+            // audio-session flip the microphone left behind.
+            requestIosMixableSession();
+          }
+          playhead = scheduleSamples(context, samples, playhead);
+        },
+      });
+      if (!merged || sequence !== requestSequence) return;
 
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += value;
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
-        events.forEach(processEvent);
-      }
-      if (buffer.trim()) processEvent(buffer);
-      if (!completed || !receivedAudio) throw new Error("Google speech returned no playable audio.");
-
-      // Cache the decoded clip so Repeat / auto-repeat replay instantly.
-      const total = captured.reduce((n, chunk) => n + chunk.length, 0);
-      const merged = new Float32Array(total);
-      let offset = 0;
-      for (const chunk of captured) {
-        merged.set(chunk, offset);
-        offset += chunk.length;
-      }
+      // Cache the decoded clip so Repeat / re-reads replay instantly and free.
       rememberClip(key, merged);
 
       const remainingMs = Math.max(0, (playhead - context.currentTime) * 1_000);
@@ -566,3 +630,77 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   })();
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Prewarm: generate the audio for sentences the user is about to reach, so the
+// next orb press plays from cache instead of waiting on the network. Strictly
+// opportunistic — never plays audio, never touches the audio route, never
+// surfaces an error, and never delays a real speak call.
+// ---------------------------------------------------------------------------
+
+let prewarmController: AbortController | null = null;
+let prewarmQueue: string[] = [];
+let prewarmRunning = false;
+
+export function cancelPrewarm() {
+  prewarmQueue = [];
+  prewarmController?.abort();
+  prewarmController = null;
+}
+
+async function runPrewarmQueue() {
+  if (prewarmRunning) return;
+  prewarmRunning = true;
+  try {
+    while (prewarmQueue.length > 0) {
+      const clean = prewarmQueue.shift();
+      if (!clean) continue;
+      if (!speechEnabled || speechSuppressed) break;
+      const key = replayKey(clean, selectedVoice);
+      const existing = await lookupClip(key).catch(() => null);
+      if (existing) continue;
+      const controller = new AbortController();
+      prewarmController = controller;
+      try {
+        const merged = await generateClip(clean, selectedVoice, controller.signal, {
+          isStale: () => controller.signal.aborted,
+        });
+        if (merged) rememberClip(key, merged);
+      } catch {
+        // Prewarm failures are invisible by design: the live speak path will
+        // report a genuine problem when the user actually asks for audio.
+      } finally {
+        if (prewarmController === controller) prewarmController = null;
+      }
+    }
+  } finally {
+    prewarmRunning = false;
+  }
+}
+
+/**
+ * Queue sentences to generate ahead of the user, nearest-first. Replaces any
+ * previously queued set; a live speak call cancels this entirely.
+ */
+export function prewarmSentences(texts: string[]) {
+  if (!speechEnabled || speechSuppressed) return;
+  cancelPrewarm();
+  const seen = new Set<string>();
+  prewarmQueue = texts
+    .map((text) => cleanForSpeech(text ?? ""))
+    .filter((clean) => {
+      if (!clean || !SPEAKABLE_RE.test(clean)) return false;
+      if (seen.has(clean)) return false;
+      seen.add(clean);
+      return !replayCache.has(replayKey(clean, selectedVoice));
+    });
+  if (prewarmQueue.length > 0) void runPrewarmQueue();
+}
+
+/** True when the audio for this sentence is already in memory. */
+export function hasCachedClip(text: string): boolean {
+  const clean = cleanForSpeech(text ?? "");
+  if (!clean) return false;
+  return replayCache.has(replayKey(clean, selectedVoice));
+}
+
