@@ -124,7 +124,13 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      <Toaster theme="dark" position="top-center" richColors />
+      <Toaster
+        theme="dark"
+        position="top-right"
+        offset={12}
+        gap={6}
+        toastOptions={{ unstyled: true, className: "!bg-transparent !border-0 !shadow-none !p-0 !w-auto" }}
+      />
     </QueryClientProvider>
   );
 }
