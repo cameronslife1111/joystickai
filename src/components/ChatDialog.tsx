@@ -117,10 +117,16 @@ type Thread = {
   title: string;
   attached_document_ids: string[];
   capabilities: ChatCapabilities;
+  /** Sticky per chat: run plans made here without asking for approval. */
+  auto_approve_plans: boolean;
   updated_at: string;
   last_assistant_at: string | null;
   last_read_at: string | null;
 };
+
+/** Columns every thread read needs — keeps the selects in sync. */
+const THREAD_COLS =
+  "id, title, attached_document_ids, capabilities, auto_approve_plans, updated_at, last_assistant_at, last_read_at";
 
 /** A chat is unread when AI activity is newer than the last time it was read. */
 function isUnread(t: Thread): boolean {
