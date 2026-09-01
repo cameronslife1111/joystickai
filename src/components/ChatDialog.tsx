@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   Paperclip,
@@ -117,10 +117,16 @@ type Thread = {
   title: string;
   attached_document_ids: string[];
   capabilities: ChatCapabilities;
+  /** Sticky per chat: run plans made here without asking for approval. */
+  auto_approve_plans: boolean;
   updated_at: string;
   last_assistant_at: string | null;
   last_read_at: string | null;
 };
+
+/** Columns every thread read needs — keeps the selects in sync. */
+const THREAD_COLS =
+  "id, title, attached_document_ids, capabilities, auto_approve_plans, updated_at, last_assistant_at, last_read_at";
 
 /** A chat is unread when AI activity is newer than the last time it was read. */
 function isUnread(t: Thread): boolean {
@@ -286,6 +292,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** Last known cursor position in the composer (survives sheets opening). */
   const cursorRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** The messages wrapper — watched so late-growing content re-pins the view. */
+  const messagesListRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
@@ -366,7 +374,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data, error } = await supabase
         .from("chat_threads")
         .select(
-          "id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at",
+          THREAD_COLS,
         )
         .order("updated_at", { ascending: false });
       if (error) throw error;
@@ -376,6 +384,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           title: t.title,
           attached_document_ids: t.attached_document_ids ?? [],
           capabilities: normalizeCaps(t.capabilities),
+          auto_approve_plans: !!t.auto_approve_plans,
           updated_at: t.updated_at,
           last_assistant_at: t.last_assistant_at ?? null,
           last_read_at: t.last_read_at ?? null,
@@ -486,7 +495,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         capabilities: NO_CAPS,
         attached_document_ids: autoAttachIds,
       })
-      .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
+      .select(THREAD_COLS)
       .single();
     if (error || !data) {
       toast.error("Couldn't create thread");
@@ -497,6 +506,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       title: data.title,
       attached_document_ids: data.attached_document_ids ?? [],
       capabilities: normalizeCaps(data.capabilities),
+      auto_approve_plans: !!(data as any).auto_approve_plans,
       updated_at: data.updated_at,
       last_assistant_at: (data as any).last_assistant_at ?? null,
       last_read_at: (data as any).last_read_at ?? null,
@@ -651,13 +661,51 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [open, activeThreadId]);
 
+  /** Jump to the very bottom of the message list. */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  /** True when the user is already parked at (or very near) the bottom. */
+  const atBottom = useCallback((slack = 120) => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
+  }, []);
+
+  // Opening a chat (or switching threads) must land at the bottom. Plan cards,
+  // media thumbnails and long replies get their real height after the first
+  // paint, so re-pin over a short settle window instead of scrolling once.
   useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-      });
-    }
-  }, [messages, isActiveBusy, open]);
+    if (!open || !activeThreadId) return;
+    const timers = [0, 60, 150, 300, 600, 1000, 1600].map((ms) =>
+      window.setTimeout(() => scrollToBottom("auto"), ms),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [open, activeThreadId, messages.length, scrollToBottom]);
+
+  // New messages / live plan updates keep the smooth follow, but never yank the
+  // view down when the user has scrolled up to read.
+  useEffect(() => {
+    if (!open) return;
+    if (!atBottom(240)) return;
+    requestAnimationFrame(() => scrollToBottom("smooth"));
+  }, [messages, isActiveBusy, open, atBottom, scrollToBottom]);
+
+  // Content that grows after layout (images loading, a plan card expanding or
+  // finishing) re-pins the view when the user is already at the bottom.
+  useEffect(() => {
+    if (!open) return;
+    const list = messagesListRef.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (atBottom()) scrollToBottom("auto");
+    });
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [open, activeThreadId, messages.length, atBottom, scrollToBottom]);
 
   useEffect(() => {
     if (!open) {
@@ -719,7 +767,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     else toast.error("Failed to copy");
   };
 
-  const updateThread = async (id: string, patch: Partial<Pick<Thread, "title" | "attached_document_ids" | "capabilities">>) => {
+  const updateThread = async (id: string, patch: Partial<Pick<Thread, "title" | "attached_document_ids" | "capabilities" | "auto_approve_plans">>) => {
     qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
       (cur ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t)),
     );
@@ -733,6 +781,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       if (activeThreadId) void updateThread(activeThreadId, { capabilities: next });
       return next;
     });
+  };
+
+  /**
+   * "Auto approve plans" — sticky per chat. When on, plans created in this chat
+   * start as soon as they're written instead of waiting on the review card.
+   */
+  const autoApprovePlans = !!activeThread?.auto_approve_plans;
+  const setAutoApprovePlans = (value: boolean) => {
+    if (!activeThreadId) return;
+    void updateThread(activeThreadId, { auto_approve_plans: value });
   };
 
   /** Clear all — unchecks every capability for this chat and persists it. */
@@ -879,6 +937,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         // will post follow-ups. Don't insert a synthetic assistant bubble.
         insertedAssistant = null;
       } else if (result.route === "plan") {
+        // Per-chat "Auto approve plans": read from the live cache so a
+        // programmatic send picks up the current setting.
+        const autoApproveForThread = !!(
+          qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? []
+        ).find((t) => t.id === threadId)?.auto_approve_plans;
         // Create + auto-run a plan tied to this thread.
         // Orby decides the capabilities itself; anything the user ticked is
         // kept on top of that. The plan waits for review in this chat.
@@ -899,6 +962,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             thread_id: threadId,
             review_in_chat: true,
             proposed_capabilities: mergedCaps as any,
+            // "Auto approve plans" is on for this chat → plan-compose approves
+            // and starts it as soon as the steps are written.
+            auto_approve_after_compose: autoApproveForThread,
           })
 
           .select("id")
@@ -913,7 +979,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             user_id: userId,
             thread_id: threadId,
             role: "assistant",
-            content: "On it — writing a plan for you to review.",
+            content: autoApproveForThread
+              ? "On it — writing a plan and starting it."
+              : "On it — writing a plan for you to review.",
             kind: "plan",
             plan_id: planRow.id,
           })
@@ -1121,18 +1189,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       )}
                     </div>
                     {CAP_LABELS.map(({ key, label, hint }) => (
-                      <div key={key} className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
-                          <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
+                      <Fragment key={key}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
+                            <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
+                          </div>
+                          <Checkbox
+                            id={`cap-${key}`}
+                            className="mt-0.5"
+                            checked={caps[key]}
+                            onCheckedChange={(v) => setCap(key, v === true)}
+                          />
                         </div>
-                        <Checkbox
-                          id={`cap-${key}`}
-                          className="mt-0.5"
-                          checked={caps[key]}
-                          onCheckedChange={(v) => setCap(key, v === true)}
-                        />
-                      </div>
+                        {key === "document_editing" && (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <Label htmlFor="cap-auto-approve" className="text-sm">
+                                Auto approve plans
+                              </Label>
+                              <p className="text-[11px] leading-tight text-muted-foreground">
+                                Run plans in this chat without asking me first
+                              </p>
+                            </div>
+                            <Checkbox
+                              id="cap-auto-approve"
+                              className="mt-0.5"
+                              checked={autoApprovePlans}
+                              onCheckedChange={(v) => setAutoApprovePlans(v === true)}
+                            />
+                          </div>
+                        )}
+                      </Fragment>
                     ))}
                     <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
                       <div className="min-w-0">
@@ -1203,7 +1291,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
+              <div ref={messagesListRef} className="flex flex-col gap-4">
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
                     <div key={m.id} className="flex flex-col items-start">
