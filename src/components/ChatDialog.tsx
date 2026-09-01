@@ -659,13 +659,51 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [open, activeThreadId]);
 
+  /** Jump to the very bottom of the message list. */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  /** True when the user is already parked at (or very near) the bottom. */
+  const atBottom = useCallback((slack = 120) => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
+  }, []);
+
+  // Opening a chat (or switching threads) must land at the bottom. Plan cards,
+  // media thumbnails and long replies get their real height after the first
+  // paint, so re-pin over a short settle window instead of scrolling once.
   useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-      });
-    }
-  }, [messages, isActiveBusy, open]);
+    if (!open || !activeThreadId) return;
+    const timers = [0, 60, 150, 300, 600, 1000, 1600].map((ms) =>
+      window.setTimeout(() => scrollToBottom("auto"), ms),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [open, activeThreadId, messages.length, scrollToBottom]);
+
+  // New messages / live plan updates keep the smooth follow, but never yank the
+  // view down when the user has scrolled up to read.
+  useEffect(() => {
+    if (!open) return;
+    if (!atBottom(240)) return;
+    requestAnimationFrame(() => scrollToBottom("smooth"));
+  }, [messages, isActiveBusy, open, atBottom, scrollToBottom]);
+
+  // Content that grows after layout (images loading, a plan card expanding or
+  // finishing) re-pins the view when the user is already at the bottom.
+  useEffect(() => {
+    if (!open) return;
+    const list = messagesRef.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (atBottom()) scrollToBottom("auto");
+    });
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [open, activeThreadId, messages.length, atBottom, scrollToBottom]);
 
   useEffect(() => {
     if (!open) {
