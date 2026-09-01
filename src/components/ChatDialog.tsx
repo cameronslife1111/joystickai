@@ -372,7 +372,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data, error } = await supabase
         .from("chat_threads")
         .select(
-          "id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at",
+          THREAD_COLS,
         )
         .order("updated_at", { ascending: false });
       if (error) throw error;
@@ -382,6 +382,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           title: t.title,
           attached_document_ids: t.attached_document_ids ?? [],
           capabilities: normalizeCaps(t.capabilities),
+          auto_approve_plans: !!t.auto_approve_plans,
           updated_at: t.updated_at,
           last_assistant_at: t.last_assistant_at ?? null,
           last_read_at: t.last_read_at ?? null,
@@ -492,7 +493,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         capabilities: NO_CAPS,
         attached_document_ids: autoAttachIds,
       })
-      .select("id, title, attached_document_ids, capabilities, updated_at, last_assistant_at, last_read_at")
+      .select(THREAD_COLS)
       .single();
     if (error || !data) {
       toast.error("Couldn't create thread");
@@ -503,6 +504,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       title: data.title,
       attached_document_ids: data.attached_document_ids ?? [],
       capabilities: normalizeCaps(data.capabilities),
+      auto_approve_plans: !!(data as any).auto_approve_plans,
       updated_at: data.updated_at,
       last_assistant_at: (data as any).last_assistant_at ?? null,
       last_read_at: (data as any).last_read_at ?? null,
@@ -725,7 +727,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     else toast.error("Failed to copy");
   };
 
-  const updateThread = async (id: string, patch: Partial<Pick<Thread, "title" | "attached_document_ids" | "capabilities">>) => {
+  const updateThread = async (id: string, patch: Partial<Pick<Thread, "title" | "attached_document_ids" | "capabilities" | "auto_approve_plans">>) => {
     qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) =>
       (cur ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t)),
     );
