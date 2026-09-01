@@ -292,6 +292,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** Last known cursor position in the composer (survives sheets opening). */
   const cursorRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** The messages wrapper — watched so late-growing content re-pins the view. */
+  const messagesRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
@@ -781,6 +783,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   };
 
+  /**
+   * "Auto approve plans" — sticky per chat. When on, plans created in this chat
+   * start as soon as they're written instead of waiting on the review card.
+   */
+  const autoApprovePlans = !!activeThread?.auto_approve_plans;
+  const setAutoApprovePlans = (value: boolean) => {
+    if (!activeThreadId) return;
+    void updateThread(activeThreadId, { auto_approve_plans: value });
+  };
+
   /** Clear all — unchecks every capability for this chat and persists it. */
   const clearCaps = () => {
     setPendingCaps(NO_CAPS);
@@ -945,6 +957,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             thread_id: threadId,
             review_in_chat: true,
             proposed_capabilities: mergedCaps as any,
+            // "Auto approve plans" is on for this chat → plan-compose approves
+            // and starts it as soon as the steps are written.
+            auto_approve_after_compose: autoApproveForThread,
           })
 
           .select("id")
@@ -959,7 +974,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             user_id: userId,
             thread_id: threadId,
             role: "assistant",
-            content: "On it — writing a plan for you to review.",
+            content: autoApproveForThread
+              ? "On it — writing a plan and starting it."
+              : "On it — writing a plan for you to review.",
             kind: "plan",
             plan_id: planRow.id,
           })
@@ -1167,18 +1184,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       )}
                     </div>
                     {CAP_LABELS.map(({ key, label, hint }) => (
-                      <div key={key} className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
-                          <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
+                      <Fragment key={key}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
+                            <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
+                          </div>
+                          <Checkbox
+                            id={`cap-${key}`}
+                            className="mt-0.5"
+                            checked={caps[key]}
+                            onCheckedChange={(v) => setCap(key, v === true)}
+                          />
                         </div>
-                        <Checkbox
-                          id={`cap-${key}`}
-                          className="mt-0.5"
-                          checked={caps[key]}
-                          onCheckedChange={(v) => setCap(key, v === true)}
-                        />
-                      </div>
+                        {key === "document_editing" && (
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <Label htmlFor="cap-auto-approve" className="text-sm">
+                                Auto approve plans
+                              </Label>
+                              <p className="text-[11px] leading-tight text-muted-foreground">
+                                Run plans in this chat without asking me first
+                              </p>
+                            </div>
+                            <Checkbox
+                              id="cap-auto-approve"
+                              className="mt-0.5"
+                              checked={autoApprovePlans}
+                              onCheckedChange={(v) => setAutoApprovePlans(v === true)}
+                            />
+                          </div>
+                        )}
+                      </Fragment>
                     ))}
                     <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
                       <div className="min-w-0">
@@ -1249,7 +1286,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
+              <div ref={messagesRef} className="flex flex-col gap-4">
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
                     <div key={m.id} className="flex flex-col items-start">
