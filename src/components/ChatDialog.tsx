@@ -1163,110 +1163,141 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Trash2 className="h-5 w-5" />
               </Button>
-              <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <PopoverTrigger asChild>
-                  <Button size="icon" variant="ghost" aria-label="Chat settings">
-                    <SettingsIcon className="h-5 w-5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 max-h-[70vh] overflow-y-auto overscroll-contain">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-start justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-2">
-                      <div className="min-w-0">
-                        <Label htmlFor="cap-auto-approve" className="text-sm">
-                          Auto approve plans
-                        </Label>
-                        <p className="text-[11px] leading-tight text-muted-foreground">
-                          Run plans in this chat without asking me first
-                        </p>
-                      </div>
-                      <Checkbox
-                        id="cap-auto-approve"
-                        className="mt-0.5"
-                        checked={autoApprovePlans}
-                        onCheckedChange={(v) => setAutoApprovePlans(v === true)}
-                      />
-                    </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Chat settings"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <SettingsIcon className="h-5 w-5" />
+              </Button>
+              <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <DialogContent className="flex max-h-[92svh] w-[calc(100%-1rem)] flex-col gap-0 p-0 sm:max-w-2xl">
+                  <DialogHeader className="border-b border-foreground/10 px-4 py-3 text-left">
+                    <DialogTitle className="text-base">Chat settings</DialogTitle>
+                  </DialogHeader>
 
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-muted-foreground">Use for this message</p>
-                        <p className="text-[11px] leading-tight text-muted-foreground">
-                          Nothing checked = plain text reply. Boxes clear after each send.
-                        </p>
-                      </div>
-                      {enabledCapCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={clearCaps}
-                          className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
-                        >
-                          Clear all
-                        </button>
-                      )}
-                    </div>
-                    {CAP_LABELS.map(({ key, label, hint }) => (
-                      <div key={key} className="flex items-start justify-between gap-3">
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setAutoApprovePlans(!autoApprovePlans)}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                          autoApprovePlans
+                            ? "border-primary/50 bg-primary/10"
+                            : "border-foreground/10 bg-muted/30 hover:bg-muted/60",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">Auto approve plans</span>
+                          <span className="block text-[11px] leading-tight text-muted-foreground">
+                            Run plans in this chat without asking me first
+                          </span>
+                        </span>
+                        <Checkbox checked={autoApprovePlans} className="pointer-events-none shrink-0" />
+                      </button>
+
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-foreground/10 bg-muted/30 p-3">
                         <div className="min-w-0">
-                          <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
-                          <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
+                          <Label htmlFor="cap-autospeak" className="text-sm font-medium">
+                            Read replies aloud
+                          </Label>
+                          <p className="text-[11px] leading-tight text-muted-foreground">
+                            Automatically speak Orby's answers
+                          </p>
                         </div>
-                        <Checkbox
-                          id={`cap-${key}`}
-                          className="mt-0.5"
-                          checked={caps[key]}
-                          onCheckedChange={(v) => setCap(key, v === true)}
+                        <Switch
+                          id="cap-autospeak"
+                          className="shrink-0"
+                          checked={autoSpeak}
+                          onCheckedChange={setAutoSpeakPref}
                         />
                       </div>
-                    ))}
-
-                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
-                      <div className="min-w-0">
-                        <Label htmlFor="cap-autospeak" className="text-sm">Read replies aloud</Label>
-                        <p className="text-[11px] leading-tight text-muted-foreground">Automatically speak Orby's answers</p>
-                      </div>
-                      <Switch
-                        id="cap-autospeak"
-                        checked={autoSpeak}
-                        onCheckedChange={setAutoSpeakPref}
-                      />
                     </div>
+
+                    <div>
+                      <p className="text-sm font-medium">What Orby can do in this chat</p>
+                      <p className="mb-2 text-[11px] leading-tight text-muted-foreground">
+                        Stays checked until you uncheck it. Nothing checked = plain text reply.
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {CAP_LABELS.map(({ key, label, hint }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setCap(key, !caps[key])}
+                            className={cn(
+                              "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                              caps[key]
+                                ? "border-primary/50 bg-primary/10"
+                                : "border-foreground/10 bg-background hover:bg-muted/60",
+                            )}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium">{label}</span>
+                              <span className="block text-[11px] leading-tight text-muted-foreground">
+                                {hint}
+                              </span>
+                            </span>
+                            <Checkbox checked={caps[key]} className="pointer-events-none shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-sm font-medium">Attach</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setTitlePickerOpen(true);
+                          }}
+                        >
+                          <Type className="mr-2 h-4 w-4" /> Image titles
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setImagePickerOpen(true);
+                          }}
+                        >
+                          <ImageIcon className="mr-2 h-4 w-4" /> Image to analyze
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setDocPickerOpen(true);
+                          }}
+                        >
+                          <Paperclip className="mr-2 h-4 w-4" /> Documents
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 border-t border-foreground/10 px-4 py-3">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="justify-start"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setTitlePickerOpen(true);
-                      }}
+                      disabled={enabledCapCount === 0}
+                      onClick={clearCaps}
                     >
-                      <Type className="mr-2 h-4 w-4" /> Attach Image titles
+                      Clear all checks
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="justify-start"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setImagePickerOpen(true);
-                      }}
-                    >
-                      <ImageIcon className="mr-2 h-4 w-4" /> Attach Image to Analyze
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="justify-start"
-                      onClick={() => {
-                        setSettingsOpen(false);
-                        setDocPickerOpen(true);
-                      }}
-                    >
-                      <Paperclip className="mr-2 h-4 w-4" /> Attach documents
+                    <Button size="sm" onClick={() => setSettingsOpen(false)}>
+                      Done
                     </Button>
                   </div>
-                </PopoverContent>
-              </Popover>
+                </DialogContent>
+              </Dialog>
             </div>
             </div>
             <DialogTitle className="px-1 text-base font-medium leading-snug break-words">
