@@ -45,7 +45,7 @@ export function useComposingPlansWatcher(
         .select("id, status, steps, review_in_chat")
         .in("id", ids);
 
-      const { toast } = await import("sonner");
+      const { toast } = await import("@/lib/toast");
       for (const row of rows ?? []) {
         if (row.status === "composing") continue;
         tracking.current.delete(row.id);
