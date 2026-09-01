@@ -293,7 +293,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const cursorRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   /** The messages wrapper — watched so late-growing content re-pins the view. */
-  const messagesRef = useRef<HTMLDivElement>(null);
+  const messagesListRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
@@ -698,7 +698,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   // finishing) re-pins the view when the user is already at the bottom.
   useEffect(() => {
     if (!open) return;
-    const list = messagesRef.current;
+    const list = messagesListRef.current;
     if (!list || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
       if (atBottom()) scrollToBottom("auto");
@@ -1291,7 +1291,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 Ask Orby anything — chat, search, edit your docs, or make images & videos.
               </div>
             ) : (
-              <div ref={messagesRef} className="flex flex-col gap-4">
+              <div ref={messagesListRef} className="flex flex-col gap-4">
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
                     <div key={m.id} className="flex flex-col items-start">
