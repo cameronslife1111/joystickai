@@ -1,0 +1,1 @@
+alter table public.chat_threads add column if not exists auto_approve_plans boolean not null default false;

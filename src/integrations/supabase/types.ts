@@ -65,6 +65,7 @@ export type Database = {
       chat_threads: {
         Row: {
           attached_document_ids: string[]
+          auto_approve_plans: boolean
           capabilities: Json
           created_at: string
           id: string
@@ -76,6 +77,7 @@ export type Database = {
         }
         Insert: {
           attached_document_ids?: string[]
+          auto_approve_plans?: boolean
           capabilities?: Json
           created_at?: string
           id?: string
@@ -87,6 +89,7 @@ export type Database = {
         }
         Update: {
           attached_document_ids?: string[]
+          auto_approve_plans?: boolean
           capabilities?: Json
           created_at?: string
           id?: string
