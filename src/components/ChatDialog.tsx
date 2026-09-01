@@ -1206,39 +1206,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       )}
                     </div>
                     {CAP_LABELS.map(({ key, label, hint }) => (
-                      <Fragment key={key}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
-                            <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
-                          </div>
-                          <Checkbox
-                            id={`cap-${key}`}
-                            className="mt-0.5"
-                            checked={caps[key]}
-                            onCheckedChange={(v) => setCap(key, v === true)}
-                          />
+                      <div key={key} className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Label htmlFor={`cap-${key}`} className="text-sm">{label}</Label>
+                          <p className="text-[11px] leading-tight text-muted-foreground">{hint}</p>
                         </div>
-                        {key === "document_editing" && (
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <Label htmlFor="cap-auto-approve" className="text-sm">
-                                Auto approve plans
-                              </Label>
-                              <p className="text-[11px] leading-tight text-muted-foreground">
-                                Run plans in this chat without asking me first
-                              </p>
-                            </div>
-                            <Checkbox
-                              id="cap-auto-approve"
-                              className="mt-0.5"
-                              checked={autoApprovePlans}
-                              onCheckedChange={(v) => setAutoApprovePlans(v === true)}
-                            />
-                          </div>
-                        )}
-                      </Fragment>
+                        <Checkbox
+                          id={`cap-${key}`}
+                          className="mt-0.5"
+                          checked={caps[key]}
+                          onCheckedChange={(v) => setCap(key, v === true)}
+                        />
+                      </div>
                     ))}
+
                     <div className="mt-1 flex items-center justify-between gap-3 border-t border-foreground/10 pt-3">
                       <div className="min-w-0">
                         <Label htmlFor="cap-autospeak" className="text-sm">Read replies aloud</Label>
