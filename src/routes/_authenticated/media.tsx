@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,

@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { PhoneOff } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";

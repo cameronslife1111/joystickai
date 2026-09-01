@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertCircle, Loader2, Send, Square, StickyNote } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { DictateButton } from "@/components/DictateButton";
