@@ -1169,8 +1169,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     <SettingsIcon className="h-5 w-5" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-72">
+                <PopoverContent align="end" className="w-72 max-h-[70vh] overflow-y-auto overscroll-contain">
                   <div className="flex flex-col gap-3">
+                    <div className="flex items-start justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-2">
+                      <div className="min-w-0">
+                        <Label htmlFor="cap-auto-approve" className="text-sm">
+                          Auto approve plans
+                        </Label>
+                        <p className="text-[11px] leading-tight text-muted-foreground">
+                          Run plans in this chat without asking me first
+                        </p>
+                      </div>
+                      <Checkbox
+                        id="cap-auto-approve"
+                        className="mt-0.5"
+                        checked={autoApprovePlans}
+                        onCheckedChange={(v) => setAutoApprovePlans(v === true)}
+                      />
+                    </div>
+
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-muted-foreground">Use for this message</p>
