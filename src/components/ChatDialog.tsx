@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Settings as SettingsIcon,
   Paperclip,
@@ -937,6 +937,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         // will post follow-ups. Don't insert a synthetic assistant bubble.
         insertedAssistant = null;
       } else if (result.route === "plan") {
+        // Per-chat "Auto approve plans": read from the live cache so a
+        // programmatic send picks up the current setting.
+        const autoApproveForThread = !!(
+          qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? []
+        ).find((t) => t.id === threadId)?.auto_approve_plans;
         // Create + auto-run a plan tied to this thread.
         // Orby decides the capabilities itself; anything the user ticked is
         // kept on top of that. The plan waits for review in this chat.
