@@ -2079,14 +2079,14 @@ function PlanProgressCard({
     );
   }
 
-  const steps = Array.isArray(plan.steps) ? plan.steps : [];
-  const running = !PLAN_DONE.has(plan.status);
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const running = !!plan && !PLAN_DONE.has(plan.status);
   const artifacts = extractArtifacts(steps);
   const planMediaIds = artifacts.mediaIds;
   const planDocIds = artifacts.documentIds;
   const { data: planDocs = [] } = useQuery({
     queryKey: ["chat_plan_documents", planId, planDocIds.join(",")],
-    enabled: planDocIds.length > 0,
+    enabled: !!plan && planDocIds.length > 0,
     queryFn: async (): Promise<{ id: string; title: string }[]> => {
       const { data } = await supabase
         .from("documents")
