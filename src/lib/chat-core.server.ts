@@ -326,7 +326,6 @@ export async function runChatTurn(
     "[[doc:document-id|Document title]] using the real UUID returned by the plan/tool and the document title. " +
     "This token becomes a tappable link in the app; never invent an id.\n\n" +
     "MEDIA IN THE CHAT: images, videos and audio you or the user reference appear inline in this chat. " +
-    "When you mention one, write its title in double quotes exactly as listed — that is what makes it show up. "
     "When you mention one, write its title in double quotes exactly as listed — that is what makes it show up. " +
     "When the user asks to change something about a media item that already exists (\"make the sky more orange\", " +
     "\"same image but at night\"), that is a NEW plan that edits or regenerates that exact asset by id — never treat it as chit-chat.\n\n" +

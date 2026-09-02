@@ -91,7 +91,7 @@ export function LinkDocumentDialog({
         return (d.title || "").toLowerCase().includes(q);
       })
     );
-  }, [documents, query, excludeDocumentId]);
+  }, [documents, freshDocs, query, excludeDocumentId]);
 
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();

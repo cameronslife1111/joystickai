@@ -2020,6 +2020,7 @@ function PlanProgressCard({
   planId,
   autoSpeak = false,
   onSteer,
+  onOpenDocument,
 }: {
   planId: string;
   autoSpeak?: boolean;
