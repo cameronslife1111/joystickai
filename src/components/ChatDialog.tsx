@@ -2024,6 +2024,7 @@ function PlanProgressCard({
   planId: string;
   autoSpeak?: boolean;
   onSteer?: (text: string) => void;
+  onOpenDocument?: (documentId: string) => void;
 }) {
   const announcedRef = useRef(false);
   const qc = useQueryClient();
