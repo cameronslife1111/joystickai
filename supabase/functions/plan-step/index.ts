@@ -1517,6 +1517,9 @@ async function composeWrapUp(
     "says what you actually produced, names the documents or media by title, and — when natural — offers one concrete next step. " +
     "Never invent results that aren't in the run log. If the run failed, say plainly what went wrong in human terms and suggest how to proceed. " +
     "Start completed messages with ✅ and failed ones with ⚠️. " +
+    "When a document was created or meaningfully edited, include a link token exactly like " +
+    "[[doc:document-id|Document title]] using the real UUID and title from the Documents line or run log; " +
+    "never invent an id. " +
     "If the run log contains any delete_sentence result, you MUST explicitly tell the user what was deleted (quote or paraphrase the deleted text and name the document) — never let a deletion go unreported.";
 
   const userPrompt =

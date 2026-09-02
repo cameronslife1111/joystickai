@@ -51,6 +51,23 @@ export function LinkDocumentDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // Always pull a fresh list when the picker opens: documents created by a
+  // chat plan on the server won't be in the caller's snapshot yet.
+  const { data: freshDocs } = useQuery({
+    queryKey: ["link_documents"],
+    enabled: open,
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async (): Promise<{ id: string; title: string }[]> => {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("id, title")
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
+
   const { data: threads = [] } = useQuery({
     queryKey: ["link_chat_threads"],
     enabled: open,
@@ -66,14 +83,15 @@ export function LinkDocumentDialog({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const list = freshDocs ?? documents;
     return sortDocsByTitle(
-      documents.filter((d) => {
+      list.filter((d) => {
         if (excludeDocumentId && d.id === excludeDocumentId) return false;
         if (!q) return true;
         return (d.title || "").toLowerCase().includes(q);
       })
     );
-  }, [documents, query, excludeDocumentId]);
+  }, [documents, freshDocs, query, excludeDocumentId]);
 
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();

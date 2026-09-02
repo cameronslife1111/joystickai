@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import {
   Settings as SettingsIcon,
   Paperclip,
@@ -70,6 +71,7 @@ import { toPlainText } from "@/lib/plain-text";
 import { StepReasoning } from "./plan/StepReasoning";
 import { PlanReviewCard, PlanSteerBox } from "./PlanReviewCard";
 import { ChatMediaRow, quotedTitles } from "./ChatMedia";
+import { DocLinkText, DocLinkRow } from "./DocLinkText";
 import { extractArtifacts } from "@/lib/plan-memory";
 import { analyzeDelegateStep } from "@/lib/delegate.functions";
 import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
@@ -1328,6 +1330,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         planId={m.plan_id}
                         autoSpeak={autoSpeak && open}
                         onSteer={(t) => void handleSend({ text: t, threadId: activeThreadId ?? undefined })}
+                        onOpenDocument={(id) => {
+                          onOpenChange(false);
+                          onOpenDocument?.(id);
+                        }}
                       />
                     </div>
                   ) : (
@@ -1342,7 +1348,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
                         }
                       >
-                        <span className="whitespace-pre-wrap">{m.content}</span>
+                        <DocLinkText
+                          text={m.content}
+                          onOpenDocument={(id) => {
+                            onOpenChange(false);
+                            onOpenDocument?.(id);
+                          }}
+                        />
                         <ChatMediaRow titles={quotedTitles(m.content)} className="mt-2" />
                       </div>
                       <div className="mt-1 flex items-center gap-1">
@@ -2008,10 +2020,12 @@ function PlanProgressCard({
   planId,
   autoSpeak = false,
   onSteer,
+  onOpenDocument,
 }: {
   planId: string;
   autoSpeak?: boolean;
   onSteer?: (text: string) => void;
+  onOpenDocument?: (documentId: string) => void;
 }) {
   const announcedRef = useRef(false);
   const qc = useQueryClient();
@@ -2058,6 +2072,29 @@ function PlanProgressCard({
   };
 
 
+  const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+  const artifacts = extractArtifacts(steps);
+  const planMediaIds = artifacts.mediaIds;
+  const planDocIds = artifacts.documentIds;
+  const { data: planDocs = [] } = useQuery({
+    queryKey: ["chat_plan_documents", planId, planDocIds.join(",")],
+    enabled: !!plan && planDocIds.length > 0,
+    queryFn: async (): Promise<{ id: string; title: string }[]> => {
+      const { data } = await supabase
+        .from("documents")
+        .select("id, title")
+        .in("id", planDocIds);
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
+
+  useEffect(() => {
+    if (!plan || !PLAN_DONE.has(plan.status)) return;
+    void qc.invalidateQueries({ queryKey: ["documents"] });
+    void qc.invalidateQueries({ queryKey: ["documents_with_counts"] });
+    void qc.invalidateQueries({ queryKey: ["link_documents"] });
+  }, [plan?.status, qc]);
+
   if (!plan) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground">
@@ -2066,9 +2103,7 @@ function PlanProgressCard({
     );
   }
 
-  const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const running = !PLAN_DONE.has(plan.status);
-  const planMediaIds = extractArtifacts(steps).mediaIds;
 
 
   // A plan Orby proposed inside the chat waits here for approval / a note.
@@ -2158,7 +2193,14 @@ function PlanProgressCard({
         </ol>
       )}
       {plan.status === "completed" && plan.result_summary && (
-        <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/80">{plan.result_summary}</p>
+        <DocLinkText
+          text={plan.result_summary}
+          className="mt-2 block text-xs text-foreground/80"
+          onOpenDocument={onOpenDocument}
+        />
+      )}
+      {planDocs.length > 0 && (
+        <DocLinkRow docs={planDocs} className="mt-2" onOpenDocument={onOpenDocument} />
       )}
       {/* Anything this plan made or touched, shown right here in the chat. */}
       {planMediaIds.length > 0 && <ChatMediaRow ids={planMediaIds} className="mt-2" />}

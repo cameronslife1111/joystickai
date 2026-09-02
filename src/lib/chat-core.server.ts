@@ -322,6 +322,9 @@ export async function runChatTurn(
     "You may use numbered lists (1. 2. 3.) when a list genuinely helps, separate paragraphs with a blank line, always use normal punctuation, and emojis are welcome. " +
     "You can kick off plans that edit documents and generate media, and you always come back to this " +
     "conversation afterwards.\n\n" +
+    "DOCUMENT LINKS IN THE CHAT: after creating or meaningfully editing a document, include " +
+    "[[doc:document-id|Document title]] using the real UUID returned by the plan/tool and the document title. " +
+    "This token becomes a tappable link in the app; never invent an id.\n\n" +
     "MEDIA IN THE CHAT: images, videos and audio you or the user reference appear inline in this chat. " +
     "When you mention one, write its title in double quotes exactly as listed — that is what makes it show up. " +
     "When the user asks to change something about a media item that already exists (\"make the sky more orange\", " +

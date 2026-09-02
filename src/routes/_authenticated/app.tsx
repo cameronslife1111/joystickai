@@ -1240,8 +1240,6 @@ function AppPageInner() {
   // used by openLinkedDocument). Used to return to the locked list.
   const goToDocument = useCallback(async (targetId: string) => {
     if (editingRef.current) return; // editor open — block navigation
-    const exists = docs?.some((d) => d.id === targetId);
-    if (!exists) return;
     const token = claimSpeech();
     const [{ data: freshDoc }, { data: rows }] = await Promise.all([
       supabase
@@ -1256,7 +1254,10 @@ function AppPageInner() {
         .order("order_index", { ascending: true })
         .order("created_at", { ascending: true }),
     ]);
-    if (token !== speechTokenRef.current) return;
+    if (token !== speechTokenRef.current || !freshDoc) return;
+    if (!docs?.some((d) => d.id === targetId)) {
+      await refetchDocs();
+    }
     const list = (rows ?? []) as Sentence[];
     const savedIdx = savedIndexFor(targetId, freshDoc?.current_sentence_index ?? 0);
     const clamped = list.length === 0
@@ -1272,7 +1273,7 @@ function AppPageInner() {
     }
     setActiveDocId(targetId);
     if (resolved?.content) speak(resolved.content, token);
-  }, [docs, claimSpeech, speak, qc, savedIndexFor, persistIndex]);
+  }, [docs, claimSpeech, speak, qc, savedIndexFor, persistIndex, refetchDocs]);
 
   /**
    * Opens the chat thread linked to the current sentence, exactly like

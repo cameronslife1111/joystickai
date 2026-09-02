@@ -78,7 +78,7 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "create_document",
-    description: "Create a new empty document. Returns the new document's id and title.",
+    description: "Create a new empty document. Returns the new document's id and title. After the plan completes, Orby should link it in chat as [[doc:<id>|<title>]].",
     args: {
       title: { type: "string", description: "Title for the new document", required: true },
     },
