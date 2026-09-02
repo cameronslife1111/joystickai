@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Settings as SettingsIcon,
   Paperclip,
@@ -70,6 +71,7 @@ import { toPlainText } from "@/lib/plain-text";
 import { StepReasoning } from "./plan/StepReasoning";
 import { PlanReviewCard, PlanSteerBox } from "./PlanReviewCard";
 import { ChatMediaRow, quotedTitles } from "./ChatMedia";
+import { DocLinkText, DocLinkRow } from "./DocLinkText";
 import { extractArtifacts } from "@/lib/plan-memory";
 import { analyzeDelegateStep } from "@/lib/delegate.functions";
 import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
@@ -1328,6 +1330,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         planId={m.plan_id}
                         autoSpeak={autoSpeak && open}
                         onSteer={(t) => void handleSend({ text: t, threadId: activeThreadId ?? undefined })}
+                        onOpenDocument={(id) => {
+                          onOpenChange(false);
+                          onOpenDocument?.(id);
+                        }}
                       />
                     </div>
                   ) : (
@@ -1342,7 +1348,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
                         }
                       >
-                        <span className="whitespace-pre-wrap">{m.content}</span>
+                        <DocLinkText
+                          text={m.content}
+                          onOpenDocument={(id) => {
+                            onOpenChange(false);
+                            onOpenDocument?.(id);
+                          }}
+                        />
                         <ChatMediaRow titles={quotedTitles(m.content)} className="mt-2" />
                       </div>
                       <div className="mt-1 flex items-center gap-1">

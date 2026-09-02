@@ -83,7 +83,7 @@ export function LinkDocumentDialog({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = freshDocs && freshDocs.length > 0 ? freshDocs : documents;
+    const list = freshDocs ?? documents;
     return sortDocsByTitle(
       list.filter((d) => {
         if (excludeDocumentId && d.id === excludeDocumentId) return false;
