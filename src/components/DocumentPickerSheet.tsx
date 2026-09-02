@@ -32,6 +32,8 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ["documents_with_counts"],
     enabled: open,
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async (): Promise<Doc[]> => {
       const { data: documents, error } = await supabase
         .from("documents")
