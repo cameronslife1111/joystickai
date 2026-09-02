@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,7 @@ type Props = {
 
 export function DocLinkText({ text, className, onOpenDocument }: Props) {
   const src = text ?? "";
-  const nodes: React.ReactNode[] = [];
+  const nodes: ReactNode[] = [];
   let last = 0;
   DOC_TOKEN.lastIndex = 0;
   let m: RegExpExecArray | null;

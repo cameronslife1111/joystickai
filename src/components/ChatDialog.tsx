@@ -2081,7 +2081,20 @@ function PlanProgressCard({
 
   const steps = Array.isArray(plan.steps) ? plan.steps : [];
   const running = !PLAN_DONE.has(plan.status);
-  const planMediaIds = extractArtifacts(steps).mediaIds;
+  const artifacts = extractArtifacts(steps);
+  const planMediaIds = artifacts.mediaIds;
+  const planDocIds = artifacts.documentIds;
+  const { data: planDocs = [] } = useQuery({
+    queryKey: ["chat_plan_documents", planId, planDocIds.join(",")],
+    enabled: planDocIds.length > 0,
+    queryFn: async (): Promise<{ id: string; title: string }[]> => {
+      const { data } = await supabase
+        .from("documents")
+        .select("id, title")
+        .in("id", planDocIds);
+      return (data ?? []) as { id: string; title: string }[];
+    },
+  });
 
 
   // A plan Orby proposed inside the chat waits here for approval / a note.
@@ -2171,7 +2184,14 @@ function PlanProgressCard({
         </ol>
       )}
       {plan.status === "completed" && plan.result_summary && (
-        <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/80">{plan.result_summary}</p>
+        <DocLinkText
+          text={plan.result_summary}
+          className="mt-2 block text-xs text-foreground/80"
+          onOpenDocument={onOpenDocument}
+        />
+      )}
+      {planDocs.length > 0 && (
+        <DocLinkRow docs={planDocs} className="mt-2" onOpenDocument={onOpenDocument} />
       )}
       {/* Anything this plan made or touched, shown right here in the chat. */}
       {planMediaIds.length > 0 && <ChatMediaRow ids={planMediaIds} className="mt-2" />}
