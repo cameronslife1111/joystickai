@@ -2071,16 +2071,7 @@ function PlanProgressCard({
   };
 
 
-  if (!plan) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Preparing…
-      </div>
-    );
-  }
-
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
-  const running = !!plan && !PLAN_DONE.has(plan.status);
   const artifacts = extractArtifacts(steps);
   const planMediaIds = artifacts.mediaIds;
   const planDocIds = artifacts.documentIds;
@@ -2095,6 +2086,23 @@ function PlanProgressCard({
       return (data ?? []) as { id: string; title: string }[];
     },
   });
+
+  useEffect(() => {
+    if (!plan || !PLAN_DONE.has(plan.status)) return;
+    void qc.invalidateQueries({ queryKey: ["documents"] });
+    void qc.invalidateQueries({ queryKey: ["documents_with_counts"] });
+    void qc.invalidateQueries({ queryKey: ["link_documents"] });
+  }, [plan?.status, qc]);
+
+  if (!plan) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Preparing…
+      </div>
+    );
+  }
+
+  const running = !PLAN_DONE.has(plan.status);
 
 
   // A plan Orby proposed inside the chat waits here for approval / a note.
