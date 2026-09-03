@@ -35,7 +35,10 @@ interface OrbClusterProps {
   onNextDoc: () => void;
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
-  onDelete: () => void;
+  /** Red orb tap: toggle the checkbox emoji on the current sentence. */
+  onToggleCheckbox: () => void;
+  /** Red orb hold: delete the current sentence. */
+  onDeleteLongPress: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
