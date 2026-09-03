@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, SquareCheckBig } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * around a transparent, pressable center pad.
  *
  *   Layout (grid):
- *   red · delete      [ ]     blue · previous      [ ]      orange · pinned doc
+ *   red · checkbox/delete      [ ]     blue · previous      [ ]      orange · pinned doc
  *   [ ]            yellow · menu   [center]   green · next doc            [ ]
  *   pink · move/jump  [ ]     purple · next        [ ]      gray · media/chat (hold)
  *
@@ -35,7 +35,10 @@ interface OrbClusterProps {
   onNextDoc: () => void;
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
-  onDelete: () => void;
+  /** Red orb tap: toggle the checkbox emoji on the current sentence. */
+  onToggleCheckbox: () => void;
+  /** Red orb hold: delete the current sentence. */
+  onDeleteLongPress: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
@@ -204,7 +207,8 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onNextDocLongPress,
-  onDelete,
+  onToggleCheckbox,
+  onDeleteLongPress,
   onPrevLongPress,
   onMenuLongPress,
   onNextLongPress,
@@ -244,9 +248,10 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-red"
-        Icon={Trash2}
-        label="Delete sentence"
-        onPress={onDelete}
+        Icon={SquareCheckBig}
+        label="Add/remove checkbox (hold to delete)"
+        onPress={onToggleCheckbox}
+        onLongPress={onDeleteLongPress}
         placement={{ gridColumn: 1, gridRow: 1 }}
       />
       <ClusterOrb
