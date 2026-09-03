@@ -27,9 +27,10 @@ function tidy(line: string): string {
     .replace(/[*_`#>]/g, "")
     .replace(/^\s*(?:[-•]|\d+[.)])\s*/, "")
     .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/, "")
     .trim();
   if (!s) return "";
-  return /[.!?]$/.test(s) ? s : `${s}.`;
+  return `${s}.`;
 }
 
 /**
