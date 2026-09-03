@@ -215,6 +215,7 @@ export function OrbCluster({
   onMediaGallery,
   onChat,
   grayBadge,
+  lockFavorites,
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
