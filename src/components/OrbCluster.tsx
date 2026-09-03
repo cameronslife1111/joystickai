@@ -282,6 +282,7 @@ export function OrbCluster({
         label="Open pinned document (hold to search docs)"
         onPress={onPinnedDoc}
         onLongPress={onPinnedDocLongPress}
+        disabled={lockFavorites}
         placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb
