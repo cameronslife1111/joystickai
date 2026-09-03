@@ -3105,7 +3105,7 @@ function AppPageInner() {
         <section className="relative flex shrink-0 items-center justify-center pb-4">
           {/* Eight orbs around a transparent center pad:
               blue = prev, purple = next (hold = delegate), yellow = menu (hold = New idea),
-              green = next doc (hold = link this sentence), red = delete,
+              green = next doc (hold = link this sentence), red = checkbox (hold = delete),
               orange = pinned doc (hold = search), pink = move sentence (hold = jump to),
               gray = media gallery (hold = chat); center tap = edit, hold = record. */}
 
