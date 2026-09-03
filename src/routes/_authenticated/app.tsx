@@ -12,6 +12,7 @@ import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSente
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
+import { generateBabySteps } from "@/lib/baby-steps.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
@@ -245,6 +246,7 @@ function AppPageInner() {
 
   const callAi = useServerFn(aiContinue);
   const askOrby = useServerFn(askAi);
+  const babySteps = useServerFn(generateBabySteps);
 
   /** 🤖 — send the composer text to the model and append the answer below it. */
   const askAiFromComposer = useCallback(async () => {
@@ -1106,6 +1108,26 @@ function AppPageInner() {
       },
     });
   }, [currentSentence, sentences, currentIdx, setIndex, speak, qc, activeDocId, claimSpeech]);
+
+  // Red orb tap: toggle a ☑️ at the very front of the current sentence so the
+  // user can mark where they were. Optimistic so it feels instant.
+  const CHECK = "\u2611\uFE0F";
+  const toggleCheckbox = useCallback(async () => {
+    if (!currentSentence) return;
+    const id = currentSentence.id;
+    const raw = currentSentence.content;
+    // Tolerate the emoji with or without the variation selector / trailing space.
+    const stripped = raw.replace(/^\u2611\uFE0F?\s*/, "");
+    const newContent = stripped === raw ? `${CHECK} ${raw}` : stripped;
+    qc.setQueryData<Sentence[]>(["sentences", activeDocId], (prev) =>
+      prev?.map((sn) => (sn.id === id ? { ...sn, content: newContent } : sn)) ?? prev,
+    );
+    const { error } = await supabase.from("sentences").update({ content: newContent }).eq("id", id);
+    if (error) {
+      qc.invalidateQueries({ queryKey: ["sentences", activeDocId] });
+      toast.error("Could not update sentence");
+    }
+  }, [currentSentence, qc, activeDocId]);
 
   // Slot 15: prepend a 🗑️ to the current sentence as a visual delete cue.
   const markCurrentTrash = useCallback(async () => {
@@ -2406,6 +2428,69 @@ function AppPageInner() {
     setChatOpen(true);
   }, [activeDoc, sentences, currentIdx]);
 
+  // Slot 24: 👣 Baby steps — break the current line into four "Go to the X and
+  // Y." steps (notes first), split them into rows, and land on the first one.
+  const [babyStepsBusy, setBabyStepsBusy] = useState(false);
+  const handleBabySteps = useCallback(async () => {
+    const list = sentences ?? [];
+    if (!activeDoc || list.length === 0) {
+      toast.error("No sentence to break down");
+      return;
+    }
+    if (babyStepsBusy) return;
+    setMenuOpen(false);
+    setBabyStepsBusy(true);
+    toast("Loading baby steps", { id: "baby-steps", duration: 60000 });
+    const docId = activeDoc.id;
+    const idx = Math.max(0, Math.min(currentIdx, list.length - 1));
+    const before = list.map((sn) => sn.content);
+    try {
+      const res = await babySteps({ data: { documentId: docId, index: idx } });
+      const replacement = [...res.notes, ...res.steps]
+        .flatMap((line) => splitIntoSentences(line))
+        .filter(Boolean);
+      if (replacement.length === 0) throw new Error("No baby steps produced");
+
+      const contents = [...before.slice(0, idx), ...replacement, ...before.slice(idx + 1)];
+      const { error } = await supabase.rpc("commit_document_edit", {
+        p_document_id: docId,
+        p_contents: contents,
+      });
+      if (error) throw new Error(error.message);
+      qc.invalidateQueries({ queryKey: ["sentences", docId] });
+
+      // Land on the first generated line and read it out.
+      await setIndex(idx);
+      const token = claimSpeech();
+      speak(replacement[0], token);
+
+      toast.dismiss("baby-steps");
+      toast(`Broke it into ${replacement.length} baby steps`, {
+        duration: 6000,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            const { error: undoErr } = await supabase.rpc("commit_document_edit", {
+              p_document_id: docId,
+              p_contents: before,
+            });
+            if (undoErr) {
+              toast.error("Couldn't undo baby steps");
+              return;
+            }
+            qc.invalidateQueries({ queryKey: ["sentences", docId] });
+            await setIndex(idx);
+          },
+        },
+      });
+    } catch (e) {
+      toast.dismiss("baby-steps");
+      toast.error(e instanceof Error ? e.message : "Baby steps failed");
+    } finally {
+      setBabyStepsBusy(false);
+    }
+  }, [activeDoc, sentences, currentIdx, babySteps, babyStepsBusy, qc, setIndex, claimSpeech, speak]);
+
 
   // In-app dialogs replace native prompt()/confirm(), which browsers can
   // silently suppress (installed/mobile web apps, embedded previews, or after
@@ -2576,7 +2661,6 @@ function AppPageInner() {
       t: lockFavorites ? "List locked" : "List unlocked",
       fn: () => toggleListLock(true),
     },
-    { e: "⚡️", t: "Swap slot", fn: () => { setMenuOpen(false); setReplaceMatching(true); setPickerQuery("🟢"); setFavoritesOpen(true); setPickerSlot(0); } },
     { e: "🕘", t: "Recent docs", fn: () => { setMenuOpen(false); setRecentOpen(true); }, onLongPress: () => {
       const prevId = recentIds[1];
       if (!prevId || !docs?.some((d) => d.id === prevId)) return;
@@ -2627,11 +2711,11 @@ function AppPageInner() {
     filled[20] = grid[24]; // 21 Recent docs
     filled[21] = grid[22]; // 22 Lock/unlock list cycling
     filled[22] = grid[16]; // 23 Media Gallery
-    filled[23] = grid[23]; // 24 Swap slot
+    filled[23] = { e: "👣", t: "Baby steps", fn: () => void handleBabySteps() }; // 24 Baby steps
 
 
     return filled;
-  }, [grid, openNewIdea, handleDelegate]);
+  }, [grid, openNewIdea, handleDelegate, handleBabySteps]);
 
   return (
     <main
@@ -3037,7 +3121,8 @@ function AppPageInner() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
-            onDelete={() => void deleteCurrent()}
+            onToggleCheckbox={() => void toggleCheckbox()}
+            onDeleteLongPress={() => void deleteCurrent()}
             onMenuLongPress={() => openNewIdea()}
             onPinnedDoc={() => {
               if (lockFavorites) {
