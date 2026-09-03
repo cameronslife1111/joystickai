@@ -56,6 +56,8 @@ interface OrbClusterProps {
   onChat: () => void;
   /** Badge count shown on the gray orb (unseen media). */
   grayBadge?: number;
+  /** When true, the orange orb is visually disabled and its actions are blocked. */
+  lockFavorites?: boolean;
 }
 
 
@@ -99,6 +101,8 @@ interface ClusterOrbProps {
   onLongPress?: () => void;
   placement: CSSProperties;
   buttonRef?: (el: HTMLButtonElement | null) => void;
+  /** When true, the orb is non-interactive and visually dimmed. */
+  disabled?: boolean;
 }
 
 function ClusterOrb({
@@ -111,6 +115,7 @@ function ClusterOrb({
   onLongPress,
   placement,
   buttonRef,
+  disabled,
 }: ClusterOrbProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -131,7 +136,7 @@ function ClusterOrb({
   };
 
   const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
-    if (!onLongPress) return;
+    if (disabled || !onLongPress) return;
     fired.current = false;
     clearTimer();
     start.current = { x: e.clientX, y: e.clientY };
@@ -146,6 +151,7 @@ function ClusterOrb({
 
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     clearTimer();
+    if (disabled) return;
     if (fired.current) {
       fired.current = false;
       return;
@@ -162,6 +168,7 @@ function ClusterOrb({
       ref={buttonRef}
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerUp={clearTimer}
@@ -171,7 +178,7 @@ function ClusterOrb({
       onContextMenu={(e) => {
         if (onLongPress) e.preventDefault();
       }}
-      className={cn("glow-orb", orbClass)}
+      className={cn("glow-orb", orbClass, disabled && "opacity-40 grayscale")}
       style={placement}
     >
       {Icon ? (
@@ -208,6 +215,7 @@ export function OrbCluster({
   onMediaGallery,
   onChat,
   grayBadge,
+  lockFavorites,
 }: OrbClusterProps) {
   const buttons = useRef<Partial<Record<OrbId, HTMLButtonElement | null>>>({});
   const setButton = (id: OrbId) => (el: HTMLButtonElement | null) => {
@@ -274,6 +282,7 @@ export function OrbCluster({
         label="Open pinned document (hold to search docs)"
         onPress={onPinnedDoc}
         onLongPress={onPinnedDocLongPress}
+        disabled={lockFavorites}
         placement={{ gridColumn: 5, gridRow: 1 }}
       />
       <ClusterOrb

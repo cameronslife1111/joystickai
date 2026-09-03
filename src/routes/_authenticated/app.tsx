@@ -3029,6 +3029,7 @@ function AppPageInner() {
             recording={recording}
             centerRef={centerRef}
             pressRef={orbPressRef}
+            lockFavorites={lockFavorites}
             onPrev={() => void onSwipeUp()}
             onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}
@@ -3038,8 +3039,18 @@ function AppPageInner() {
             onNextDocLongPress={() => setLinkPickerOpen(true)}
             onDelete={() => void deleteCurrent()}
             onMenuLongPress={() => openNewIdea()}
-            onPinnedDoc={() => void openPinnedDocument()}
+            onPinnedDoc={() => {
+              if (lockFavorites) {
+                toast.error("List is locked");
+                return;
+              }
+              void openPinnedDocument();
+            }}
             onPinnedDocLongPress={() => {
+              if (lockFavorites) {
+                toast.error("List is locked");
+                return;
+              }
               setSearchQuery("");
               setSearchOpen(true);
             }}
@@ -3052,7 +3063,6 @@ function AppPageInner() {
               setChatOpen(true);
             }}
             grayBadge={unseenCount}
-
           />
         </section>
       )}
