@@ -101,6 +101,8 @@ interface ClusterOrbProps {
   onLongPress?: () => void;
   placement: CSSProperties;
   buttonRef?: (el: HTMLButtonElement | null) => void;
+  /** When true, the orb is non-interactive and visually dimmed. */
+  disabled?: boolean;
 }
 
 function ClusterOrb({
@@ -113,6 +115,7 @@ function ClusterOrb({
   onLongPress,
   placement,
   buttonRef,
+  disabled,
 }: ClusterOrbProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
