@@ -136,7 +136,7 @@ function ClusterOrb({
   };
 
   const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
-    if (!onLongPress) return;
+    if (disabled || !onLongPress) return;
     fired.current = false;
     clearTimer();
     start.current = { x: e.clientX, y: e.clientY };
@@ -151,6 +151,7 @@ function ClusterOrb({
 
   const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
     clearTimer();
+    if (disabled) return;
     if (fired.current) {
       fired.current = false;
       return;
@@ -167,6 +168,7 @@ function ClusterOrb({
       ref={buttonRef}
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
       onPointerUp={clearTimer}
@@ -176,7 +178,7 @@ function ClusterOrb({
       onContextMenu={(e) => {
         if (onLongPress) e.preventDefault();
       }}
-      className={cn("glow-orb", orbClass)}
+      className={cn("glow-orb", orbClass, disabled && "opacity-40 grayscale")}
       style={placement}
     >
       {Icon ? (
