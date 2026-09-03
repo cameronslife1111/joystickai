@@ -90,8 +90,8 @@ export const generateBabySteps = createServerFn({ method: "POST" })
         .filter(Boolean)
         .map((n) => (/^note\s*:/i.test(n) ? n : `Note: ${n}`))
         .slice(0, 3);
-      const steps = parsed.steps.map((s) => tidy(s)).filter(Boolean).slice(0, 4);
-      if (steps.length === 0) throw new Error("Could not read the baby steps");
+      const steps = parsed.steps.map((s) => tidy(s)).filter(Boolean);
+      if (steps.length !== 4) throw new Error("The AI did not return exactly four baby steps");
 
       return { notes, steps, index, original: sentences[index] ?? "" };
     },
