@@ -45,7 +45,7 @@ export const generateBabySteps = createServerFn({ method: "POST" })
       data,
       context,
     }): Promise<{ notes: string[]; steps: string[]; index: number; original: string }> => {
-      const apiKey = process.env.OPENAI_API_KEY;
+      const apiKey = process.env["OPENAI_API_KEY"];
       if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
       const { data: doc, error: docErr } = await context.supabase
