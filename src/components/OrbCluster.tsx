@@ -56,6 +56,8 @@ interface OrbClusterProps {
   onChat: () => void;
   /** Badge count shown on the gray orb (unseen media). */
   grayBadge?: number;
+  /** When true, the orange orb is visually disabled and its actions are blocked. */
+  lockFavorites?: boolean;
 }
 
 
