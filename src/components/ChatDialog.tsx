@@ -1650,6 +1650,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Clock className="h-4 w-4" />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => setDocTextPickerOpen(true)}
+                aria-label="Insert document text"
+                title="Add a document's text to the message box"
+                className="shrink-0"
+              >
+                <StickyNote className="h-4 w-4" />
+              </Button>
               <Textarea
 
                 ref={textareaRef}
