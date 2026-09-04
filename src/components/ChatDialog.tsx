@@ -1679,8 +1679,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   }
                 }}
                 placeholder="Message Orby…"
-                rows={1}
-                className="max-h-40 min-h-[44px] flex-1 resize-none"
+                rows={3}
+                className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
               <Button
                 size="icon"
