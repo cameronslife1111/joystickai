@@ -314,10 +314,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }, []),
   );
 
-  /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
-  const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
-    const titles = assets
-      .map((a) => a.title.replace(/["“”]/g, "").trim())
+  /** Type quoted titles into the composer at the cursor. */
+  const insertQuotedTitles = useCallback((rawTitles: string[]) => {
+    const titles = rawTitles
+      .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
       .filter(Boolean);
     if (!titles.length) return;
     const insert = titles.map((t) => `"${t}"`).join(", ");
