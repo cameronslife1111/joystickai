@@ -1906,6 +1906,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onConfirmDocs={insertDocTitlesAtCursor}
       />
 
+      {/* Note button — types the document's text into the composer; attaches nothing. */}
+      <DocumentPickerSheet
+        open={docTextPickerOpen}
+        onOpenChange={setDocTextPickerOpen}
+        initialSelectedIds={[]}
+        heading="Insert document text"
+        onConfirm={() => {}}
+        onConfirmDocs={insertDocTextAtCursor}
+      />
+
+
 
       {/* Documents attached automatically to every new chat. */}
       <DocumentPickerSheet
