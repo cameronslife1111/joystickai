@@ -25,6 +25,7 @@ import {
   Phone,
   PhoneOff,
   Clock,
+  StickyNote,
   Pause,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -277,6 +278,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [docTitlePickerOpen, setDocTitlePickerOpen] = useState(false);
+  /** Composer note button → type a document's text into the message box. */
+  const [docTextPickerOpen, setDocTextPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Composer clock button → schedule this message for later. */
