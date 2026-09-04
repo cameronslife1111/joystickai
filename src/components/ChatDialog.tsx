@@ -1845,6 +1845,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onConfirm={setContextDocIds}
       />
 
+      {/* Types document titles into the composer; attaches nothing. */}
+      <DocumentPickerSheet
+        open={docTitlePickerOpen}
+        onOpenChange={setDocTitlePickerOpen}
+        initialSelectedIds={[]}
+        heading="Attach Document titles"
+        onConfirm={() => {}}
+        onConfirmDocs={insertDocTitlesAtCursor}
+      />
+
+
       {/* Documents attached automatically to every new chat. */}
       <DocumentPickerSheet
         open={autoAttachOpen}
