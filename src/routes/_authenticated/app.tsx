@@ -3055,8 +3055,8 @@ function AppPageInner() {
                 toast.error("List is locked");
                 return;
               }
-              setSearchQuery("");
-              setSearchOpen(true);
+              setPinPickerQuery("");
+              setPinPickerOpen(true);
             }}
             onMoveSentence={() => setMoveOpen(true)}
             onJumpTo={() => setJumpOpen(true)}
