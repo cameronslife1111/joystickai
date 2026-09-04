@@ -1075,8 +1075,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       });
 
       // Auto-read the reply aloud when enabled. Plans get a short cue; the
-      // per-step cues are handled inside PlanProgressCard.
-      if (autoSpeak && open && threadId === activeThreadId && insertedAssistant) {
+      // per-step cues are handled inside PlanProgressCard. Uses live view state
+      // so nothing is spoken if the user left the chat while it was thinking.
+      const viewing = viewRef.current.open && threadId === viewRef.current.activeThreadId;
+      if (autoSpeak && viewing && !voice.live && insertedAssistant) {
         if (insertedAssistant.kind === "plan") {
           speakCue("Writing a plan for you to review.");
         } else if (insertedAssistant.content) {
@@ -1087,8 +1089,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       // actually looking at this thread.
       bumpThread(threadId, {
         assistant: !!insertedAssistant,
-        read: open && threadId === activeThreadId,
+        read: viewing,
       });
+
 
       // Auto-name the thread from the first message (background, non-blocking).
       const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
