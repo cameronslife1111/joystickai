@@ -36,6 +36,8 @@ interface OrbClusterProps {
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
   onDelete: () => void;
+  /** Red orb hold: open Search docs (never deletes). */
+  onDeleteLongPress: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
@@ -44,7 +46,7 @@ interface OrbClusterProps {
   onNextLongPress: () => void;
   /** Orange orb tap: open the pinned document. */
   onPinnedDoc: () => void;
-  /** Orange orb hold: open Search docs. */
+  /** Orange orb hold: open the pin-a-document picker. */
   onPinnedDocLongPress: () => void;
   /** Pink orb tap: open the Move sentence sheet. */
   onMoveSentence: () => void;
@@ -205,6 +207,7 @@ export function OrbCluster({
   onNextDoc,
   onNextDocLongPress,
   onDelete,
+  onDeleteLongPress,
   onPrevLongPress,
   onMenuLongPress,
   onNextLongPress,
@@ -245,8 +248,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-red"
         Icon={Trash2}
-        label="Delete sentence"
+        label="Delete sentence (hold to search docs)"
         onPress={onDelete}
+        onLongPress={onDeleteLongPress}
         placement={{ gridColumn: 1, gridRow: 1 }}
       />
       <ClusterOrb
@@ -279,7 +283,7 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-orange"
         Icon={Pin}
-        label="Open pinned document (hold to search docs)"
+        label="Open pinned document (hold to pin a document)"
         onPress={onPinnedDoc}
         onLongPress={onPinnedDocLongPress}
         disabled={lockFavorites}

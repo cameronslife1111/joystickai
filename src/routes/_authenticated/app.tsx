@@ -3022,7 +3022,7 @@ function AppPageInner() {
           {/* Eight orbs around a transparent center pad:
               blue = prev, purple = next (hold = delegate), yellow = menu (hold = New idea),
               green = next doc (hold = link this sentence), red = delete,
-              orange = pinned doc (hold = search), pink = move sentence (hold = jump to),
+              orange = pinned doc (hold = pin a doc), red = delete (hold = search docs), pink = move sentence (hold = jump to),
               gray = media gallery (hold = chat); center tap = edit, hold = record. */}
 
           <OrbCluster
@@ -3038,6 +3038,10 @@ function AppPageInner() {
             onNextDoc={() => void onSwipeRight()}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
             onDelete={() => void deleteCurrent()}
+            onDeleteLongPress={() => {
+              setSearchQuery("");
+              setSearchOpen(true);
+            }}
             onMenuLongPress={() => openNewIdea()}
             onPinnedDoc={() => {
               if (lockFavorites) {
@@ -3051,8 +3055,8 @@ function AppPageInner() {
                 toast.error("List is locked");
                 return;
               }
-              setSearchQuery("");
-              setSearchOpen(true);
+              setPinPickerQuery("");
+              setPinPickerOpen(true);
             }}
             onMoveSentence={() => setMoveOpen(true)}
             onJumpTo={() => setJumpOpen(true)}
