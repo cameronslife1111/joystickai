@@ -276,6 +276,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [autoAttachOpen, setAutoAttachOpen] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [titlePickerOpen, setTitlePickerOpen] = useState(false);
+  const [docTitlePickerOpen, setDocTitlePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Composer clock button → schedule this message for later. */
@@ -314,10 +315,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }, []),
   );
 
-  /** "Attach Image titles" — type the picked titles into the composer at the cursor. */
-  const insertTitlesAtCursor = useCallback((assets: MediaAsset[]) => {
-    const titles = assets
-      .map((a) => a.title.replace(/["“”]/g, "").trim())
+  /** Type quoted titles into the composer at the cursor. */
+  const insertQuotedTitles = useCallback((rawTitles: string[]) => {
+    const titles = rawTitles
+      .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
       .filter(Boolean);
     if (!titles.length) return;
     const insert = titles.map((t) => `"${t}"`).join(", ");
@@ -340,6 +341,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       return next;
     });
   }, []);
+
+  /** "Attach Image titles" — type the picked image titles into the composer. */
+  const insertTitlesAtCursor = useCallback(
+    (assets: MediaAsset[]) => insertQuotedTitles(assets.map((a) => a.title)),
+    [insertQuotedTitles],
+  );
+
+  /** "Attach Document titles" — type the picked document titles into the composer. */
+  const insertDocTitlesAtCursor = useCallback(
+    (docs: { id: string; title: string }[]) =>
+      insertQuotedTitles(docs.map((d) => d.title)),
+    [insertQuotedTitles],
+  );
+
 
 
   useEffect(() => {
@@ -1266,6 +1281,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           size="sm"
                           onClick={() => {
                             setSettingsOpen(false);
+                            setDocTitlePickerOpen(true);
+                          }}
+                        >
+                          <Type className="mr-2 h-4 w-4" /> Document titles
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSettingsOpen(false);
                             setImagePickerOpen(true);
                           }}
                         >
@@ -1819,6 +1844,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
       />
+
+      {/* Types document titles into the composer; attaches nothing. */}
+      <DocumentPickerSheet
+        open={docTitlePickerOpen}
+        onOpenChange={setDocTitlePickerOpen}
+        initialSelectedIds={[]}
+        heading="Attach Document titles"
+        onConfirm={() => {}}
+        onConfirmDocs={insertDocTitlesAtCursor}
+      />
+
 
       {/* Documents attached automatically to every new chat. */}
       <DocumentPickerSheet

@@ -12,13 +12,24 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   initialSelectedIds: string[];
   onConfirm: (selectedIds: string[]) => void;
+  /** Sheet title; defaults to "Attach documents". */
+  heading?: string;
+  /** Also receives the full selected document rows (id + title). */
+  onConfirmDocs?: (docs: { id: string; title: string }[]) => void;
 }
 
 type Doc = { id: string; title: string; sentence_count: number };
 
 const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
 
-export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
+export function DocumentPickerSheet({
+  open,
+  onOpenChange,
+  initialSelectedIds,
+  onConfirm,
+  heading = "Attach documents",
+  onConfirmDocs,
+}: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
   const [query, setQuery] = useState("");
 
@@ -74,7 +85,7 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="flex h-[80vh] flex-col">
         <SheetHeader>
-          <SheetTitle>Attach documents</SheetTitle>
+          <SheetTitle>{heading}</SheetTitle>
         </SheetHeader>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {EMOJI_FILTERS.map((emoji) => (
@@ -135,6 +146,12 @@ export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, on
             className="w-full"
             onClick={() => {
               onConfirm(selected);
+              onConfirmDocs?.(
+                selected
+                  .map((id) => docs.find((d) => d.id === id))
+                  .filter((d): d is Doc => !!d)
+                  .map((d) => ({ id: d.id, title: d.title })),
+              );
               onOpenChange(false);
             }}
           >
