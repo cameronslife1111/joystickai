@@ -708,6 +708,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
   }, [voice.live]);
 
+  // Always-current view state. The send handler runs long after it was created,
+  // so it must not rely on the `open`/`activeThreadId` values captured then:
+  // a reply that lands after the user closed the chat must stay silent.
+  const viewRef = useRef({ open, activeThreadId });
+  viewRef.current = { open, activeThreadId };
 
 
   // Focus textarea on open + thread switch.
