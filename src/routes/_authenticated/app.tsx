@@ -3038,6 +3038,10 @@ function AppPageInner() {
             onNextDoc={() => void onSwipeRight()}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
             onDelete={() => void deleteCurrent()}
+            onDeleteLongPress={() => {
+              setSearchQuery("");
+              setSearchOpen(true);
+            }}
             onMenuLongPress={() => openNewIdea()}
             onPinnedDoc={() => {
               if (lockFavorites) {
