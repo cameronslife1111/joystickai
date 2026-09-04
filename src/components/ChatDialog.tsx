@@ -341,6 +341,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   }, []);
 
+  /** "Attach Image titles" — type the picked image titles into the composer. */
+  const insertTitlesAtCursor = useCallback(
+    (assets: MediaAsset[]) => insertQuotedTitles(assets.map((a) => a.title)),
+    [insertQuotedTitles],
+  );
+
+  /** "Attach Document titles" — type the picked document titles into the composer. */
+  const insertDocTitlesAtCursor = useCallback(
+    (docs: { id: string; title: string }[]) =>
+      insertQuotedTitles(docs.map((d) => d.title)),
+    [insertQuotedTitles],
+  );
+
+
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
