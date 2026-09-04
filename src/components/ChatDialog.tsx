@@ -25,6 +25,7 @@ import {
   Phone,
   PhoneOff,
   Clock,
+  StickyNote,
   Pause,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -277,6 +278,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [titlePickerOpen, setTitlePickerOpen] = useState(false);
   const [docTitlePickerOpen, setDocTitlePickerOpen] = useState(false);
+  /** Composer note button → type a document's text into the message box. */
+  const [docTextPickerOpen, setDocTextPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** Composer clock button → schedule this message for later. */
@@ -315,16 +318,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }, []),
   );
 
-  /** Type quoted titles into the composer at the cursor. */
-  const insertQuotedTitles = useCallback((rawTitles: string[]) => {
-    const titles = rawTitles
-      .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
-      .filter(Boolean);
-    if (!titles.length) return;
-    const insert = titles.map((t) => `"${t}"`).join(", ");
+  /** Splice arbitrary text into the composer at the saved cursor position. */
+  const spliceAtCursor = useCallback((insert: string) => {
+    if (!insert) return;
     setInput((prev) => {
       const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
-      // Pad with spaces so the titles don't fuse with neighboring words.
+      // Pad with spaces so the inserted text doesn't fuse with neighboring words.
       let text = insert;
       if (pos > 0 && !/\s/.test(prev[pos - 1])) text = " " + text;
       if (pos < prev.length && !/\s/.test(prev[pos])) text = text + " ";
@@ -342,6 +341,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   }, []);
 
+  /** Type quoted titles into the composer at the cursor. */
+  const insertQuotedTitles = useCallback(
+    (rawTitles: string[]) => {
+      const titles = rawTitles
+        .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
+        .filter(Boolean);
+      if (!titles.length) return;
+      spliceAtCursor(titles.map((t) => `"${t}"`).join(", "));
+    },
+    [spliceAtCursor],
+  );
+
   /** "Attach Image titles" — type the picked image titles into the composer. */
   const insertTitlesAtCursor = useCallback(
     (assets: MediaAsset[]) => insertQuotedTitles(assets.map((a) => a.title)),
@@ -354,6 +365,35 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       insertQuotedTitles(docs.map((d) => d.title)),
     [insertQuotedTitles],
   );
+
+  /** Note button — type the picked documents' full text into the composer. */
+  const insertDocTextAtCursor = useCallback(
+    (docs: { id: string; title: string }[]) => {
+      if (!docs.length) return;
+      void (async () => {
+        const blocks: string[] = [];
+        for (const d of docs) {
+          const { data } = await supabase
+            .from("sentences")
+            .select("id, content")
+            .eq("document_id", d.id)
+            .order("order_index", { ascending: true });
+          const body = (data ?? [])
+            .map((s) => (s.content ?? "").trim())
+            .filter(Boolean)
+            .join(" ");
+          if (body) blocks.push(body);
+        }
+        if (!blocks.length) {
+          toast.error("That document has no text yet");
+          return;
+        }
+        spliceAtCursor(blocks.join("\n\n"));
+      })();
+    },
+    [spliceAtCursor],
+  );
+
 
 
 
@@ -1610,6 +1650,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Clock className="h-4 w-4" />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                onClick={() => setDocTextPickerOpen(true)}
+                aria-label="Insert document text"
+                title="Add a document's text to the message box"
+                className="shrink-0"
+              >
+                <StickyNote className="h-4 w-4" />
+              </Button>
               <Textarea
 
                 ref={textareaRef}
@@ -1628,8 +1679,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   }
                 }}
                 placeholder="Message Orby…"
-                rows={1}
-                className="max-h-40 min-h-[44px] flex-1 resize-none"
+                rows={3}
+                className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
               <Button
                 size="icon"
@@ -1854,6 +1905,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onConfirm={() => {}}
         onConfirmDocs={insertDocTitlesAtCursor}
       />
+
+      {/* Note button — types the document's text into the composer; attaches nothing. */}
+      <DocumentPickerSheet
+        open={docTextPickerOpen}
+        onOpenChange={setDocTextPickerOpen}
+        initialSelectedIds={[]}
+        heading="Insert document text"
+        onConfirm={() => {}}
+        onConfirmDocs={insertDocTextAtCursor}
+      />
+
 
 
       {/* Documents attached automatically to every new chat. */}
