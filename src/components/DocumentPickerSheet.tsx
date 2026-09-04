@@ -85,7 +85,7 @@ export function DocumentPickerSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="flex h-[80vh] flex-col">
         <SheetHeader>
-          <SheetTitle>Attach documents</SheetTitle>
+          <SheetTitle>{heading}</SheetTitle>
         </SheetHeader>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {EMOJI_FILTERS.map((emoji) => (
@@ -146,6 +146,12 @@ export function DocumentPickerSheet({
             className="w-full"
             onClick={() => {
               onConfirm(selected);
+              onConfirmDocs?.(
+                selected
+                  .map((id) => docs.find((d) => d.id === id))
+                  .filter((d): d is Doc => !!d)
+                  .map((d) => ({ id: d.id, title: d.title })),
+              );
               onOpenChange(false);
             }}
           >
