@@ -315,16 +315,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }, []),
   );
 
-  /** Type quoted titles into the composer at the cursor. */
-  const insertQuotedTitles = useCallback((rawTitles: string[]) => {
-    const titles = rawTitles
-      .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
-      .filter(Boolean);
-    if (!titles.length) return;
-    const insert = titles.map((t) => `"${t}"`).join(", ");
+  /** Splice arbitrary text into the composer at the saved cursor position. */
+  const spliceAtCursor = useCallback((insert: string) => {
+    if (!insert) return;
     setInput((prev) => {
       const pos = Math.min(Math.max(cursorRef.current, 0), prev.length);
-      // Pad with spaces so the titles don't fuse with neighboring words.
+      // Pad with spaces so the inserted text doesn't fuse with neighboring words.
       let text = insert;
       if (pos > 0 && !/\s/.test(prev[pos - 1])) text = " " + text;
       if (pos < prev.length && !/\s/.test(prev[pos])) text = text + " ";
@@ -342,6 +338,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   }, []);
 
+  /** Type quoted titles into the composer at the cursor. */
+  const insertQuotedTitles = useCallback(
+    (rawTitles: string[]) => {
+      const titles = rawTitles
+        .map((t) => (t ?? "").replace(/["“”]/g, "").trim())
+        .filter(Boolean);
+      if (!titles.length) return;
+      spliceAtCursor(titles.map((t) => `"${t}"`).join(", "));
+    },
+    [spliceAtCursor],
+  );
+
   /** "Attach Image titles" — type the picked image titles into the composer. */
   const insertTitlesAtCursor = useCallback(
     (assets: MediaAsset[]) => insertQuotedTitles(assets.map((a) => a.title)),
@@ -354,6 +362,35 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       insertQuotedTitles(docs.map((d) => d.title)),
     [insertQuotedTitles],
   );
+
+  /** Note button — type the picked documents' full text into the composer. */
+  const insertDocTextAtCursor = useCallback(
+    (docs: { id: string; title: string }[]) => {
+      if (!docs.length) return;
+      void (async () => {
+        const blocks: string[] = [];
+        for (const d of docs) {
+          const { data } = await supabase
+            .from("sentences")
+            .select("id, content")
+            .eq("document_id", d.id)
+            .order("order_index", { ascending: true });
+          const body = (data ?? [])
+            .map((s) => (s.content ?? "").trim())
+            .filter(Boolean)
+            .join(" ");
+          if (body) blocks.push(body);
+        }
+        if (!blocks.length) {
+          toast.error("That document has no text yet");
+          return;
+        }
+        spliceAtCursor(blocks.join("\n\n"));
+      })();
+    },
+    [spliceAtCursor],
+  );
+
 
 
 
