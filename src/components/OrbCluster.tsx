@@ -36,6 +36,8 @@ interface OrbClusterProps {
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
   onDelete: () => void;
+  /** Red orb hold: open Search docs (never deletes). */
+  onDeleteLongPress: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
