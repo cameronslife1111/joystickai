@@ -12,13 +12,24 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   initialSelectedIds: string[];
   onConfirm: (selectedIds: string[]) => void;
+  /** Sheet title; defaults to "Attach documents". */
+  heading?: string;
+  /** Also receives the full selected document rows (id + title). */
+  onConfirmDocs?: (docs: { id: string; title: string }[]) => void;
 }
 
 type Doc = { id: string; title: string; sentence_count: number };
 
 const EMOJI_FILTERS = ["⚪️", "⚫️", "🟣", "🔵", "🔴", "🟢", "🟡", "🟠", "🟤"];
 
-export function DocumentPickerSheet({ open, onOpenChange, initialSelectedIds, onConfirm }: Props) {
+export function DocumentPickerSheet({
+  open,
+  onOpenChange,
+  initialSelectedIds,
+  onConfirm,
+  heading = "Attach documents",
+  onConfirmDocs,
+}: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
   const [query, setQuery] = useState("");
 
