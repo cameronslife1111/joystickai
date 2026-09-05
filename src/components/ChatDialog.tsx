@@ -381,7 +381,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           const body = (data ?? [])
             .map((s) => (s.content ?? "").trim())
             .filter(Boolean)
-            .join(" ");
+            .join("\n\n");
           if (body) blocks.push(body);
         }
         if (!blocks.length) {
