@@ -1131,7 +1131,7 @@ const TOOL_HANDLERS: Record<string, any> = {
       throw new Error("Only JPEG and PNG images can be shrunk");
     }
 
-    const { Image } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+    // (Image is imported statically at the top of this file.)
     const decoded: any = await Image.decode(bytes);
     const srcW = decoded.width;
     const srcH = decoded.height;
