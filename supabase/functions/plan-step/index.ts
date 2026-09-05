@@ -3,10 +3,12 @@ import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
 import { applyEmojiSynonyms, tokenizeRich } from "../_shared/lookup.ts";
 import { nextRunAt, type Cadence, type ScheduleSpec } from "../_shared/recurrence.ts";
 import { splitIntoSentences } from "../_shared/sentences.ts";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const FAL_KEY = Deno.env.get("FAL_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,6 +121,8 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     read_document: ["document_id"],
     regenerate_image: ["source_media_id"],
     remix_images: ["source_media_ids"],
+    upscale_image: ["source_media_id"],
+    shrink_image: ["source_media_id"],
     image_to_video: ["source_media_id"],
     video_to_video: ["source_image_id", "reference_video_id"],
     audio_image_to_video: ["source_image_id", "audio_media_id"],
@@ -165,7 +169,7 @@ Rules:
 - Every mutating/media step MUST carry its full target id in its own args — a concrete id from the snapshot, or a {{step_N.result.id}} template pointing at an EARLIER step.
 - ABSOLUTE INDEXING: your first generated step will be inserted at index {{BASE_INDEX}}. So reference your own generated steps by their absolute index: the first is step {{BASE_INDEX}}, the next is {{BASE_INDEX_PLUS_1}}, and so on. You may also reference any already-completed earlier step by its absolute index if its result id is given to you.
 - Image prompts must never exceed 3000 characters. Generate media one item at a time (one step per image).
-- MEDIA MATCHING: resolve images/videos/audio LOOSELY against the MEDIA CATALOG — never require an exact title; pick the closest id by keywords, emoji, or words from its src prompt. Image tool choice: generate_image (new, no source), regenerate_image (one source + change), remix_images (combine 2-16 existing sources — resolve every source id first and pass them as a JSON array in source_media_ids). Never remix with fewer than 2 sources and never invent ids.
+- MEDIA MATCHING: resolve images/videos/audio LOOSELY against the MEDIA CATALOG — never require an exact title; pick the closest id by keywords, emoji, or words from its src prompt. Image tool choice: generate_image (new, no source), regenerate_image (one source + change), remix_images (combine 2-16 existing sources — resolve every source id first and pass them as a JSON array in source_media_ids), upscale_image (higher resolution / enhance / "4x" on one source), shrink_image (smaller dimensions / "half size" / target pixel width on one source). Never remix with fewer than 2 sources and never invent ids.
 - Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
 
 
@@ -1031,6 +1035,162 @@ const TOOL_HANDLERS: Record<string, any> = {
       row_id: row.id, prompt, image_urls: sources.map((s) => s.url), image_size, quality, output_format,
     }, { internal, user_id });
     return { __pending_media: row.id };
+  },
+
+  // Topaz generative upscale (Wonder 3.5) — same queue+poll path the gallery's
+  // three-dot Upscale action uses, so the shared image poller finishes the row.
+  async upscale_image(args, { user_id, admin }) {
+    const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
+
+    let factor = typeof args.upscale_factor === "number" ? args.upscale_factor : 2;
+    factor = Math.min(4, Math.max(1.5, Math.round(factor * 2) / 2));
+    const output_format = ["jpeg", "png"].includes(args.output_format) ? args.output_format : "jpeg";
+    const face_enhancement =
+      typeof args.face_enhancement === "boolean" ? args.face_enhancement : true;
+    const enhancement_strength = ["low", "medium", "high"].includes(args.enhancement_strength)
+      ? args.enhancement_strength
+      : null;
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: `${source.title ?? "Image"} (upscaled ${factor}x)`.slice(0, 120),
+        kind: "image",
+        status: "generating",
+        generation_params: {
+          mode: "upscale",
+          model: "Wonder 3.5",
+          upscale_factor: factor,
+          output_format,
+          face_enhancement,
+          enhancement_strength,
+          source_asset_id: source.id,
+          origin: "plan",
+        },
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+
+    try {
+      const res = await fetch("https://queue.fal.run/topaz/upscale/image/generative", {
+        method: "POST",
+        headers: { Authorization: `Key ${FAL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_url: source.url,
+          model: "Wonder 3.5",
+          upscale_factor: factor,
+          output_format,
+          face_enhancement,
+          ...(enhancement_strength ? { enhancement_strength } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`fal submit ${res.status}: ${t.slice(0, 400)}`);
+      }
+      const queued = await res.json();
+      if (!queued.status_url || !queued.response_url) {
+        throw new Error("fal queue returned no status/response url");
+      }
+      await admin
+        .from("media_assets")
+        .update({
+          fal_model_id: "topaz/upscale/image/generative",
+          fal_request_id: queued.request_id ?? null,
+          fal_status_url: queued.status_url,
+          fal_response_url: queued.response_url,
+        })
+        .eq("id", row.id)
+        .eq("user_id", user_id);
+    } catch (err: any) {
+      const detail = String(err?.message ?? err ?? "Upscale failed");
+      await admin
+        .from("media_assets")
+        .update({ status: "failed", error_message: detail })
+        .eq("id", row.id)
+        .eq("user_id", user_id);
+      throw new Error(detail);
+    }
+
+    return { __pending_media: row.id };
+  },
+
+  // Pure pixel downscale — no AI, no queue. Finishes inside this step.
+  async shrink_image(args, { user_id, admin }) {
+    const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
+
+    const imgRes = await fetch(source.url);
+    if (!imgRes.ok) throw new Error(`Could not download the source image (${imgRes.status})`);
+    const contentType = (imgRes.headers.get("content-type") ?? "").toLowerCase();
+    const bytes = new Uint8Array(await imgRes.arrayBuffer());
+    if (bytes.byteLength > 25_000_000) {
+      throw new Error("Source image is too large to shrink (over 25 MB)");
+    }
+    if (contentType.includes("webp") || contentType.includes("gif")) {
+      throw new Error("Only JPEG and PNG images can be shrunk");
+    }
+
+    // (Image is imported statically at the top of this file.)
+    const decoded: any = await Image.decode(bytes);
+    const srcW = decoded.width;
+    const srcH = decoded.height;
+    const longest = Math.max(srcW, srcH);
+
+    let scale: number;
+    if (typeof args.max_dimension === "number" && args.max_dimension >= 64) {
+      scale = Math.min(1, args.max_dimension / longest);
+    } else {
+      let pct = typeof args.scale_percent === "number" ? args.scale_percent : 50;
+      pct = Math.min(95, Math.max(10, pct));
+      scale = pct / 100;
+    }
+    const targetW = Math.max(1, Math.round(srcW * scale));
+    const targetH = Math.max(1, Math.round(srcH * scale));
+    if (targetW >= srcW && targetH >= srcH) {
+      throw new Error("That target is not smaller than the original image");
+    }
+
+    const resized: any = decoded.resize(targetW, targetH);
+    const isJpeg = contentType.includes("jpeg") || contentType.includes("jpg");
+    const out: Uint8Array = isJpeg ? await resized.encodeJPEG(90) : await resized.encode();
+    const ext = isJpeg ? "jpg" : "png";
+    const mime = isJpeg ? "image/jpeg" : "image/png";
+
+    const storagePath = `${user_id}/${Date.now()}_shrunk.${ext}`;
+    const { error: upErr } = await admin.storage
+      .from("joystick-media")
+      .upload(storagePath, out, { contentType: mime, upsert: false });
+    if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+    const { data: pub } = admin.storage.from("joystick-media").getPublicUrl(storagePath);
+
+    const { data: row, error } = await admin
+      .from("media_assets")
+      .insert({
+        user_id,
+        title: `${source.title ?? "Image"} (small)`.slice(0, 120),
+        kind: "image",
+        status: "completed",
+        url: pub.publicUrl,
+        storage_path: storagePath,
+        mime_type: mime,
+        size_bytes: out.byteLength,
+        width: targetW,
+        height: targetH,
+        generation_params: {
+          mode: "shrink",
+          source_asset_id: source.id,
+          target_width: targetW,
+          target_height: targetH,
+          origin: "plan",
+        },
+      })
+      .select("id, title, width, height")
+      .single();
+    if (error) throw new Error(error.message);
+
+    return { id: row.id, title: row.title, width: row.width, height: row.height };
   },
 
   async image_to_video(args, { user_id, admin, supabase, internal }) {
