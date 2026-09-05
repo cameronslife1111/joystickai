@@ -3279,8 +3279,10 @@ function AppPageInner() {
               </button>
             </div>
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
-              Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
+              Long press a slot below to jump to the next document, or tap it to choose one.{" "}
+              {favorites.filter(Boolean).length} / 50 filled.
             </div>
+
             <div className="mb-2 flex flex-wrap gap-1.5 px-1">
               {EMOJI_FILTERS.map((emoji) => (
                 <button
