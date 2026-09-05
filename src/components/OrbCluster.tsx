@@ -301,9 +301,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-pink"
         Icon={ArrowUpDown}
-        label="Move sentence (hold to jump to)"
-        onPress={onMoveSentence}
-        onLongPress={onJumpTo}
+        label="Jump to (hold to move sentence)"
+        onPress={onJumpTo}
+        onLongPress={onMoveSentence}
         placement={{ gridColumn: 1, gridRow: 3 }}
       />
       <ClusterOrb
