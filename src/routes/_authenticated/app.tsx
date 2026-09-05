@@ -2149,6 +2149,17 @@ function AppPageInner() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak, savedIndexFor, persistIndex]);
 
+  const slotHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slotHoldStartRef = useRef<{ x: number; y: number } | null>(null);
+  const slotHoldFiredRef = useRef(false);
+  const clearSlotHold = useCallback(() => {
+    if (slotHoldTimerRef.current) {
+      clearTimeout(slotHoldTimerRef.current);
+      slotHoldTimerRef.current = null;
+    }
+    slotHoldStartRef.current = null;
+  }, []);
+
   /**
    * Favorites screen: long-pressing a slot advances it (and every slot holding
    * the same document) to the next document alphabetically. Stays on-screen.
@@ -3339,7 +3350,7 @@ function AppPageInner() {
                     onPointerLeave={clearSlotHold}
                     onPointerCancel={clearSlotHold}
                     onContextMenu={(e) => e.preventDefault()}
-                    className="flex w-full touch-none select-none items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition [-webkit-touch-callout:none] active:scale-[0.98] hover:bg-foreground/10"
+                    className="flex w-full select-none items-center [touch-action:pan-y] gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition [-webkit-touch-callout:none] active:scale-[0.98] hover:bg-foreground/10"
                   >
                     <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                       {i + 1}
