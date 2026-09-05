@@ -2149,6 +2149,30 @@ function AppPageInner() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak, savedIndexFor, persistIndex]);
 
+  /**
+   * Favorites screen: long-pressing a slot advances it (and every slot holding
+   * the same document) to the next document alphabetically. Stays on-screen.
+   */
+  const advanceSlotDoc = useCallback(async (slot: number) => {
+    if (lockFavorites) { toast.error("List is locked"); return; }
+    const sorted = sortDocsByTitle(docs ?? []);
+    if (sorted.length === 0) { toast.error("No documents yet"); return; }
+    const curId = favorites[slot] ?? null;
+    const curPos = curId ? sorted.findIndex((d) => d.id === curId) : -1;
+    const nextDoc = sorted[(curPos + 1) % sorted.length];
+    if (!nextDoc) return;
+    const next = [...favorites];
+    while (next.length < 50) next.push(null);
+    if (curId) {
+      for (let i = 0; i < next.length; i++) if (next[i] === curId) next[i] = nextDoc.id;
+    } else {
+      next[slot] = nextDoc.id;
+    }
+    toast.success(nextDoc.title || "Untitled", { id: "slot-advance" });
+    await saveFavorites(next);
+  }, [docs, favorites, lockFavorites, saveFavorites]);
+
+
 
 
 
