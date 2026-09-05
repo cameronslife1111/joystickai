@@ -3,6 +3,7 @@ import { TOOL_CATALOG, toolCatalogForPrompt } from "../_shared/tools.ts";
 import { applyEmojiSynonyms, tokenizeRich } from "../_shared/lookup.ts";
 import { nextRunAt, type Cadence, type ScheduleSpec } from "../_shared/recurrence.ts";
 import { splitIntoSentences } from "../_shared/sentences.ts";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
