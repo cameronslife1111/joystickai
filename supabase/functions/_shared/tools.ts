@@ -425,6 +425,8 @@ export const TOOL_GROUPS: Record<string, string> = {
   generate_image: "image_generation",
   regenerate_image: "image_generation",
   remix_images: "image_generation",
+  upscale_image: "image_generation",
+  shrink_image: "image_generation",
   // video_generation
   image_to_video: "video_generation",
   video_to_video: "video_generation",
