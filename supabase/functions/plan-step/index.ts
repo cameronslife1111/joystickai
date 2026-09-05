@@ -120,6 +120,8 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     read_document: ["document_id"],
     regenerate_image: ["source_media_id"],
     remix_images: ["source_media_ids"],
+    upscale_image: ["source_media_id"],
+    shrink_image: ["source_media_id"],
     image_to_video: ["source_media_id"],
     video_to_video: ["source_image_id", "reference_video_id"],
     audio_image_to_video: ["source_image_id", "audio_media_id"],
