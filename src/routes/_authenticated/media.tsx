@@ -6,12 +6,15 @@ import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
   CheckSquare, CheckCircle2, FileText, ImageIcon, FolderInput, CopyPlus, FolderMinus,
+  ArrowUpNarrowWide, Minimize2,
 } from "lucide-react";
 import { AppBackground } from "@/components/AppBackground";
 import { useAppBackground, setAppBackground } from "@/lib/use-app-background";
 import { GenerateImageDialog } from "@/components/GenerateImageDialog";
 import { RegenerateImageDialog } from "@/components/RegenerateImageDialog";
 import { RemixImagesDialog } from "@/components/RemixImagesDialog";
+import { UpscaleImageDialog } from "@/components/UpscaleImageDialog";
+import { ShrinkImageDialog } from "@/components/ShrinkImageDialog";
 import { ImageToVideoDialog } from "@/components/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/VideoToVideoDialog";
 import { AudioImageToVideoDialog } from "@/components/AudioImageToVideoDialog";
@@ -140,6 +143,8 @@ function MediaPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [regenerateAsset, setRegenerateAsset] = useState<Asset | null>(null);
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
+  const [upscaleAsset, setUpscaleAsset] = useState<Asset | null>(null);
+  const [shrinkAsset, setShrinkAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
   const [stuckAsset, setStuckAsset] = useState<Asset | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1144,6 +1149,16 @@ function MediaPage() {
                 />
               )}
               {sheetAsset.kind === "image" && (
+                <SheetButton icon={<ArrowUpNarrowWide className="h-4 w-4" />} label="Upscale"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setUpscaleAsset(a); }}
+                />
+              )}
+              {sheetAsset.kind === "image" && (
+                <SheetButton icon={<Minimize2 className="h-4 w-4" />} label="Shrink"
+                  onClick={() => { const a = sheetAsset; setSheetAsset(null); setShrinkAsset(a); }}
+                />
+              )}
+              {sheetAsset.kind === "image" && (
                 <SheetButton icon={<Film className="h-4 w-4" />} label="Image to Video"
                   onClick={() => {
                     const a = sheetAsset;
@@ -1431,6 +1446,30 @@ function MediaPage() {
           onOpenChange={(o) => { if (!o) setRemixAsset(null); }}
           initialAsset={{ id: remixAsset.id, url: remixAsset.url, title: remixAsset.title }}
           onSubmitted={() => { setRemixAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {upscaleAsset && (
+        <UpscaleImageDialog
+          open={!!upscaleAsset}
+          onOpenChange={(o) => { if (!o) setUpscaleAsset(null); }}
+          sourceAsset={{
+            id: upscaleAsset.id, url: upscaleAsset.url, title: upscaleAsset.title,
+            width: upscaleAsset.width, height: upscaleAsset.height,
+          }}
+          onSubmitted={() => { setUpscaleAsset(null); setViewerIdx(null); }}
+        />
+      )}
+
+      {shrinkAsset && (
+        <ShrinkImageDialog
+          open={!!shrinkAsset}
+          onOpenChange={(o) => { if (!o) setShrinkAsset(null); }}
+          sourceAsset={{
+            id: shrinkAsset.id, url: shrinkAsset.url, title: shrinkAsset.title,
+            width: shrinkAsset.width, height: shrinkAsset.height, mime_type: shrinkAsset.mime_type,
+          }}
+          onSubmitted={() => { setShrinkAsset(null); setViewerIdx(null); }}
         />
       )}
 
