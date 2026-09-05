@@ -1631,7 +1631,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 size="icon"
                 variant="ghost"
                 type="button"
-                onClick={() => void dictation.toggle()}
+                onClick={() => {
+                  // Starting a recording must silence any read-aloud first so
+                  // Orby's voice doesn't bleed into the user's dictation.
+                  if (!dictation.recording) {
+                    cancelSpeech();
+                    setSpeakingId(null);
+                  }
+                  void dictation.toggle();
+                }}
                 disabled={dictation.transcribing}
                 aria-label={dictation.recording ? "Stop recording" : "Start voice input"}
                 title={dictation.recording ? "Stop and transcribe" : "Voice input"}
