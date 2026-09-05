@@ -2149,6 +2149,41 @@ function AppPageInner() {
     if (resolved?.content) speak(resolved.content, token);
   }, [docs, activeDocId, favorites, saveFavorites, saveLastFavoriteSlot, qc, claimSpeech, speak, savedIndexFor, persistIndex]);
 
+  const slotHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slotHoldStartRef = useRef<{ x: number; y: number } | null>(null);
+  const slotHoldFiredRef = useRef(false);
+  const clearSlotHold = useCallback(() => {
+    if (slotHoldTimerRef.current) {
+      clearTimeout(slotHoldTimerRef.current);
+      slotHoldTimerRef.current = null;
+    }
+    slotHoldStartRef.current = null;
+  }, []);
+
+  /**
+   * Favorites screen: long-pressing a slot advances it (and every slot holding
+   * the same document) to the next document alphabetically. Stays on-screen.
+   */
+  const advanceSlotDoc = useCallback(async (slot: number) => {
+    if (lockFavorites) { toast.error("List is locked"); return; }
+    const sorted = sortDocsByTitle(docs ?? []);
+    if (sorted.length === 0) { toast.error("No documents yet"); return; }
+    const curId = favorites[slot] ?? null;
+    const curPos = curId ? sorted.findIndex((d) => d.id === curId) : -1;
+    const nextDoc = sorted[(curPos + 1) % sorted.length];
+    if (!nextDoc) return;
+    const next = [...favorites];
+    while (next.length < 50) next.push(null);
+    if (curId) {
+      for (let i = 0; i < next.length; i++) if (next[i] === curId) next[i] = nextDoc.id;
+    } else {
+      next[slot] = nextDoc.id;
+    }
+    toast.success(nextDoc.title || "Untitled", { id: "slot-advance" });
+    await saveFavorites(next);
+  }, [docs, favorites, lockFavorites, saveFavorites]);
+
+
 
 
 
@@ -3255,8 +3290,10 @@ function AppPageInner() {
               </button>
             </div>
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
-              Swipe right on the orb to cycle through these. {favorites.filter(Boolean).length} / 50 filled.
+              Long press a slot below to jump to the next document, or tap it to choose one.{" "}
+              {favorites.filter(Boolean).length} / 50 filled.
             </div>
+
             <div className="mb-2 flex flex-wrap gap-1.5 px-1">
               {EMOJI_FILTERS.map((emoji) => (
                 <button
@@ -3290,8 +3327,30 @@ function AppPageInner() {
                 return (
                   <button
                     key={i}
-                    onClick={() => setPickerSlot(i)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition active:scale-[0.98] hover:bg-foreground/10"
+                    onClick={() => {
+                      if (slotHoldFiredRef.current) { slotHoldFiredRef.current = false; return; }
+                      setPickerSlot(i);
+                    }}
+                    onPointerDown={(e) => {
+                      slotHoldFiredRef.current = false;
+                      clearSlotHold();
+                      slotHoldStartRef.current = { x: e.clientX, y: e.clientY };
+                      slotHoldTimerRef.current = setTimeout(() => {
+                        slotHoldTimerRef.current = null;
+                        slotHoldFiredRef.current = true;
+                        void advanceSlotDoc(i);
+                      }, 500);
+                    }}
+                    onPointerMove={(e) => {
+                      const s = slotHoldStartRef.current;
+                      if (!slotHoldTimerRef.current || !s) return;
+                      if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) clearSlotHold();
+                    }}
+                    onPointerUp={clearSlotHold}
+                    onPointerLeave={clearSlotHold}
+                    onPointerCancel={clearSlotHold}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="flex w-full select-none items-center [touch-action:pan-y] gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition [-webkit-touch-callout:none] active:scale-[0.98] hover:bg-foreground/10"
                   >
                     <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                       {i + 1}
@@ -3307,6 +3366,7 @@ function AppPageInner() {
                   </button>
                 );
               })}
+
             </div>
             <button
               onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
