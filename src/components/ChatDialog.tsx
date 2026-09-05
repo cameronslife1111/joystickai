@@ -868,7 +868,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   const handleClear = async () => {
     if (!activeThreadId) return;
+    // Clearing must silence whatever bubble is being read right now.
+    cancelSpeech();
+    setSpeakingId(null);
+    if (autoSpokeThreadRef.current === activeThreadId) autoSpokeThreadRef.current = null;
     const { error } = await supabase.from("chat_messages").delete().eq("thread_id", activeThreadId);
+
     if (error) {
       toast.error("Failed to clear chat");
       return;
