@@ -224,6 +224,32 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "upscale_image",
+    description:
+      "Upscale an existing image to a higher resolution with the Topaz generative upscaler (Wonder 3.5). Use when the user says 'upscale', 'make it higher resolution', 'enhance', '4x' etc. " +
+      "source_media_id must be the id of an existing image asset. The upscaled image is saved as a NEW asset; the original is untouched. Runs in the background like other image jobs. " +
+      "Optional overrides: upscale_factor (number 1.5-4, default 2), output_format ('jpeg' [default] | 'png'), face_enhancement (boolean, default true), enhancement_strength ('low'|'medium'|'high', omit for the model default).",
+    args: {
+      source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
+      upscale_factor: { type: "number", description: "How much bigger, 1.5 to 4 (default 2)", required: false },
+      output_format: { type: "string", description: "'jpeg' or 'png'", required: false },
+      face_enhancement: { type: "boolean", description: "Enhance faces", required: false },
+      enhancement_strength: { type: "string", description: "'low' | 'medium' | 'high'", required: false },
+    },
+  },
+  {
+    name: "shrink_image",
+    description:
+      "Shrink an existing image's DIMENSIONS without changing the picture itself (no AI). Use when the user says 'shrink', 'make it smaller', 'resize down', 'half size', 'make a 1024px version'. " +
+      "source_media_id must be the id of an existing image asset. The smaller image is saved as a NEW asset; the original is untouched. Completes immediately. " +
+      "Give EITHER scale_percent (10-95, default 50) OR max_dimension (target longest side in pixels, 64-8000). Never upsizes.",
+    args: {
+      source_media_id: { type: "string", description: "UUID of the source image asset", required: true },
+      scale_percent: { type: "number", description: "Percent of original size, 10-95 (default 50)", required: false },
+      max_dimension: { type: "number", description: "Target longest side in pixels (overrides scale_percent)", required: false },
+    },
+  },
+  {
     name: "image_to_video",
     description:
       "Animate a still image into a short video using a motion prompt. source_media_id must be the id of an existing image asset. " +
