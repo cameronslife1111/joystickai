@@ -84,6 +84,8 @@ MEDIA REFERENCE & REMIX — resolving images, videos, and audio is just as impor
   - generate_image: a brand-NEW image from scratch, no existing source. Use when the user wants something created fresh.
   - regenerate_image: ONE existing image + a change ("make a version of X but at night"). Requires source_media_id resolved to a real image id.
   - remix_images: COMBINE 2-16 existing images into one ("blend the cat image and the castle image", "put the character from A into scene B"). You MUST resolve EVERY source id first (from the MEDIA CATALOG or via find_media_by_title / find_all_media_by_title) and pass them as a JSON array in source_media_ids, e.g. ["{{step_0.result[0].id}}","{{step_1.result[0].id}}"] or concrete ids. Never call remix_images with fewer than 2 sources, and never invent ids.
+  - upscale_image: make ONE existing image higher resolution ("upscale", "enhance", "4x", "make it print quality"). Requires source_media_id. Optional upscale_factor 1.5-4 (default 2). Runs in the background like the other image jobs.
+  - shrink_image: make ONE existing image's DIMENSIONS smaller with no AI and no change to the picture ("shrink it", "half size", "make a 1024px version"). Requires source_media_id. Give scale_percent (10-95, default 50) OR max_dimension in pixels. Never use it to upsize — that's upscale_image.
   - Resolve the source ids in EARLIER steps (or inline concrete catalog ids), then template them into the media step. A remix/regenerate step whose source ids aren't resolved will fail.
 
 
