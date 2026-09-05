@@ -189,7 +189,7 @@ const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number 
   { color: "green", label: "Next document (hold to link this sentence)", col: 4, row: 2 },
   { color: "orange", label: "Pinned document / pin a doc", col: 5, row: 1 },
   { color: "purple", label: "Next sentence (hold to delegate)", col: 3, row: 3 },
-  { color: "pink", label: "Move sentence", col: 1, row: 3 },
+  { color: "pink", label: "Jump to / move sentence", col: 1, row: 3 },
   { color: "gray", label: "Media gallery", col: 5, row: 3 },
 ];
 
