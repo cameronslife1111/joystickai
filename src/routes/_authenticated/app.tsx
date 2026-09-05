@@ -3316,8 +3316,30 @@ function AppPageInner() {
                 return (
                   <button
                     key={i}
-                    onClick={() => setPickerSlot(i)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition active:scale-[0.98] hover:bg-foreground/10"
+                    onClick={() => {
+                      if (slotHoldFiredRef.current) { slotHoldFiredRef.current = false; return; }
+                      setPickerSlot(i);
+                    }}
+                    onPointerDown={(e) => {
+                      slotHoldFiredRef.current = false;
+                      clearSlotHold();
+                      slotHoldStartRef.current = { x: e.clientX, y: e.clientY };
+                      slotHoldTimerRef.current = setTimeout(() => {
+                        slotHoldTimerRef.current = null;
+                        slotHoldFiredRef.current = true;
+                        void advanceSlotDoc(i);
+                      }, 500);
+                    }}
+                    onPointerMove={(e) => {
+                      const s = slotHoldStartRef.current;
+                      if (!slotHoldTimerRef.current || !s) return;
+                      if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) clearSlotHold();
+                    }}
+                    onPointerUp={clearSlotHold}
+                    onPointerLeave={clearSlotHold}
+                    onPointerCancel={clearSlotHold}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="flex w-full touch-none select-none items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-left transition [-webkit-touch-callout:none] active:scale-[0.98] hover:bg-foreground/10"
                   >
                     <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                       {i + 1}
@@ -3333,6 +3355,7 @@ function AppPageInner() {
                   </button>
                 );
               })}
+
             </div>
             <button
               onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
