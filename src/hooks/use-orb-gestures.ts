@@ -17,8 +17,11 @@ interface Options {
   doubleTapMs?: number;
   swipeThreshold?: number;
   moveCancelPx?: number;
+  /** CSS selector for descendants that keep their native behavior (e.g. "a"). */
+  ignoreSelector?: string;
   /** Change this value to force listeners to re-bind to the current ref.current. */
   rebindKey?: string | number | boolean | null;
+
 }
 
 /**
