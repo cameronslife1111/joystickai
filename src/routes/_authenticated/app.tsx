@@ -3272,6 +3272,80 @@ function AppPageInner() {
         }}
       />
 
+      {/* Appearance + sentence-press settings */}
+      {themeSheetOpen && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
+          onClick={() => setThemeSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-5 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="font-display text-lg">🌓 Theme</div>
+              <button
+                onClick={() => setThemeSheetOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Appearance</div>
+            <div className="mb-5 grid grid-cols-2 gap-2">
+              {(["light", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => void saveTheme(t)}
+                  className={cn(
+                    "rounded-2xl border px-3 py-2.5 text-sm transition active:scale-95",
+                    theme === t
+                      ? "border-foreground/30 bg-foreground/10 font-medium"
+                      : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+                  )}
+                >
+                  {t === "light" ? "☀️ Light" : "🌙 Dark"}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+              Pressing a sentence
+            </div>
+            <div className="grid gap-2">
+              {([
+                { v: "editor", label: "📝 Open the full editor", hint: "Edit the whole document at once." },
+                { v: "sentence", label: "✏️ Quick edit this sentence", hint: "Edit just this sentence, right where it is." },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => {
+                    setTapMode(opt.v);
+                    if (typeof window !== "undefined") {
+                      window.localStorage.setItem("orby_tap_mode", opt.v);
+                    }
+                  }}
+                  className={cn(
+                    "rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
+                    tapMode === opt.v
+                      ? "border-foreground/30 bg-foreground/10 font-medium"
+                      : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+                  )}
+                >
+                  <div>{opt.label}</div>
+                  <div className="text-xs font-normal text-muted-foreground">{opt.hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
       {menuOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
