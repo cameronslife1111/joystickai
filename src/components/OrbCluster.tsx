@@ -5,25 +5,21 @@ import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Trash2 } f
 import { cn } from "@/lib/utils";
 
 /**
- * The home-screen control cluster: eight small glowing icon orbs arranged
- * around a transparent, pressable center pad.
+ * The home-screen control cluster: eight gapless rounded tiles.
  *
- *   Layout (grid):
- *   red · delete      [ ]     blue · previous      [ ]      orange · pinned doc
- *   [ ]            yellow · menu   [center]   green · next doc            [ ]
- *   pink · move/jump  [ ]     purple · next        [ ]      gray · media/chat (hold)
+ *   Layout (3 columns x 6 rows, no gaps):
+ *   red · delete       |  blue · previous   |  orange · pinned doc
+ *   yellow · menu      |  (top half)        |  green · next doc
+ *   pink · jump to     |  purple · next     |  gray · media/chat
  *
- * The center pad is intentionally empty/transparent so the app background
- * shows through; gestures (tap = edit, long-press = record) are attached by
- * the parent via `centerRef` and `useOrbGestures`.
+ * Tap-to-edit and hold-to-record now live on the sentence text itself
+ * (see `.sentence-surface` in styles.css), not in this cluster.
  */
 
 /** Orbs that can be pressed programmatically (keyboard arrows). */
 export type OrbId = "prev" | "next" | "menu" | "nextDoc";
 
 interface OrbClusterProps {
-  recording: boolean;
-  centerRef: RefObject<HTMLDivElement | null>;
   /**
    * Receives an imperative press function so keyboard shortcuts can go through
    * the exact same click path (giggle animation included) as a real press.
@@ -33,6 +29,7 @@ interface OrbClusterProps {
   onNext: () => void;
   onMenu: () => void;
   onNextDoc: () => void;
+
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
   onDelete: () => void;
