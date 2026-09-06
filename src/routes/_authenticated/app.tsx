@@ -2619,25 +2619,8 @@ function AppPageInner() {
         if (ok) toast.success("Copied sentence");
         else toast.error("Failed to copy");
       });
-    }},
-    { e: "📄", t: "Copy document", fn: async () => {
-      setMenuOpen(false);
-      if (!activeDocId) { toast.error("No document open"); return; }
-      let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
-      if (!list) {
-        const { data } = await supabase
-          .from("sentences")
-          .select("content")
-          .eq("document_id", activeDocId)
-          .order("order_index", { ascending: true });
-        list = data ?? [];
-      }
-      const full = list.map((s) => s.content).join(" ").trim();
-      if (!full) { toast.error("Document is empty"); return; }
-      const ok = await copyToClipboard(full);
-      if (ok) toast.success("Copied document");
-      else toast.error("Failed to copy");
-    }},
+    }, onLongPress: () => { void copyWholeDocument(); }},
+    { e: "📄", t: "Copy document", fn: () => { void copyWholeDocument(); }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
