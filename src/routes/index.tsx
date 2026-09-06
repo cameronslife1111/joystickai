@@ -182,16 +182,23 @@ function SentenceCycler() {
 
 /* ----------------------------- Meet the orbs ------------------------------ */
 
-const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number }> = [
-  { color: "blue", label: "Previous sentence", col: 3, row: 1 },
-  { color: "red", label: "Delete sentence / search docs", col: 1, row: 1 },
-  { color: "yellow", label: "Open the menu", col: 2, row: 2 },
-  { color: "green", label: "Next document (hold to link this sentence)", col: 4, row: 2 },
-  { color: "orange", label: "Pinned document / pin a doc", col: 5, row: 1 },
-  { color: "purple", label: "Next sentence (hold to delegate)", col: 3, row: 3 },
-  { color: "pink", label: "Jump to / move sentence", col: 1, row: 3 },
-  { color: "gray", label: "Media gallery", col: 5, row: 3 },
+const CLUSTER: Array<{
+  color: OrbColor;
+  label: string;
+  col: number;
+  row: number;
+  rowSpan: number;
+}> = [
+  { color: "red", label: "Delete sentence / search docs", col: 1, row: 1, rowSpan: 2 },
+  { color: "yellow", label: "Open the menu (hold for New idea)", col: 1, row: 3, rowSpan: 2 },
+  { color: "pink", label: "Jump to / move sentence", col: 1, row: 5, rowSpan: 2 },
+  { color: "blue", label: "Previous sentence", col: 2, row: 1, rowSpan: 3 },
+  { color: "purple", label: "Next sentence (hold to delegate)", col: 2, row: 4, rowSpan: 3 },
+  { color: "orange", label: "Pinned document / pin a doc", col: 3, row: 1, rowSpan: 2 },
+  { color: "green", label: "Next document (hold to link this sentence)", col: 3, row: 3, rowSpan: 2 },
+  { color: "gray", label: "Media gallery (hold for chat)", col: 3, row: 5, rowSpan: 2 },
 ];
+
 
 function MeetTheOrbs() {
   const [active, setActive] = useState(0);
@@ -218,15 +225,15 @@ function MeetTheOrbs() {
 
       <Reveal delay="150ms" className="mt-14">
         <div
-          className="landing-cluster grid"
+          className="landing-cluster landing-cluster-tiles grid"
           style={{
             alignItems: "stretch",
             justifyItems: "stretch",
-            gridTemplateColumns:
-              "repeat(2, clamp(44px, 13vw, 64px)) clamp(60px, 18vw, 88px) repeat(2, clamp(44px, 13vw, 64px))",
-            gridTemplateRows:
-              "clamp(44px, 13vw, 64px) clamp(60px, 18vw, 88px) clamp(44px, 13vw, 64px)",
-            gap: "clamp(8px, 2.5vw, 14px)",
+            width: "min(100%, 360px)",
+            height: "clamp(210px, 52vw, 280px)",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr)",
+            gridTemplateRows: "repeat(6, minmax(0, 1fr))",
+            gap: 0,
           }}
         >
           {CLUSTER.map((orb, i) => (
@@ -236,26 +243,20 @@ function MeetTheOrbs() {
               size="fill"
               active={i === active}
               floatDelay={`${i * 0.35}s`}
-              style={{ gridColumn: orb.col, gridRow: orb.row }}
+              style={{ gridColumn: orb.col, gridRow: `${orb.row} / span ${orb.rowSpan}` }}
               className="h-full w-full"
             />
           ))}
-          <div
-            className="flex h-full w-full items-center justify-center rounded-full border border-dashed border-white/20"
-            style={{ gridColumn: 3, gridRow: 2 }}
-          >
-            <span className="px-1 text-[8px] uppercase leading-relaxed tracking-[0.18em] text-slate-500 md:text-[9px]">
-              tap to edit
-              <br />
-              hold to speak
-            </span>
-          </div>
         </div>
         <div className="mt-8 flex h-6 items-center justify-center">
           <p key={active} className="sentence-swap text-sm font-semibold" style={{ color: ORB_HEX[CLUSTER[active].color] }}>
             {CLUSTER[active].label}
           </p>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Press the sentence itself to edit it — hold it to speak a new idea.
+        </p>
+
       </Reveal>
 
       <Reveal delay="250ms" className="mt-12 w-full max-w-md">

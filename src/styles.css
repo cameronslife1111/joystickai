@@ -565,40 +565,59 @@
   .glow-orb { animation: none; }
 }
 
-/* ============ Orb cluster (6 orbs + transparent center pad) ============ */
+/* ============ Orb cluster (8 gapless tiles) ============ */
 .orb-cluster {
-  --orb-size: clamp(64px, 18vw, 96px);
   display: grid;
-  grid-template-columns: var(--orb-size) var(--orb-size) 64px var(--orb-size) var(--orb-size);
-  grid-template-rows: var(--orb-size) var(--orb-size) var(--orb-size);
-  gap: clamp(10px, 2.5vw, 18px);
-  align-items: center;
-  justify-items: center;
+  width: min(100%, 460px);
+  height: clamp(210px, 46vw, 300px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 0;
 }
 
-/* The empty middle: fully transparent (background shows through), but
-   pressable — tap opens the editor, long-press starts recording. */
-.orb-cluster-center {
-  width: 64px;
-  height: 64px;
-  border-radius: 9999px;
-  position: relative;
+/* Inside the cluster the orbs become gapless rounded rectangles. The scale
+   pulse is swapped for an opacity-only pulse so tiles never overlap. */
+.orb-cluster .glow-orb {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  animation: orb-tile-pulse 2.5s ease-in-out infinite;
+}
+.orb-cluster .glow-orb:active {
+  transform: scale(0.97);
+}
+
+@keyframes orb-tile-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-cluster .glow-orb { animation: none; }
+}
+
+/* The sentence itself is the gesture surface: tap opens the editor,
+   long-press toggles voice recording. */
+.sentence-surface {
+  border-radius: 24px;
+  padding: 10px 12px;
   cursor: pointer;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Red pulsing ring while the mic is live */
-.orb-cluster-center.orb-recording {
+.sentence-surface.sentence-recording {
   box-shadow:
     0 0 0 2px color-mix(in oklab, var(--destructive) 85%, transparent),
     0 0 38px 4px color-mix(in oklab, var(--destructive) 65%, transparent);
-  animation: orb-center-recording 1.1s ease-in-out infinite;
+  animation: sentence-recording-pulse 1.1s ease-in-out infinite;
 }
 
-@keyframes orb-center-recording {
+@keyframes sentence-recording-pulse {
   0%, 100% {
     box-shadow:
       0 0 0 2px color-mix(in oklab, var(--destructive) 85%, transparent),
@@ -612,8 +631,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb-cluster-center.orb-recording { animation: none; }
+  .sentence-surface.sentence-recording { animation: none; }
 }
+
 
 /* ============ App background photo ============ */
 /* The photo fades out toward the top so the header stays clean… */
@@ -722,3 +742,15 @@
   width: clamp(44px, 12vw, 60px);
   height: clamp(44px, 12vw, 60px);
 }
+
+/* Tile version of the legend: gapless rounded rectangles filling their cells. */
+.landing-cluster-tiles .landing-orb {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  animation: orb-tile-pulse 2.5s ease-in-out infinite;
+}
+.landing-cluster-tiles .landing-float {
+  animation: none;
+}
+

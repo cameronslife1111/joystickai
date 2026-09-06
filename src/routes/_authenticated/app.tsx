@@ -8,6 +8,8 @@ import { OrbCluster, type OrbId } from "@/components/OrbCluster";
 import { AppBackground } from "@/components/AppBackground";
 import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
+import { cn } from "@/lib/utils";
+
 import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences } from "@/lib/speech";
 import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
 
@@ -1571,9 +1573,9 @@ function AppPageInner() {
   const onLongPressEnd = useCallback(() => {}, []);
 
 
-  // The transparent center pad is the only gesture surface: tap opens the
-  // editor, long-press toggles voice recording. Navigation lives on the six
-  // surrounding orb buttons now — no swipe handling here.
+  // The sentence text is the gesture surface: tap opens the editor,
+  // long-press toggles voice recording. Navigation lives on the eight
+  // surrounding orb tiles — no swipe handling here.
   useOrbGestures(
     centerRef,
     {
@@ -1583,11 +1585,14 @@ function AppPageInner() {
       onLongPressEnd,
     },
     {
-      // The cluster is unmounted while the editor is open, so exiting edit
-      // mode creates a brand-new center pad — rebind listeners to it.
+      // The sentence surface is unmounted while the editor is open, so exiting
+      // edit mode creates a brand-new element — rebind listeners to it.
       rebindKey: editing ? "edit" : "read",
+      // Links inside a sentence keep their native tap behavior.
+      ignoreSelector: "a",
     },
   );
+
 
   // Arrow keys mirror the four navigation orbs for keyboard / Bluetooth-keyboard
   // users. The press goes through the real button click so the giggle animation
@@ -2826,16 +2831,25 @@ function AppPageInner() {
               style={{ minHeight: "60vh", maxHeight: "82vh" }}
             />
           ) : (
-            <p className="font-display text-3xl leading-tight md:text-4xl">
-              {currentSentence ? (
-                <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
-              ) : (
-                <span className="text-muted-foreground italic text-2xl">
-                  Hold the orb and speak, or double-tap to write.
-                </span>
-              )}
-            </p>
+            <div
+              ref={centerRef}
+              role="button"
+              tabIndex={-1}
+              aria-label="Press to edit document, hold to record a voice idea"
+              className={cn("sentence-surface", recording && "sentence-recording")}
+            >
+              <p className="font-display text-3xl leading-tight md:text-4xl">
+                {currentSentence ? (
+                  <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
+                ) : (
+                  <span className="text-muted-foreground italic text-2xl">
+                    Press here to write, or hold to speak.
+                  </span>
+                )}
+              </p>
+            </div>
           )}
+
         </div>
       </section>
 
@@ -3053,18 +3067,17 @@ function AppPageInner() {
       )}
 
       {!editing && (
-        <section className="relative flex shrink-0 items-center justify-center pb-4">
-          {/* Eight orbs around a transparent center pad:
-              blue = prev, purple = next (hold = delegate), yellow = menu (hold = New idea),
-              green = next doc (hold = link this sentence), red = delete,
-              orange = pinned doc (hold = pin a doc), red = delete (hold = search docs), pink = move sentence (hold = jump to),
-              gray = media gallery (hold = chat); center tap = edit, hold = record. */}
+        <section className="relative flex shrink-0 items-center justify-center px-3 pb-3">
+          {/* Eight gapless tiles, 3 columns:
+              left = red delete (hold search docs), yellow menu (hold New idea), pink jump to (hold move sentence);
+              middle = blue prev (hold lock list) on top, purple next (hold delegate) below;
+              right = orange pinned doc (hold pin a doc), green next doc (hold link sentence), gray media (hold chat).
+              Tap/hold to edit or record now live on the sentence text above. */}
 
           <OrbCluster
-            recording={recording}
-            centerRef={centerRef}
             pressRef={orbPressRef}
             lockFavorites={lockFavorites}
+
             onPrev={() => void onSwipeUp()}
             onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}

@@ -17,8 +17,11 @@ interface Options {
   doubleTapMs?: number;
   swipeThreshold?: number;
   moveCancelPx?: number;
+  /** CSS selector for descendants that keep their native behavior (e.g. "a"). */
+  ignoreSelector?: string;
   /** Change this value to force listeners to re-bind to the current ref.current. */
   rebindKey?: string | number | boolean | null;
+
 }
 
 /**
@@ -44,6 +47,8 @@ export function useOrbGestures(
   const doubleTapMs = opts.doubleTapMs ?? 280;
   const swipeThreshold = opts.swipeThreshold ?? 40;
   const moveCancelPx = opts.moveCancelPx ?? 12;
+  const ignoreSelector = opts.ignoreSelector;
+
 
   const cbRef = useRef(cb);
   cbRef.current = cb;
@@ -153,12 +158,18 @@ export function useOrbGestures(
       /* ------------------------- pointer events ------------------------- */
       let activePointerId: number | null = null;
 
+      /** Presses starting on e.g. a link keep their native behavior. */
+      const ignored = (target: EventTarget | null) =>
+        !!ignoreSelector && !!(target as HTMLElement | null)?.closest?.(ignoreSelector);
+
       const onPointerDown = (e: PointerEvent) => {
+        if (ignored(e.target)) return;
         // Stop native drag / text selection from stealing the interaction.
         e.preventDefault();
         activePointerId = e.pointerId;
         begin(e.clientX, e.clientY, true);
       };
+
       const onPointerMove = (e: PointerEvent) => {
         if (!usingPointer || e.pointerId !== activePointerId) return;
         move(e.clientX, e.clientY);
@@ -176,7 +187,8 @@ export function useOrbGestures(
 
       /* -------------------------- mouse fallback ------------------------- */
       const onMouseDown = (e: MouseEvent) => {
-        if (usingPointer || active) return;
+        if (usingPointer || active || ignored(e.target)) return;
+
         e.preventDefault();
         begin(e.clientX, e.clientY, false);
       };
@@ -191,7 +203,8 @@ export function useOrbGestures(
 
       /* -------------------------- touch fallback ------------------------- */
       const onTouchStart = (e: TouchEvent) => {
-        if (usingPointer || active) return;
+        if (usingPointer || active || ignored(e.target)) return;
+
         const t = e.touches[0];
         if (!t) return;
         begin(t.clientX, t.clientY, false);
@@ -272,5 +285,5 @@ export function useOrbGestures(
       cleanup?.();
     };
 
-  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
+  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, ignoreSelector, opts.rebindKey]);
 }
