@@ -3065,18 +3065,17 @@ function AppPageInner() {
       )}
 
       {!editing && (
-        <section className="relative flex shrink-0 items-center justify-center pb-4">
-          {/* Eight orbs around a transparent center pad:
-              blue = prev, purple = next (hold = delegate), yellow = menu (hold = New idea),
-              green = next doc (hold = link this sentence), red = delete,
-              orange = pinned doc (hold = pin a doc), red = delete (hold = search docs), pink = move sentence (hold = jump to),
-              gray = media gallery (hold = chat); center tap = edit, hold = record. */}
+        <section className="relative flex shrink-0 items-center justify-center px-3 pb-3">
+          {/* Eight gapless tiles, 3 columns:
+              left = red delete (hold search docs), yellow menu (hold New idea), pink jump to (hold move sentence);
+              middle = blue prev (hold lock list) on top, purple next (hold delegate) below;
+              right = orange pinned doc (hold pin a doc), green next doc (hold link sentence), gray media (hold chat).
+              Tap/hold to edit or record now live on the sentence text above. */}
 
           <OrbCluster
-            recording={recording}
-            centerRef={centerRef}
             pressRef={orbPressRef}
             lockFavorites={lockFavorites}
+
             onPrev={() => void onSwipeUp()}
             onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}
