@@ -237,21 +237,12 @@ export function OrbCluster({
   return (
     <div className="orb-cluster">
       <ClusterOrb
-        orbClass="glow-orb-blue"
-        Icon={ArrowUp}
-        label="Previous sentence (hold to lock/unlock list)"
-        onPress={onPrev}
-        onLongPress={onPrevLongPress}
-        buttonRef={setButton("prev")}
-        placement={{ gridColumn: 3, gridRow: 1 }}
-      />
-      <ClusterOrb
         orbClass="glow-orb-red"
         Icon={Trash2}
         label="Delete sentence (hold to search docs)"
         onPress={onDelete}
         onLongPress={onDeleteLongPress}
-        placement={{ gridColumn: 1, gridRow: 1 }}
+        placement={{ gridColumn: 1, gridRow: "1 / span 2" }}
       />
       <ClusterOrb
         orbClass="glow-orb-yellow"
@@ -260,34 +251,24 @@ export function OrbCluster({
         onPress={onMenu}
         onLongPress={onMenuLongPress}
         buttonRef={setButton("menu")}
-        placement={{ gridColumn: 2, gridRow: 2 }}
-
-      />
-      <div
-        ref={centerRef}
-        role="button"
-        tabIndex={-1}
-        aria-label="Press to edit document, hold to record a voice idea"
-        className={cn("orb-cluster-center", recording && "orb-recording")}
-        style={{ gridColumn: 3, gridRow: 2 }}
+        placement={{ gridColumn: 1, gridRow: "3 / span 2" }}
       />
       <ClusterOrb
-        orbClass="glow-orb-green"
-        Icon={FileText}
-        label="Next document (hold to link this sentence)"
-        onPress={onNextDoc}
-        onLongPress={onNextDocLongPress}
-        buttonRef={setButton("nextDoc")}
-        placement={{ gridColumn: 4, gridRow: 2 }}
+        orbClass="glow-orb-pink"
+        Icon={ArrowUpDown}
+        label="Jump to (hold to move sentence)"
+        onPress={onJumpTo}
+        onLongPress={onMoveSentence}
+        placement={{ gridColumn: 1, gridRow: "5 / span 2" }}
       />
       <ClusterOrb
-        orbClass="glow-orb-orange"
-        Icon={Pin}
-        label="Open pinned document (hold to pin a document)"
-        onPress={onPinnedDoc}
-        onLongPress={onPinnedDocLongPress}
-        disabled={lockFavorites}
-        placement={{ gridColumn: 5, gridRow: 1 }}
+        orbClass="glow-orb-blue"
+        Icon={ArrowUp}
+        label="Previous sentence (hold to lock/unlock list)"
+        onPress={onPrev}
+        onLongPress={onPrevLongPress}
+        buttonRef={setButton("prev")}
+        placement={{ gridColumn: 2, gridRow: "1 / span 3" }}
       />
       <ClusterOrb
         orbClass="glow-orb-purple"
@@ -296,15 +277,25 @@ export function OrbCluster({
         onPress={onNext}
         onLongPress={onNextLongPress}
         buttonRef={setButton("next")}
-        placement={{ gridColumn: 3, gridRow: 3 }}
+        placement={{ gridColumn: 2, gridRow: "4 / span 3" }}
       />
       <ClusterOrb
-        orbClass="glow-orb-pink"
-        Icon={ArrowUpDown}
-        label="Jump to (hold to move sentence)"
-        onPress={onJumpTo}
-        onLongPress={onMoveSentence}
-        placement={{ gridColumn: 1, gridRow: 3 }}
+        orbClass="glow-orb-orange"
+        Icon={Pin}
+        label="Open pinned document (hold to pin a document)"
+        onPress={onPinnedDoc}
+        onLongPress={onPinnedDocLongPress}
+        disabled={lockFavorites}
+        placement={{ gridColumn: 3, gridRow: "1 / span 2" }}
+      />
+      <ClusterOrb
+        orbClass="glow-orb-green"
+        Icon={FileText}
+        label="Next document (hold to link this sentence)"
+        onPress={onNextDoc}
+        onLongPress={onNextDocLongPress}
+        buttonRef={setButton("nextDoc")}
+        placement={{ gridColumn: 3, gridRow: "3 / span 2" }}
       />
       <ClusterOrb
         orbClass="glow-orb-gray"
@@ -313,8 +304,9 @@ export function OrbCluster({
         badge={grayBadge}
         onPress={onMediaGallery}
         onLongPress={onChat}
-        placement={{ gridColumn: 5, gridRow: 3 }}
+        placement={{ gridColumn: 3, gridRow: "5 / span 2" }}
       />
     </div>
   );
 }
+
