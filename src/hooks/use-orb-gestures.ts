@@ -285,5 +285,5 @@ export function useOrbGestures(
       cleanup?.();
     };
 
-  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, opts.rebindKey]);
+  }, [ref, longPressMs, doubleTapMs, swipeThreshold, moveCancelPx, ignoreSelector, opts.rebindKey]);
 }
