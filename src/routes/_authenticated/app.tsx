@@ -2552,9 +2552,29 @@ function AppPageInner() {
     qc.invalidateQueries({ queryKey: ["documents"] });
   }, [activeDoc, favorites, saveFavorites, qc]);
 
+  /** Copy every sentence of the open document, one blank line between each. */
+  const copyWholeDocument = useCallback(async () => {
+    setMenuOpen(false);
+    if (!activeDocId) { toast.error("No document open"); return; }
+    let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
+    if (!list) {
+      const { data } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", activeDocId)
+        .order("order_index", { ascending: true });
+      list = data ?? [];
+    }
+    const full = list.map((s) => s.content).join("\n\n").trim();
+    if (!full) { toast.error("Document is empty"); return; }
+    const ok = await copyToClipboard(full);
+    if (ok) toast.success("Copied document");
+    else toast.error("Failed to copy");
+  }, [activeDocId, qc]);
+
   const grid = useMemo(() => [
 
-    { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
+    { e: "🌓", t: "Theme", fn: () => { setMenuOpen(false); setThemeSheetOpen(true); } },
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
