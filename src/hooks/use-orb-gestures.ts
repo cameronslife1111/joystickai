@@ -203,7 +203,8 @@ export function useOrbGestures(
 
       /* -------------------------- touch fallback ------------------------- */
       const onTouchStart = (e: TouchEvent) => {
-        if (usingPointer || active) return;
+        if (usingPointer || active || ignored(e.target)) return;
+
         const t = e.touches[0];
         if (!t) return;
         begin(t.clientX, t.clientY, false);
