@@ -1480,12 +1480,21 @@ function AppPageInner() {
   
 
   const onDoubleTap = useCallback(() => {
-    if (editing) return; // already editing — ignore
+    if (editing || quickEditing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
     cancelSpeech();
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
+
+    // Quick-edit mode: edit just this sentence, in place.
+    if (tapMode === "sentence" && list.length > 0) {
+      setQuickEditText(list[currentIdx]?.content ?? "");
+      setQuickEditing(true);
+      editingRef.current = true; // block navigation while the box is open
+      return;
+    }
+
     if (list.length === 0) {
       setEditText("");
       setEditing(true);
@@ -1496,7 +1505,7 @@ function AppPageInner() {
     setEditText(full);
     setEditing(true);
     editingRef.current = true;
-  }, [editing, currentIdx, sentences, activeDocId]);
+  }, [editing, quickEditing, tapMode, currentIdx, sentences, activeDocId]);
 
   // Voice → New idea: transcribe the clip and drop the text into the New idea
   // composer so the user can edit it and send it wherever they want.
