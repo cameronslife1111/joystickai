@@ -3067,7 +3067,7 @@ function AppPageInner() {
       )}
 
       {!editing && (
-        <section className="relative flex shrink-0 items-center justify-center px-3 pb-3">
+        <section className="relative flex shrink-0 items-center justify-center px-3 pb-0">
           {/* Eight gapless tiles, 3 columns:
               left = red delete (hold search docs), yellow menu (hold New idea), pink jump to (hold move sentence);
               middle = blue prev (hold lock list) on top, purple next (hold delegate) below;

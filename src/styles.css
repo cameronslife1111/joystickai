@@ -569,18 +569,18 @@
 .orb-cluster {
   display: grid;
   width: min(100%, 460px);
-  height: clamp(210px, 46vw, 300px);
+  height: clamp(260px, 45svh, 400px);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
   grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: 0;
 }
 
-/* Inside the cluster the orbs become gapless rounded rectangles. The scale
+/* Inside the cluster the orbs become gapless sharp rectangles. The scale
    pulse is swapped for an opacity-only pulse so tiles never overlap. */
 .orb-cluster .glow-orb {
   width: 100%;
   height: 100%;
-  border-radius: 16px;
+  border-radius: 0;
   animation: orb-tile-pulse 2.5s ease-in-out infinite;
 }
 .orb-cluster .glow-orb:active {
