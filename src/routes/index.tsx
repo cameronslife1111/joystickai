@@ -182,16 +182,23 @@ function SentenceCycler() {
 
 /* ----------------------------- Meet the orbs ------------------------------ */
 
-const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number }> = [
-  { color: "blue", label: "Previous sentence", col: 3, row: 1 },
-  { color: "red", label: "Delete sentence / search docs", col: 1, row: 1 },
-  { color: "yellow", label: "Open the menu", col: 2, row: 2 },
-  { color: "green", label: "Next document (hold to link this sentence)", col: 4, row: 2 },
-  { color: "orange", label: "Pinned document / pin a doc", col: 5, row: 1 },
-  { color: "purple", label: "Next sentence (hold to delegate)", col: 3, row: 3 },
-  { color: "pink", label: "Jump to / move sentence", col: 1, row: 3 },
-  { color: "gray", label: "Media gallery", col: 5, row: 3 },
+const CLUSTER: Array<{
+  color: OrbColor;
+  label: string;
+  col: number;
+  row: number;
+  rowSpan: number;
+}> = [
+  { color: "red", label: "Delete sentence / search docs", col: 1, row: 1, rowSpan: 2 },
+  { color: "yellow", label: "Open the menu (hold for New idea)", col: 1, row: 3, rowSpan: 2 },
+  { color: "pink", label: "Jump to / move sentence", col: 1, row: 5, rowSpan: 2 },
+  { color: "blue", label: "Previous sentence", col: 2, row: 1, rowSpan: 3 },
+  { color: "purple", label: "Next sentence (hold to delegate)", col: 2, row: 4, rowSpan: 3 },
+  { color: "orange", label: "Pinned document / pin a doc", col: 3, row: 1, rowSpan: 2 },
+  { color: "green", label: "Next document (hold to link this sentence)", col: 3, row: 3, rowSpan: 2 },
+  { color: "gray", label: "Media gallery (hold for chat)", col: 3, row: 5, rowSpan: 2 },
 ];
+
 
 function MeetTheOrbs() {
   const [active, setActive] = useState(0);
