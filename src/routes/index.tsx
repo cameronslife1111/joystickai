@@ -225,15 +225,15 @@ function MeetTheOrbs() {
 
       <Reveal delay="150ms" className="mt-14">
         <div
-          className="landing-cluster grid"
+          className="landing-cluster landing-cluster-tiles grid"
           style={{
             alignItems: "stretch",
             justifyItems: "stretch",
-            gridTemplateColumns:
-              "repeat(2, clamp(44px, 13vw, 64px)) clamp(60px, 18vw, 88px) repeat(2, clamp(44px, 13vw, 64px))",
-            gridTemplateRows:
-              "clamp(44px, 13vw, 64px) clamp(60px, 18vw, 88px) clamp(44px, 13vw, 64px)",
-            gap: "clamp(8px, 2.5vw, 14px)",
+            width: "min(100%, 360px)",
+            height: "clamp(210px, 52vw, 280px)",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr)",
+            gridTemplateRows: "repeat(6, minmax(0, 1fr))",
+            gap: 0,
           }}
         >
           {CLUSTER.map((orb, i) => (
@@ -243,26 +243,20 @@ function MeetTheOrbs() {
               size="fill"
               active={i === active}
               floatDelay={`${i * 0.35}s`}
-              style={{ gridColumn: orb.col, gridRow: orb.row }}
+              style={{ gridColumn: orb.col, gridRow: `${orb.row} / span ${orb.rowSpan}` }}
               className="h-full w-full"
             />
           ))}
-          <div
-            className="flex h-full w-full items-center justify-center rounded-full border border-dashed border-white/20"
-            style={{ gridColumn: 3, gridRow: 2 }}
-          >
-            <span className="px-1 text-[8px] uppercase leading-relaxed tracking-[0.18em] text-slate-500 md:text-[9px]">
-              tap to edit
-              <br />
-              hold to speak
-            </span>
-          </div>
         </div>
         <div className="mt-8 flex h-6 items-center justify-center">
           <p key={active} className="sentence-swap text-sm font-semibold" style={{ color: ORB_HEX[CLUSTER[active].color] }}>
             {CLUSTER[active].label}
           </p>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Press the sentence itself to edit it — hold it to speak a new idea.
+        </p>
+
       </Reveal>
 
       <Reveal delay="250ms" className="mt-12 w-full max-w-md">
