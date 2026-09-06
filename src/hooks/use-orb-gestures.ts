@@ -47,6 +47,8 @@ export function useOrbGestures(
   const doubleTapMs = opts.doubleTapMs ?? 280;
   const swipeThreshold = opts.swipeThreshold ?? 40;
   const moveCancelPx = opts.moveCancelPx ?? 12;
+  const ignoreSelector = opts.ignoreSelector;
+
 
   const cbRef = useRef(cb);
   cbRef.current = cb;
