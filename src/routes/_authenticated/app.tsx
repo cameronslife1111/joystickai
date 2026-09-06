@@ -1832,6 +1832,55 @@ function AppPageInner() {
     setEditText("");
   }, []);
 
+  const cancelQuickEdit = useCallback(() => {
+    setQuickEditing(false);
+    editingRef.current = false;
+    setQuickEditText("");
+  }, []);
+
+  /**
+   * Quick edit: replace just the current sentence with whatever the user typed,
+   * splitting it into multiple sentences when it contains more than one.
+   */
+  const commitQuickEdit = useCallback(async () => {
+    const docId = activeDocId;
+    const list = sentences ?? [];
+    if (!docId || list.length === 0) { cancelQuickEdit(); return; }
+    const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
+    const parts = parseEditParts(quickEditText);
+
+    if (list[idx]?.content === quickEditText.trim() || (parts.length === 1 && parts[0] === list[idx]?.content)) {
+      cancelQuickEdit();
+      return;
+    }
+
+    const contents = list.map((s) => s.content);
+    contents.splice(idx, 1, ...parts);
+
+    const { error } = await supabase.rpc("commit_document_edit", {
+      p_document_id: docId,
+      p_contents: contents,
+    });
+    if (error) {
+      console.error("[quick-edit] commit failed", error);
+      toast.error("Couldn't save edits");
+      return;
+    }
+
+    qc.invalidateQueries({ queryKey: ["sentences", docId] });
+    setQuickEditing(false);
+    editingRef.current = false;
+    setQuickEditText("");
+
+    const targetIdx = Math.max(0, Math.min(idx, contents.length - 1));
+    await setIndex(targetIdx);
+    const spoken = contents[targetIdx];
+    if (spoken) {
+      const token = claimSpeech();
+      speak(spoken, token);
+    }
+  }, [activeDocId, sentences, quickEditText, parseEditParts, qc, setIndex, speak, claimSpeech, cancelQuickEdit]);
+
   // Never leave the mic open once the editor closes.
   useEffect(() => {
     if (!editing) {
