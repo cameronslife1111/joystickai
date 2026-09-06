@@ -2829,16 +2829,25 @@ function AppPageInner() {
               style={{ minHeight: "60vh", maxHeight: "82vh" }}
             />
           ) : (
-            <p className="font-display text-3xl leading-tight md:text-4xl">
-              {currentSentence ? (
-                <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
-              ) : (
-                <span className="text-muted-foreground italic text-2xl">
-                  Hold the orb and speak, or double-tap to write.
-                </span>
-              )}
-            </p>
+            <div
+              ref={centerRef}
+              role="button"
+              tabIndex={-1}
+              aria-label="Press to edit document, hold to record a voice idea"
+              className={cn("sentence-surface", recording && "sentence-recording")}
+            >
+              <p className="font-display text-3xl leading-tight md:text-4xl">
+                {currentSentence ? (
+                  <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
+                ) : (
+                  <span className="text-muted-foreground italic text-2xl">
+                    Press here to write, or hold to speak.
+                  </span>
+                )}
+              </p>
+            </div>
           )}
+
         </div>
       </section>
 
