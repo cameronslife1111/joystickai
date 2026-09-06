@@ -126,6 +126,14 @@ function AppPageInner() {
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [soundSettingsOpen, setSoundSettingsOpen] = useState(false);
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  /** What a single press on the sentence does. Remembered on this device. */
+  const [tapMode, setTapMode] = useState<"editor" | "sentence">(() => {
+    if (typeof window === "undefined") return "editor";
+    return window.localStorage.getItem("orby_tap_mode") === "sentence" ? "sentence" : "editor";
+  });
+  const [quickEditing, setQuickEditing] = useState(false);
+  const [quickEditText, setQuickEditText] = useState("");
   
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
@@ -1472,12 +1480,21 @@ function AppPageInner() {
   
 
   const onDoubleTap = useCallback(() => {
-    if (editing) return; // already editing — ignore
+    if (editing || quickEditing) return; // already editing — ignore
     if (recordingRef.current) return; // red recording glow is active — ignore tap
     cancelSpeech();
     editOriginIdxRef.current = currentIdx;
     editOriginDocIdRef.current = activeDocId;
     const list = sentences ?? [];
+
+    // Quick-edit mode: edit just this sentence, in place.
+    if (tapMode === "sentence" && list.length > 0) {
+      setQuickEditText(list[currentIdx]?.content ?? "");
+      setQuickEditing(true);
+      editingRef.current = true; // block navigation while the box is open
+      return;
+    }
+
     if (list.length === 0) {
       setEditText("");
       setEditing(true);
@@ -1488,7 +1505,7 @@ function AppPageInner() {
     setEditText(full);
     setEditing(true);
     editingRef.current = true;
-  }, [editing, currentIdx, sentences, activeDocId]);
+  }, [editing, quickEditing, tapMode, currentIdx, sentences, activeDocId]);
 
   // Voice → New idea: transcribe the clip and drop the text into the New idea
   // composer so the user can edit it and send it wherever they want.
@@ -1814,6 +1831,55 @@ function AppPageInner() {
     editOriginDocIdRef.current = null;
     setEditText("");
   }, []);
+
+  const cancelQuickEdit = useCallback(() => {
+    setQuickEditing(false);
+    editingRef.current = false;
+    setQuickEditText("");
+  }, []);
+
+  /**
+   * Quick edit: replace just the current sentence with whatever the user typed,
+   * splitting it into multiple sentences when it contains more than one.
+   */
+  const commitQuickEdit = useCallback(async () => {
+    const docId = activeDocId;
+    const list = sentences ?? [];
+    if (!docId || list.length === 0) { cancelQuickEdit(); return; }
+    const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
+    const parts = parseEditParts(quickEditText);
+
+    if (list[idx]?.content === quickEditText.trim() || (parts.length === 1 && parts[0] === list[idx]?.content)) {
+      cancelQuickEdit();
+      return;
+    }
+
+    const contents = list.map((s) => s.content);
+    contents.splice(idx, 1, ...parts);
+
+    const { error } = await supabase.rpc("commit_document_edit", {
+      p_document_id: docId,
+      p_contents: contents,
+    });
+    if (error) {
+      console.error("[quick-edit] commit failed", error);
+      toast.error("Couldn't save edits");
+      return;
+    }
+
+    qc.invalidateQueries({ queryKey: ["sentences", docId] });
+    setQuickEditing(false);
+    editingRef.current = false;
+    setQuickEditText("");
+
+    const targetIdx = Math.max(0, Math.min(idx, contents.length - 1));
+    await setIndex(targetIdx);
+    const spoken = contents[targetIdx];
+    if (spoken) {
+      const token = claimSpeech();
+      speak(spoken, token);
+    }
+  }, [activeDocId, sentences, quickEditText, parseEditParts, qc, setIndex, speak, claimSpeech, cancelQuickEdit]);
 
   // Never leave the mic open once the editor closes.
   useEffect(() => {
@@ -2486,9 +2552,29 @@ function AppPageInner() {
     qc.invalidateQueries({ queryKey: ["documents"] });
   }, [activeDoc, favorites, saveFavorites, qc]);
 
+  /** Copy every sentence of the open document, one blank line between each. */
+  const copyWholeDocument = useCallback(async () => {
+    setMenuOpen(false);
+    if (!activeDocId) { toast.error("No document open"); return; }
+    let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
+    if (!list) {
+      const { data } = await supabase
+        .from("sentences")
+        .select("content")
+        .eq("document_id", activeDocId)
+        .order("order_index", { ascending: true });
+      list = data ?? [];
+    }
+    const full = list.map((s) => s.content).join("\n\n").trim();
+    if (!full) { toast.error("Document is empty"); return; }
+    const ok = await copyToClipboard(full);
+    if (ok) toast.success("Copied document");
+    else toast.error("Failed to copy");
+  }, [activeDocId, qc]);
+
   const grid = useMemo(() => [
 
-    { e: "🌓", t: "Theme", fn: () => void saveTheme(theme === "dark" ? "light" : "dark") },
+    { e: "🌓", t: "Theme", fn: () => { setMenuOpen(false); setThemeSheetOpen(true); } },
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
@@ -2553,25 +2639,8 @@ function AppPageInner() {
         if (ok) toast.success("Copied sentence");
         else toast.error("Failed to copy");
       });
-    }},
-    { e: "📄", t: "Copy document", fn: async () => {
-      setMenuOpen(false);
-      if (!activeDocId) { toast.error("No document open"); return; }
-      let list = qc.getQueryData<Array<{ content: string }>>(["sentences", activeDocId]);
-      if (!list) {
-        const { data } = await supabase
-          .from("sentences")
-          .select("content")
-          .eq("document_id", activeDocId)
-          .order("order_index", { ascending: true });
-        list = data ?? [];
-      }
-      const full = list.map((s) => s.content).join(" ").trim();
-      if (!full) { toast.error("Document is empty"); return; }
-      const ok = await copyToClipboard(full);
-      if (ok) toast.success("Copied document");
-      else toast.error("Failed to copy");
-    }},
+    }, onLongPress: () => { void copyWholeDocument(); }},
+    { e: "📄", t: "Copy document", fn: () => { void copyWholeDocument(); }},
     { e: "🚪", t: "Sign out", fn: async () => {
       await supabase.auth.signOut();
       navigate({ to: "/" });
@@ -2637,7 +2706,7 @@ function AppPageInner() {
       })();
     } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, chatUnreadCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
+  ], [copyWholeDocument, theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, chatUnreadCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
 
 
 
@@ -2651,7 +2720,7 @@ function AppPageInner() {
     filled[4] = grid[7];   // 5  Delete doc
     filled[5] = grid[10];  // 6  Move sentence (long-press preserved)
     // 7 intentionally left blank
-    filled[7] = grid[13];  // 8  Copy document
+    filled[7] = grid[12];  // 8  Copy sentence (hold to copy the whole document)
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
     filled[10] = grid[2];  // 11 Chat (opens the chat list)
@@ -2830,6 +2899,50 @@ function AppPageInner() {
               className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-2xl"
               style={{ minHeight: "60vh", maxHeight: "82vh" }}
             />
+          ) : quickEditing ? (
+            <div className="w-full">
+              <textarea
+                ref={(el) => {
+                  if (!el || (el as any).__quickInit) return;
+                  (el as any).__quickInit = true;
+                  requestAnimationFrame(() => {
+                    el.focus();
+                    try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+                  });
+                }}
+                value={quickEditText}
+                onChange={(e) => setQuickEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelQuickEdit();
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void commitQuickEdit();
+                  }
+                }}
+                rows={3}
+                inputMode="text"
+                placeholder="Edit this sentence…"
+                className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none [touch-action:auto] placeholder:text-muted-foreground/40 md:text-4xl"
+              />
+              <div className="mt-4 flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={cancelQuickEdit}
+                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void commitQuickEdit()}
+                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           ) : (
             <div
               ref={centerRef}
@@ -3158,6 +3271,80 @@ function AppPageInner() {
           speakText("This is Orby speaking with your selected voice.");
         }}
       />
+
+      {/* Appearance + sentence-press settings */}
+      {themeSheetOpen && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
+          onClick={() => setThemeSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-5 backdrop-blur"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="font-display text-lg">🌓 Theme</div>
+              <button
+                onClick={() => setThemeSheetOpen(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Appearance</div>
+            <div className="mb-5 grid grid-cols-2 gap-2">
+              {(["light", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => void saveTheme(t)}
+                  className={cn(
+                    "rounded-2xl border px-3 py-2.5 text-sm transition active:scale-95",
+                    theme === t
+                      ? "border-foreground/30 bg-foreground/10 font-medium"
+                      : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+                  )}
+                >
+                  {t === "light" ? "☀️ Light" : "🌙 Dark"}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+              Pressing a sentence
+            </div>
+            <div className="grid gap-2">
+              {([
+                { v: "editor", label: "📝 Open the full editor", hint: "Edit the whole document at once." },
+                { v: "sentence", label: "✏️ Quick edit this sentence", hint: "Edit just this sentence, right where it is." },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => {
+                    setTapMode(opt.v);
+                    if (typeof window !== "undefined") {
+                      window.localStorage.setItem("orby_tap_mode", opt.v);
+                    }
+                  }}
+                  className={cn(
+                    "rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
+                    tapMode === opt.v
+                      ? "border-foreground/30 bg-foreground/10 font-medium"
+                      : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+                  )}
+                >
+                  <div>{opt.label}</div>
+                  <div className="text-xs font-normal text-muted-foreground">{opt.hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+
 
       {menuOpen && (
         <div
