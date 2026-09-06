@@ -1647,7 +1647,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 rows={3}
                 className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
-              <div className="flex shrink-0 flex-col gap-2">
+              <div className="flex shrink-0 flex-col justify-end gap-2">
                 <Button
                   size="icon"
                   variant="ghost"
