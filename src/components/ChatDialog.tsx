@@ -1626,7 +1626,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     .join(" · ")}
             </div>
 
-            <div className="flex items-end gap-2">
+            <div className="flex items-stretch gap-2">
               <Textarea
                 ref={textareaRef}
                 value={input}
