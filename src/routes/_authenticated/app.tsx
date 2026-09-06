@@ -2899,6 +2899,50 @@ function AppPageInner() {
               className="w-full resize-none overflow-y-auto bg-transparent text-left font-display text-xl leading-snug outline-none placeholder:text-muted-foreground/40 md:text-2xl"
               style={{ minHeight: "60vh", maxHeight: "82vh" }}
             />
+          ) : quickEditing ? (
+            <div className="w-full">
+              <textarea
+                ref={(el) => {
+                  if (!el || (el as any).__quickInit) return;
+                  (el as any).__quickInit = true;
+                  requestAnimationFrame(() => {
+                    el.focus();
+                    try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+                  });
+                }}
+                value={quickEditText}
+                onChange={(e) => setQuickEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelQuickEdit();
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void commitQuickEdit();
+                  }
+                }}
+                rows={3}
+                inputMode="text"
+                placeholder="Edit this sentence…"
+                className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none [touch-action:auto] placeholder:text-muted-foreground/40 md:text-4xl"
+              />
+              <div className="mt-4 flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={cancelQuickEdit}
+                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void commitQuickEdit()}
+                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           ) : (
             <div
               ref={centerRef}
