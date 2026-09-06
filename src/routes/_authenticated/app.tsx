@@ -126,6 +126,14 @@ function AppPageInner() {
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [soundSettingsOpen, setSoundSettingsOpen] = useState(false);
+  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  /** What a single press on the sentence does. Remembered on this device. */
+  const [tapMode, setTapMode] = useState<"editor" | "sentence">(() => {
+    if (typeof window === "undefined") return "editor";
+    return window.localStorage.getItem("orby_tap_mode") === "sentence" ? "sentence" : "editor";
+  });
+  const [quickEditing, setQuickEditing] = useState(false);
+  const [quickEditText, setQuickEditText] = useState("");
   
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
