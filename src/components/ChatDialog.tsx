@@ -1626,64 +1626,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     .join(" · ")}
             </div>
 
-            <div className="flex items-end gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  // Starting a recording must silence any read-aloud first so
-                  // Orby's voice doesn't bleed into the user's dictation.
-                  if (!dictation.recording) {
-                    cancelSpeech();
-                    setSpeakingId(null);
-                  }
-                  void dictation.toggle();
-                }}
-                disabled={dictation.transcribing}
-                aria-label={dictation.recording ? "Stop recording" : "Start voice input"}
-                title={dictation.recording ? "Stop and transcribe" : "Voice input"}
-                className="shrink-0 text-lg"
-              >
-                {dictation.transcribing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : dictation.recording ? (
-                  <span aria-hidden>⬛️</span>
-                ) : (
-                  <span aria-hidden>🔴</span>
-                )}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                type="button"
-                onClick={() => {
-                  if (!activeThreadId) return;
-                  if (!input.trim()) {
-                    toast.error("Type the message you want to schedule first");
-                    return;
-                  }
-                  setScheduleOpen(true);
-                }}
-                aria-label="Schedule this message"
-                title="Send this message later (works with the app closed)"
-                className="shrink-0"
-              >
-                <Clock className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                type="button"
-                onClick={() => setDocTextPickerOpen(true)}
-                aria-label="Insert document text"
-                title="Add a document's text to the message box"
-                className="shrink-0"
-              >
-                <StickyNote className="h-4 w-4" />
-              </Button>
+            <div className="flex items-stretch gap-2">
               <Textarea
-
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => {
@@ -1703,14 +1647,70 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 rows={3}
                 className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
-              <Button
-                size="icon"
-                onClick={() => void handleSend()}
-                disabled={isActiveBusy || !input.trim()}
-                aria-label="Send"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+              <div className="flex shrink-0 flex-col justify-end gap-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    if (!activeThreadId) return;
+                    if (!input.trim()) {
+                      toast.error("Type the message you want to schedule first");
+                      return;
+                    }
+                    setScheduleOpen(true);
+                  }}
+                  aria-label="Schedule this message"
+                  title="Send this message later (works with the app closed)"
+                >
+                  <Clock className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setDocTextPickerOpen(true)}
+                  aria-label="Insert document text"
+                  title="Add a document's text to the message box"
+                >
+                  <StickyNote className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    // Starting a recording must silence any read-aloud first so
+                    // Orby's voice doesn't bleed into the user's dictation.
+                    if (!dictation.recording) {
+                      cancelSpeech();
+                      setSpeakingId(null);
+                    }
+                    void dictation.toggle();
+                  }}
+                  disabled={dictation.transcribing}
+                  aria-label={dictation.recording ? "Stop recording" : "Start voice input"}
+                  title={dictation.recording ? "Stop and transcribe" : "Voice input"}
+                  className="text-lg"
+                >
+                  {dictation.transcribing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : dictation.recording ? (
+                    <span aria-hidden>⬛️</span>
+                  ) : (
+                    <span aria-hidden>🔴</span>
+                  )}
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => void handleSend()}
+                  disabled={isActiveBusy || !input.trim()}
+                  aria-label="Send"
+                  className="bg-aurora-1 text-foreground hover:bg-aurora-1/90"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
