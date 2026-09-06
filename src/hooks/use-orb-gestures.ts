@@ -187,7 +187,8 @@ export function useOrbGestures(
 
       /* -------------------------- mouse fallback ------------------------- */
       const onMouseDown = (e: MouseEvent) => {
-        if (usingPointer || active) return;
+        if (usingPointer || active || ignored(e.target)) return;
+
         e.preventDefault();
         begin(e.clientX, e.clientY, false);
       };
