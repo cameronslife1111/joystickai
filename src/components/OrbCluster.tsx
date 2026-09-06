@@ -195,9 +195,8 @@ function ClusterOrb({
 }
 
 export function OrbCluster({
-  recording,
-  centerRef,
   pressRef,
+
   onPrev,
   onNext,
   onMenu,
