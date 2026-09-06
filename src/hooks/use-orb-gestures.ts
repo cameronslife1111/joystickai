@@ -158,12 +158,18 @@ export function useOrbGestures(
       /* ------------------------- pointer events ------------------------- */
       let activePointerId: number | null = null;
 
+      /** Presses starting on e.g. a link keep their native behavior. */
+      const ignored = (target: EventTarget | null) =>
+        !!ignoreSelector && !!(target as HTMLElement | null)?.closest?.(ignoreSelector);
+
       const onPointerDown = (e: PointerEvent) => {
+        if (ignored(e.target)) return;
         // Stop native drag / text selection from stealing the interaction.
         e.preventDefault();
         activePointerId = e.pointerId;
         begin(e.clientX, e.clientY, true);
       };
+
       const onPointerMove = (e: PointerEvent) => {
         if (!usingPointer || e.pointerId !== activePointerId) return;
         move(e.clientX, e.clientY);
