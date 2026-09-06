@@ -742,3 +742,15 @@
   width: clamp(44px, 12vw, 60px);
   height: clamp(44px, 12vw, 60px);
 }
+
+/* Tile version of the legend: gapless rounded rectangles filling their cells. */
+.landing-cluster-tiles .landing-orb {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  animation: orb-tile-pulse 2.5s ease-in-out infinite;
+}
+.landing-cluster-tiles .landing-float {
+  animation: none;
+}
+
