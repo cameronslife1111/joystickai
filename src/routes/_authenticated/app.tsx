@@ -2706,7 +2706,7 @@ function AppPageInner() {
       })();
     } },
     { e: "🗑️", t: "Mark trash", fn: () => void markCurrentTrash() },
-  ], [theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, chatUnreadCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
+  ], [copyWholeDocument, theme, saveTheme, muted, currentSentence, docs, activeDoc, activeDocId, favorites, saveFavorites, qc, navigate, unseenCount, chatUnreadCount, handleExportAll, openLinkedDocument, openPinnedDocument, pendingPlanCount, lockFavorites, saveLockFavorites, saveLockedDoc, swapSlot, markCurrentTrash, moveSentence, moveCurrentToBottom, sentences, recentIds, claimSpeech, speak]);
 
 
 
@@ -2720,7 +2720,7 @@ function AppPageInner() {
     filled[4] = grid[7];   // 5  Delete doc
     filled[5] = grid[10];  // 6  Move sentence (long-press preserved)
     // 7 intentionally left blank
-    filled[7] = grid[13];  // 8  Copy document
+    filled[7] = grid[12];  // 8  Copy sentence (hold to copy the whole document)
     filled[8] = grid[15];  // 9  Import checklists
     filled[9] = grid[14];  // 10 Sign out
     filled[10] = grid[2];  // 11 Chat (opens the chat list)
