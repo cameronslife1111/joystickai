@@ -1571,9 +1571,9 @@ function AppPageInner() {
   const onLongPressEnd = useCallback(() => {}, []);
 
 
-  // The transparent center pad is the only gesture surface: tap opens the
-  // editor, long-press toggles voice recording. Navigation lives on the six
-  // surrounding orb buttons now — no swipe handling here.
+  // The sentence text is the gesture surface: tap opens the editor,
+  // long-press toggles voice recording. Navigation lives on the eight
+  // surrounding orb tiles — no swipe handling here.
   useOrbGestures(
     centerRef,
     {
@@ -1583,11 +1583,14 @@ function AppPageInner() {
       onLongPressEnd,
     },
     {
-      // The cluster is unmounted while the editor is open, so exiting edit
-      // mode creates a brand-new center pad — rebind listeners to it.
+      // The sentence surface is unmounted while the editor is open, so exiting
+      // edit mode creates a brand-new element — rebind listeners to it.
       rebindKey: editing ? "edit" : "read",
+      // Links inside a sentence keep their native tap behavior.
+      ignoreSelector: "a",
     },
   );
+
 
   // Arrow keys mirror the four navigation orbs for keyboard / Bluetooth-keyboard
   // users. The press goes through the real button click so the giggle animation
