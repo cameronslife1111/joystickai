@@ -505,17 +505,19 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
+        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
       const savedVoice = data?.tts_voice;
       const savedPrefetch = Number((data as any)?.tts_prefetch);
-      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
+      const savedTap = (data as any)?.tap_mode;
+      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null };
+
     },
   });
   const favorites = prefs?.favorites ?? [];
