@@ -132,6 +132,8 @@ function AppPageInner() {
     if (typeof window === "undefined") return "editor";
     return window.localStorage.getItem("orby_tap_mode") === "sentence" ? "sentence" : "editor";
   });
+  /** Open a sentence's linked chat automatically when we land on it. */
+  const [autoOpenLinkedChat, setAutoOpenLinkedChat] = useState(false);
   const [quickEditing, setQuickEditing] = useState(false);
   const [quickEditText, setQuickEditText] = useState("");
   
