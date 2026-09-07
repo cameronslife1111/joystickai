@@ -132,6 +132,8 @@ function AppPageInner() {
     if (typeof window === "undefined") return "editor";
     return window.localStorage.getItem("orby_tap_mode") === "sentence" ? "sentence" : "editor";
   });
+  /** Open a sentence's linked chat automatically when we land on it. */
+  const [autoOpenLinkedChat, setAutoOpenLinkedChat] = useState(false);
   const [quickEditing, setQuickEditing] = useState(false);
   const [quickEditText, setQuickEditText] = useState("");
   
@@ -505,10 +507,10 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode")
+        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
@@ -516,7 +518,7 @@ function AppPageInner() {
       const savedVoice = data?.tts_voice;
       const savedPrefetch = Number((data as any)?.tts_prefetch);
       const savedTap = (data as any)?.tap_mode;
-      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null };
+      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat };
 
     },
   });
@@ -546,6 +548,16 @@ function AppPageInner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs?.tap_mode]);
+
+  // Hydrate the auto-open-linked-chat preference from the account.
+  useEffect(() => {
+    if (typeof prefs?.auto_open_linked_chat === "boolean") {
+      setAutoOpenLinkedChat(prefs.auto_open_linked_chat);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.auto_open_linked_chat]);
+
+
 
 
   useEffect(() => {
@@ -583,6 +595,18 @@ function AppPageInner() {
       { onConflict: "user_id" },
     );
   }, [qc, favorites]);
+
+  const saveAutoOpenLinkedChat = useCallback(async (next: boolean) => {
+    setAutoOpenLinkedChat(next);
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), auto_open_linked_chat: next }));
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, auto_open_linked_chat: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
+
 
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
@@ -1369,6 +1393,25 @@ function AppPageInner() {
     setChatOpen(true);
     return true;
   }, [currentSentence?.linked_thread_id, claimSpeech]);
+
+  // Auto-open a sentence's linked chat when the preference is on. The ref keeps
+  // it from reopening on the same sentence after the user closes the chat.
+  const autoOpenedSentenceRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sid = currentSentence?.id ?? null;
+    if (autoOpenedSentenceRef.current && autoOpenedSentenceRef.current !== sid) {
+      autoOpenedSentenceRef.current = null;
+    }
+    if (!autoOpenLinkedChat || !sid) return;
+    if (chatOpen || editing || quickEditing || composing) return;
+    if (currentSentence?.linked_document_id || !currentSentence?.linked_thread_id) return;
+    if (autoOpenedSentenceRef.current === sid) return;
+    autoOpenedSentenceRef.current = sid;
+    void openLinkedChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenLinkedChat, chatOpen, editing, quickEditing, composing, currentSentence?.id, currentSentence?.linked_thread_id, currentSentence?.linked_document_id]);
+
+
 
   const onSwipeRightRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -3441,6 +3484,25 @@ function AppPageInner() {
                 </button>
               ))}
             </div>
+
+            <div className="mb-1 mt-5 text-xs uppercase tracking-wide text-muted-foreground">
+              Linked chats
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveAutoOpenLinkedChat(!autoOpenLinkedChat)}
+              className={cn(
+                "w-full rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
+                autoOpenLinkedChat
+                  ? "border-foreground/30 bg-foreground/10 font-medium"
+                  : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+              )}
+            >
+              <div>{autoOpenLinkedChat ? "✅ Open linked chats automatically" : "⬜️ Open linked chats automatically"}</div>
+              <div className="text-xs font-normal text-muted-foreground">
+                Landing on a sentence with a chat linked to it opens that chat for you.
+              </div>
+            </button>
           </div>
         </div>
       )}

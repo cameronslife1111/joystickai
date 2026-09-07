@@ -50,6 +50,13 @@
       "when": 1788785120110,
       "tag": "0006_add_tap_mode_to_user_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788819083237,
+      "tag": "0007_add_auto_open_linked_chat",
+      "breakpoints": true
     }
   ]
 }
