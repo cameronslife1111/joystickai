@@ -189,7 +189,7 @@ const CLUSTER: Array<{
   row: number;
   rowSpan: number;
 }> = [
-  { color: "red", label: "Delete sentence / search docs", col: 1, row: 1, rowSpan: 2 },
+  { color: "red", label: "Recent docs / search docs", col: 1, row: 1, rowSpan: 2 },
   { color: "yellow", label: "Open the menu (hold for New idea)", col: 1, row: 3, rowSpan: 2 },
   { color: "pink", label: "Jump to / move sentence", col: 1, row: 5, rowSpan: 2 },
   { color: "blue", label: "Previous sentence", col: 2, row: 1, rowSpan: 3 },

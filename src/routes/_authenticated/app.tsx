@@ -18,9 +18,6 @@ import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/l
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
 
-import { transcribeAudio } from "@/lib/whisper.functions";
-
-import { startPcmRecorder, blobToBase64, releaseMic, micErrorMessage, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { HandsFreeProvider, HandsFreeIndicator } from "@/lib/hands-free";
@@ -178,9 +175,6 @@ function AppPageInner() {
   } | null>(null);
 
 
-  const [recording, setRecording] = useState(false);
-  const recorderRef = useRef<PcmRecorder | null>(null);
-  const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
   const [askingAi, setAskingAi] = useState(false);
 
@@ -273,7 +267,7 @@ function AppPageInner() {
     }
   }, [composeText, askingAi, askOrby]);
 
-  const transcribe = useServerFn(transcribeAudio);
+  
   const sendChat = useServerFn(sendChatMessage);
   const nameChatThread = useServerFn(generateThreadTitle);
 
@@ -1578,86 +1572,13 @@ function AppPageInner() {
     editingRef.current = true;
   }, [editing, quickEditing, tapMode, currentIdx, sentences, activeDocId]);
 
-  // Voice → New idea: transcribe the clip and drop the text into the New idea
-  // composer so the user can edit it and send it wherever they want.
-  const dispatchVoiceToComposer = useCallback(
-    async (audioBlob: Blob) => {
-      const listeningId = `voice-${Date.now()}`;
-      toast.loading("Transcribing…", { id: listeningId });
-      try {
-        const audioBase64 = await blobToBase64(audioBlob);
-        const { text } = await transcribe({
-          data: { audioBase64, mimeType: audioBlob.type || "audio/wav" },
-        });
-        const transcript = (text ?? "").trim();
-        if (!transcript) {
-          toast.dismiss(listeningId);
-          return;
-        }
-        openNewIdea();
-        setComposeText((prev) => appendTranscript(prev, transcript));
-        toast.dismiss(listeningId);
-      } catch (err: any) {
-        toast.error(err?.message ?? "Transcription failed", { id: listeningId });
-      }
-    },
-    [transcribe, openNewIdea],
-  );
-
-
-  const micStartingRef = useRef(false);
-
+  // Holding the sentence deletes it (with the usual undo notice). Voice ideas
+  // now live behind the yellow tile's New idea composer.
   const onLongPressStart = useCallback(() => {
-    if (editing) return;
-    // Toggle: if already recording, this long-press stops and dispatches.
-    if (recorderRef.current) {
-      const rec = recorderRef.current;
-      const durationMs = Date.now() - recordStartMsRef.current;
-      recorderRef.current = null;
-      setRecording(false);
-      recordingRef.current = false;
-      void (async () => {
-        let blob: Blob | null = null;
-        try {
-          blob = await rec.stop();
-        } finally {
-          // Fully release the mic so iOS drops the recording indicator the
-          // moment the second long-press stops recording.
-          releaseMic();
-        }
-        if (!blob || durationMs < 400 || blob.size < 4096) return;
-        void dispatchVoiceToComposer(blob);
-      })();
-      return;
-    }
-    if (micStartingRef.current) return;
-    // Cancel any in-flight speech so the mic doesn't pick up the orb's voice.
-    cancelSpeech();
-    micStartingRef.current = true;
-    void (async () => {
-      try {
-        const rec = await startPcmRecorder();
-        // Only glow red once the mic is actually delivering audio — otherwise
-        // the first second or two of speech is spoken into a dead mic.
-        await rec.ready;
-        recorderRef.current = rec;
-        recordStartMsRef.current = Date.now();
-        setRecording(true);
-        recordingRef.current = true;
-      } catch (err: any) {
-        setRecording(false);
-        recordingRef.current = false;
-        recorderRef.current = null;
-        releaseMic();
-        const message = micErrorMessage(err);
-        if (message) toast.error(message);
-      } finally {
-        micStartingRef.current = false;
-      }
-    })();
-  }, [editing, dispatchVoiceToComposer]);
+    if (editing || quickEditing) return;
+    void deleteCurrent();
+  }, [editing, quickEditing, deleteCurrent]);
 
-  // Release no longer stops recording — stop is triggered by a second long-press.
   const onLongPressEnd = useCallback(() => {}, []);
 
 
@@ -3057,15 +2978,15 @@ function AppPageInner() {
               ref={centerRef}
               role="button"
               tabIndex={-1}
-              aria-label="Press to edit document, hold to record a voice idea"
-              className={cn("sentence-surface", recording && "sentence-recording")}
+              aria-label="Press to edit, hold to delete this sentence"
+              className="sentence-surface"
             >
               <p className="font-display text-3xl leading-tight md:text-4xl">
                 {currentSentence ? (
                   <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
                 ) : (
                   <span className="text-muted-foreground italic text-2xl">
-                    Press here to write, or hold to speak.
+                    Press here to write.
                   </span>
                 )}
               </p>
@@ -3346,8 +3267,8 @@ function AppPageInner() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
-            onDelete={() => void deleteCurrent()}
-            onDeleteLongPress={() => {
+            onRecents={() => setRecentOpen(true)}
+            onRecentsLongPress={() => {
               setSearchQuery("");
               setSearchOpen(true);
             }}
