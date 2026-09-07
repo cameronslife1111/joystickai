@@ -3377,12 +3377,8 @@ function AppPageInner() {
                 <button
                   key={opt.v}
                   type="button"
-                  onClick={() => {
-                    setTapMode(opt.v);
-                    if (typeof window !== "undefined") {
-                      window.localStorage.setItem("orby_tap_mode", opt.v);
-                    }
-                  }}
+                  onClick={() => void saveTapMode(opt.v)}
+
                   className={cn(
                     "rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
                     tapMode === opt.v
