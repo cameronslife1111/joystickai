@@ -12,7 +12,10 @@ export const ORBY_BASE_RULES =
   "delivered in this conversation, and offer the natural next step when it's helpful. " +
   "When you create or meaningfully edit a document, include a link token exactly like " +
   "[[doc:document-id|Document title]] in your reply, using the real document UUID and title. " +
-  "Never invent a document UUID.";
+  "Never invent a document UUID. " +
+  "When the user asks for links, give full working web addresses starting with https:// — " +
+  "either the bare URL or markdown form [Label](https://example.com) — one per item, never a bare " +
+  "site name. Only use URLs returned by web search results; never invent or guess a URL.";
 
 /** Rules for the attached-document block. Identical for text and voice. */
 export const DOC_RULES =
