@@ -896,6 +896,8 @@ function AppPageInner() {
   const busyRef = useRef(false);
   busyRef.current =
     editing ||
+    quickEditing ||
+
     menuOpen ||
     favoritesOpen ||
     jumpOpen ||
@@ -1647,7 +1649,12 @@ function AppPageInner() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== "Space" && e.key !== " ") return;
       if (busyRef.current) return; // typing in an editor / dialog open
+      // Never steal a space typed into any text field.
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
       e.preventDefault();
+
       spaceTaps += 1;
       if (spaceTimer) clearTimeout(spaceTimer);
       spaceTimer = setTimeout(() => {
@@ -1849,10 +1856,20 @@ function AppPageInner() {
     const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
     const parts = parseEditParts(quickEditText);
 
-    if (list[idx]?.content === quickEditText.trim() || (parts.length === 1 && parts[0] === list[idx]?.content)) {
+    // Nothing typed at all: just close.
+    if (parts.length === 0) {
       cancelQuickEdit();
       return;
     }
+
+    // Unchanged text: skip the save, but still read the sentence back.
+    if (parts.length === 1 && parts[0] === list[idx]?.content) {
+      cancelQuickEdit();
+      const token = claimSpeech();
+      speak(parts[0], token);
+      return;
+    }
+
 
     const contents = list.map((s) => s.content);
     contents.splice(idx, 1, ...parts);
@@ -2913,6 +2930,9 @@ function AppPageInner() {
                 value={quickEditText}
                 onChange={(e) => setQuickEditText(e.target.value)}
                 onKeyDown={(e) => {
+                  // Keep every keystroke — including the space bar — inside the
+                  // box; the window-level shortcuts must not see them.
+                  e.stopPropagation();
                   if (e.key === "Escape") {
                     e.preventDefault();
                     cancelQuickEdit();
@@ -2926,23 +2946,8 @@ function AppPageInner() {
                 placeholder="Edit this sentence…"
                 className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none [touch-action:auto] placeholder:text-muted-foreground/40 md:text-4xl"
               />
-              <div className="mt-4 flex justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={cancelQuickEdit}
-                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void commitQuickEdit()}
-                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-                >
-                  Done
-                </button>
-              </div>
             </div>
+
           ) : (
             <div
               ref={centerRef}
@@ -2965,6 +2970,30 @@ function AppPageInner() {
 
         </div>
       </section>
+
+      {/* Quick-edit action buttons (just above the tile cluster) */}
+      {quickEditing && (
+        <div className="relative z-10 flex justify-center pb-3">
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={cancelQuickEdit}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void commitQuickEdit()}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+
 
       {/* Compose action buttons (above orb) */}
       {composing && (
