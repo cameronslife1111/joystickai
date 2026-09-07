@@ -178,9 +178,6 @@ function AppPageInner() {
   } | null>(null);
 
 
-  const [recording, setRecording] = useState(false);
-  const recorderRef = useRef<PcmRecorder | null>(null);
-  const recordStartMsRef = useRef<number>(0);
   const [composeText, setComposeText] = useState("");
   const [askingAi, setAskingAi] = useState(false);
 
@@ -273,7 +270,7 @@ function AppPageInner() {
     }
   }, [composeText, askingAi, askOrby]);
 
-  const transcribe = useServerFn(transcribeAudio);
+  
   const sendChat = useServerFn(sendChatMessage);
   const nameChatThread = useServerFn(generateThreadTitle);
 
@@ -2984,8 +2981,8 @@ function AppPageInner() {
               ref={centerRef}
               role="button"
               tabIndex={-1}
-              aria-label="Press to edit document, hold to record a voice idea"
-              className={cn("sentence-surface", recording && "sentence-recording")}
+              aria-label="Press to edit, hold to delete this sentence"
+              className="sentence-surface"
             >
               <p className="font-display text-3xl leading-tight md:text-4xl">
                 {currentSentence ? (
