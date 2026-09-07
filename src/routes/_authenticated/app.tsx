@@ -896,6 +896,8 @@ function AppPageInner() {
   const busyRef = useRef(false);
   busyRef.current =
     editing ||
+    quickEditing ||
+
     menuOpen ||
     favoritesOpen ||
     jumpOpen ||
