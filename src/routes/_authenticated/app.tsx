@@ -1924,6 +1924,41 @@ function AppPageInner() {
     }
   }, [activeDocId, sentences, quickEditText, parseEditParts, qc, setIndex, speak, claimSpeech, cancelQuickEdit]);
 
+  /** Quick edit: copy whatever is in the box to the clipboard, stay in the box. */
+  const copyQuickEditText = useCallback(async () => {
+    const text = quickEditText.trim();
+    if (!text) { toast("🤷 Nothing to copy", { id: "quick-edit-copy" }); return; }
+    const ok = await copyToClipboard(text);
+    if (ok) toast.success("📋 Copied", { id: "quick-edit-copy" });
+    else toast.error("Couldn't copy", { id: "quick-edit-copy" });
+  }, [quickEditText]);
+
+  /** Quick edit: save an extra identical copy right after this sentence, keep editing. */
+  const duplicateQuickEditSentence = useCallback(async () => {
+    const docId = activeDocId;
+    const list = sentences ?? [];
+    if (!docId || list.length === 0) return;
+    const parts = parseEditParts(quickEditText);
+    if (parts.length === 0) return;
+    const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
+
+    const contents = list.map((s) => s.content);
+    contents.splice(idx, 1, ...parts, ...parts);
+
+    const { error } = await supabase.rpc("commit_document_edit", {
+      p_document_id: docId,
+      p_contents: contents,
+    });
+    if (error) {
+      console.error("[quick-edit] duplicate failed", error);
+      toast.error("Couldn't save edits");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["sentences", docId] });
+    toast.success("📄 Duplicated", { id: "quick-edit-duplicate" });
+  }, [activeDocId, sentences, quickEditText, parseEditParts, qc]);
+
+
   // Never leave the mic open once the editor closes.
   useEffect(() => {
     if (!editing) {
