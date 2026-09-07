@@ -1649,7 +1649,12 @@ function AppPageInner() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== "Space" && e.key !== " ") return;
       if (busyRef.current) return; // typing in an editor / dialog open
+      // Never steal a space typed into any text field.
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
       e.preventDefault();
+
       spaceTaps += 1;
       if (spaceTimer) clearTimeout(spaceTimer);
       spaceTimer = setTimeout(() => {
