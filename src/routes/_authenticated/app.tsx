@@ -3484,6 +3484,25 @@ function AppPageInner() {
                 </button>
               ))}
             </div>
+
+            <div className="mb-1 mt-5 text-xs uppercase tracking-wide text-muted-foreground">
+              Linked chats
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveAutoOpenLinkedChat(!autoOpenLinkedChat)}
+              className={cn(
+                "w-full rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
+                autoOpenLinkedChat
+                  ? "border-foreground/30 bg-foreground/10 font-medium"
+                  : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
+              )}
+            >
+              <div>{autoOpenLinkedChat ? "✅ Open linked chats automatically" : "⬜️ Open linked chats automatically"}</div>
+              <div className="text-xs font-normal text-muted-foreground">
+                Landing on a sentence with a chat linked to it opens that chat for you.
+              </div>
+            </button>
           </div>
         </div>
       )}
