@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { linkify, stripMarkdownLinks } from "@/lib/linkify";
 
 /**
  * Renders chat text and turns [[doc:<uuid>|Title]] tokens into tappable pills
- * that open that document in the app (closing the chat first).
+ * that open that document in the app (closing the chat first). Web addresses
+ * (and markdown links) become real tappable links.
  */
 const DOC_TOKEN =
   /\[\[doc:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\|([^\]]*))?\]\]/g;
@@ -16,7 +18,9 @@ export function hasDocLink(text: string): boolean {
 
 /** Strip link tokens so speech / copy stay clean. */
 export function stripDocLinks(text: string): string {
-  return (text ?? "").replace(DOC_TOKEN, (_m, _id, title) => (title ? String(title).trim() : "")).trim();
+  return stripMarkdownLinks(
+    (text ?? "").replace(DOC_TOKEN, (_m, _id, title) => (title ? String(title).trim() : "")),
+  ).trim();
 }
 
 type Props = {
@@ -25,6 +29,26 @@ type Props = {
   onOpenDocument?: (documentId: string) => void;
 };
 
+/** Plain text run → text plus <a> links. */
+function renderLinks(text: string, keyPrefix: string): ReactNode[] {
+  return linkify(text).map((seg, i) =>
+    seg.type === "text" ? (
+      <span key={`${keyPrefix}t${i}`}>{seg.value}</span>
+    ) : (
+      <a
+        key={`${keyPrefix}l${i}`}
+        href={seg.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="break-all font-medium underline decoration-current/50 underline-offset-2 transition hover:decoration-current"
+      >
+        {seg.display}
+      </a>
+    ),
+  );
+}
+
 export function DocLinkText({ text, className, onOpenDocument }: Props) {
   const src = text ?? "";
   const nodes: ReactNode[] = [];
@@ -32,7 +56,7 @@ export function DocLinkText({ text, className, onOpenDocument }: Props) {
   DOC_TOKEN.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = DOC_TOKEN.exec(src))) {
-    if (m.index > last) nodes.push(<span key={`t${last}`}>{src.slice(last, m.index)}</span>);
+    if (m.index > last) nodes.push(...renderLinks(src.slice(last, m.index), `p${last}`));
     const id = m[1];
     const title = (m[2] ?? "").trim() || "Open document";
     nodes.push(
@@ -48,10 +72,11 @@ export function DocLinkText({ text, className, onOpenDocument }: Props) {
     );
     last = m.index + m[0].length;
   }
-  if (last < src.length) nodes.push(<span key={`t${last}`}>{src.slice(last)}</span>);
+  if (last < src.length) nodes.push(...renderLinks(src.slice(last), `p${last}`));
 
-  return <span className={cn("whitespace-pre-wrap", className)}>{nodes}</span>;
+  return <span className={cn("whitespace-pre-wrap break-words", className)}>{nodes}</span>;
 }
+
 
 /** A standalone row of document pills (used by plan cards). */
 export function DocLinkRow({
