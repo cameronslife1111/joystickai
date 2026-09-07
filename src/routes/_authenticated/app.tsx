@@ -572,6 +572,19 @@ function AppPageInner() {
     );
   }, [qc, favorites]);
 
+  const saveTapMode = useCallback(async (next: "editor" | "sentence") => {
+    setTapMode(next);
+    if (typeof window !== "undefined") window.localStorage.setItem("orby_tap_mode", next);
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tap_mode: next }));
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, tap_mode: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
+
+
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
