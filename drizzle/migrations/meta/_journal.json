@@ -43,6 +43,13 @@
       "when": 1788259225930,
       "tag": "0005_chat_threads_auto_approve_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788785120110,
+      "tag": "0006_add_tap_mode_to_user_preferences",
+      "breakpoints": true
     }
   ]
 }

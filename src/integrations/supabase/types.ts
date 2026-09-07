@@ -611,6 +611,7 @@ export type Database = {
           locked_document_id: string | null
           muted: boolean
           pinned_document_id: string | null
+          tap_mode: string | null
           theme: string
           tts_prefetch: number
           tts_voice: string | null
@@ -629,6 +630,7 @@ export type Database = {
           locked_document_id?: string | null
           muted?: boolean
           pinned_document_id?: string | null
+          tap_mode?: string | null
           theme?: string
           tts_prefetch?: number
           tts_voice?: string | null
@@ -647,6 +649,7 @@ export type Database = {
           locked_document_id?: string | null
           muted?: boolean
           pinned_document_id?: string | null
+          tap_mode?: string | null
           theme?: string
           tts_prefetch?: number
           tts_voice?: string | null
