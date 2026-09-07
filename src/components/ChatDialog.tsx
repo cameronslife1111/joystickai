@@ -711,8 +711,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   // Always-current view state. The send handler runs long after it was created,
   // so it must not rely on the `open`/`activeThreadId` values captured then:
   // a reply that lands after the user closed the chat must stay silent.
-  const viewRef = useRef({ open, activeThreadId });
-  viewRef.current = { open, activeThreadId };
+  const viewRef = useRef({ open, activeThreadId, drawerOpen });
+  viewRef.current = { open, activeThreadId, drawerOpen };
 
 
   // Focus textarea on open + thread switch.
@@ -793,14 +793,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       autoSpokeThreadRef.current = null;
       return;
     }
-    if (!autoSpeak || !activeThreadId || voice.live) return;
+    // Thread picker is covering the chat — don't read until a chat is open.
+    if (!autoSpeak || !activeThreadId || drawerOpen || voice.live) return;
     if (autoSpokeThreadRef.current === activeThreadId) return;
     if (messages.length === 0) return;
     autoSpokeThreadRef.current = activeThreadId;
     const last = [...messages].reverse().find((m) => m.role === "assistant" && m.content?.trim());
     if (last) speakMessage(last.id, last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, autoSpeak, activeThreadId, messages]);
+  }, [open, autoSpeak, activeThreadId, drawerOpen, messages]);
 
   // Speak a short cue not tied to a specific message bubble.
   const speakCue = (text: string) => {
@@ -1082,7 +1083,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       // Auto-read the reply aloud when enabled. Plans get a short cue; the
       // per-step cues are handled inside PlanProgressCard. Uses live view state
       // so nothing is spoken if the user left the chat while it was thinking.
-      const viewing = viewRef.current.open && threadId === viewRef.current.activeThreadId;
+      const viewing =
+        viewRef.current.open &&
+        !viewRef.current.drawerOpen &&
+        threadId === viewRef.current.activeThreadId;
       if (autoSpeak && viewing && !voice.live && insertedAssistant) {
         if (insertedAssistant.kind === "plan") {
           speakCue("Writing a plan for you to review.");
