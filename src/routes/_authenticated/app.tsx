@@ -537,6 +537,17 @@ function AppPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs?.theme]);
 
+  // Hydrate the sentence-press mode from the account, so it follows the user
+  // across devices.
+  useEffect(() => {
+    if (prefs?.tap_mode && prefs.tap_mode !== tapMode) {
+      setTapMode(prefs.tap_mode);
+      if (typeof window !== "undefined") window.localStorage.setItem("orby_tap_mode", prefs.tap_mode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.tap_mode]);
+
+
   useEffect(() => {
     setSpeechVoice(ttsVoice);
   }, [ttsVoice]);
