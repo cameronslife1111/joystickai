@@ -601,6 +601,7 @@ export type Database = {
       user_preferences: {
         Row: {
           auto_attach_document_ids: string[]
+          auto_open_linked_chat: boolean
           background_media_asset_id: string | null
           created_at: string
           favorites: Json
@@ -620,6 +621,7 @@ export type Database = {
         }
         Insert: {
           auto_attach_document_ids?: string[]
+          auto_open_linked_chat?: boolean
           background_media_asset_id?: string | null
           created_at?: string
           favorites?: Json
@@ -639,6 +641,7 @@ export type Database = {
         }
         Update: {
           auto_attach_document_ids?: string[]
+          auto_open_linked_chat?: boolean
           background_media_asset_id?: string | null
           created_at?: string
           favorites?: Json
