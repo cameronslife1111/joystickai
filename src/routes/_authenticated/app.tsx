@@ -2954,6 +2954,30 @@ function AppPageInner() {
         </div>
       </section>
 
+      {/* Quick-edit action buttons (just above the tile cluster) */}
+      {quickEditing && (
+        <div className="relative z-10 flex justify-center pb-3">
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={cancelQuickEdit}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void commitQuickEdit()}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
       {/* Compose action buttons (above orb) */}
       {composing && (
         <div className="pointer-events-none flex justify-center pb-4">
