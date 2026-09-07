@@ -505,17 +505,19 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id")
+        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
       const savedVoice = data?.tts_voice;
       const savedPrefetch = Number((data as any)?.tts_prefetch);
-      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null };
+      const savedTap = (data as any)?.tap_mode;
+      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null };
+
     },
   });
   const favorites = prefs?.favorites ?? [];
@@ -534,6 +536,17 @@ function AppPageInner() {
     if (prefs?.theme && prefs.theme !== theme) setTheme(prefs.theme);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs?.theme]);
+
+  // Hydrate the sentence-press mode from the account, so it follows the user
+  // across devices.
+  useEffect(() => {
+    if (prefs?.tap_mode && prefs.tap_mode !== tapMode) {
+      setTapMode(prefs.tap_mode);
+      if (typeof window !== "undefined") window.localStorage.setItem("orby_tap_mode", prefs.tap_mode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.tap_mode]);
+
 
   useEffect(() => {
     setSpeechVoice(ttsVoice);
@@ -558,6 +571,19 @@ function AppPageInner() {
       { onConflict: "user_id" },
     );
   }, [qc, favorites]);
+
+  const saveTapMode = useCallback(async (next: "editor" | "sentence") => {
+    setTapMode(next);
+    if (typeof window !== "undefined") window.localStorage.setItem("orby_tap_mode", next);
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tap_mode: next }));
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, tap_mode: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
+
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
@@ -1898,6 +1924,41 @@ function AppPageInner() {
     }
   }, [activeDocId, sentences, quickEditText, parseEditParts, qc, setIndex, speak, claimSpeech, cancelQuickEdit]);
 
+  /** Quick edit: copy whatever is in the box to the clipboard, stay in the box. */
+  const copyQuickEditText = useCallback(async () => {
+    const text = quickEditText.trim();
+    if (!text) { toast("🤷 Nothing to copy", { id: "quick-edit-copy" }); return; }
+    const ok = await copyToClipboard(text);
+    if (ok) toast.success("📋 Copied", { id: "quick-edit-copy" });
+    else toast.error("Couldn't copy", { id: "quick-edit-copy" });
+  }, [quickEditText]);
+
+  /** Quick edit: save an extra identical copy right after this sentence, keep editing. */
+  const duplicateQuickEditSentence = useCallback(async () => {
+    const docId = activeDocId;
+    const list = sentences ?? [];
+    if (!docId || list.length === 0) return;
+    const parts = parseEditParts(quickEditText);
+    if (parts.length === 0) return;
+    const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
+
+    const contents = list.map((s) => s.content);
+    contents.splice(idx, 1, ...parts, ...parts);
+
+    const { error } = await supabase.rpc("commit_document_edit", {
+      p_document_id: docId,
+      p_contents: contents,
+    });
+    if (error) {
+      console.error("[quick-edit] duplicate failed", error);
+      toast.error("Couldn't save edits");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["sentences", docId] });
+    toast.success("📄 Duplicated", { id: "quick-edit-duplicate" });
+  }, [activeDocId, sentences, quickEditText, parseEditParts, qc]);
+
+
   // Never leave the mic open once the editor closes.
   useEffect(() => {
     if (!editing) {
@@ -2974,7 +3035,7 @@ function AppPageInner() {
       {/* Quick-edit action buttons (just above the tile cluster) */}
       {quickEditing && (
         <div className="relative z-10 flex justify-center pb-3">
-          <div className="flex gap-3">
+          <div className="flex flex-wrap justify-center gap-2">
             <button
               type="button"
               onClick={cancelQuickEdit}
@@ -2984,13 +3045,28 @@ function AppPageInner() {
             </button>
             <button
               type="button"
-              onClick={() => void commitQuickEdit()}
+              onClick={() => void copyQuickEditText()}
               className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              onClick={() => void duplicateQuickEditSentence()}
+              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              onClick={() => void commitQuickEdit()}
+              className="rounded-full bg-aurora-2 px-5 py-2 text-sm font-medium text-background transition active:scale-95 hover:bg-aurora-2/90"
             >
               Done
             </button>
           </div>
         </div>
+
       )}
 
 
@@ -3351,12 +3427,8 @@ function AppPageInner() {
                 <button
                   key={opt.v}
                   type="button"
-                  onClick={() => {
-                    setTapMode(opt.v);
-                    if (typeof window !== "undefined") {
-                      window.localStorage.setItem("orby_tap_mode", opt.v);
-                    }
-                  }}
+                  onClick={() => void saveTapMode(opt.v)}
+
                   className={cn(
                     "rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.98]",
                     tapMode === opt.v
