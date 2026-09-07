@@ -596,6 +596,18 @@ function AppPageInner() {
     );
   }, [qc, favorites]);
 
+  const saveAutoOpenLinkedChat = useCallback(async (next: boolean) => {
+    setAutoOpenLinkedChat(next);
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), auto_open_linked_chat: next }));
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    await supabase.from("user_preferences").upsert(
+      { user_id: u.user.id, auto_open_linked_chat: next, favorites: favorites as any },
+      { onConflict: "user_id" },
+    );
+  }, [qc, favorites]);
+
+
 
   const saveFavorites = useCallback(async (next: (string | null)[]) => {
     const { data: u } = await supabase.auth.getUser();
