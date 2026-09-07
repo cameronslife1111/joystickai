@@ -549,6 +549,16 @@ function AppPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs?.tap_mode]);
 
+  // Hydrate the auto-open-linked-chat preference from the account.
+  useEffect(() => {
+    if (typeof prefs?.auto_open_linked_chat === "boolean") {
+      setAutoOpenLinkedChat(prefs.auto_open_linked_chat);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs?.auto_open_linked_chat]);
+
+
+
 
   useEffect(() => {
     setSpeechVoice(ttsVoice);
