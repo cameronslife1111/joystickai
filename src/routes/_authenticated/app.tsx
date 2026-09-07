@@ -18,9 +18,6 @@ import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/l
 import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 
 
-import { transcribeAudio } from "@/lib/whisper.functions";
-
-import { startPcmRecorder, blobToBase64, releaseMic, micErrorMessage, type PcmRecorder } from "@/lib/audio-recorder";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { HandsFreeProvider, HandsFreeIndicator } from "@/lib/hands-free";
@@ -2989,7 +2986,7 @@ function AppPageInner() {
                   <SentenceText content={currentSentence.content} pendingDelete={currentSentence.pending_delete} />
                 ) : (
                   <span className="text-muted-foreground italic text-2xl">
-                    Press here to write, or hold to speak.
+                    Press here to write.
                   </span>
                 )}
               </p>
