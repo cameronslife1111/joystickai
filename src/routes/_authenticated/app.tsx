@@ -1856,10 +1856,20 @@ function AppPageInner() {
     const idx = Math.max(0, Math.min(editOriginIdxRef.current, list.length - 1));
     const parts = parseEditParts(quickEditText);
 
-    if (list[idx]?.content === quickEditText.trim() || (parts.length === 1 && parts[0] === list[idx]?.content)) {
+    // Nothing typed at all: just close.
+    if (parts.length === 0) {
       cancelQuickEdit();
       return;
     }
+
+    // Unchanged text: skip the save, but still read the sentence back.
+    if (parts.length === 1 && parts[0] === list[idx]?.content) {
+      cancelQuickEdit();
+      const token = claimSpeech();
+      speak(parts[0], token);
+      return;
+    }
+
 
     const contents = list.map((s) => s.content);
     contents.splice(idx, 1, ...parts);
