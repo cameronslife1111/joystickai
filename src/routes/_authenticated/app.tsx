@@ -2913,6 +2913,9 @@ function AppPageInner() {
                 value={quickEditText}
                 onChange={(e) => setQuickEditText(e.target.value)}
                 onKeyDown={(e) => {
+                  // Keep every keystroke — including the space bar — inside the
+                  // box; the window-level shortcuts must not see them.
+                  e.stopPropagation();
                   if (e.key === "Escape") {
                     e.preventDefault();
                     cancelQuickEdit();
@@ -2926,23 +2929,8 @@ function AppPageInner() {
                 placeholder="Edit this sentence…"
                 className="w-full resize-none bg-transparent text-center font-display text-3xl leading-tight outline-none [touch-action:auto] placeholder:text-muted-foreground/40 md:text-4xl"
               />
-              <div className="mt-4 flex justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={cancelQuickEdit}
-                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void commitQuickEdit()}
-                  className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-                >
-                  Done
-                </button>
-              </div>
             </div>
+
           ) : (
             <div
               ref={centerRef}
