@@ -3267,8 +3267,8 @@ function AppPageInner() {
             onMenu={() => setMenuOpen(true)}
             onNextDoc={() => void onSwipeRight()}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
-            onDelete={() => void deleteCurrent()}
-            onDeleteLongPress={() => {
+            onRecents={() => setRecentOpen(true)}
+            onRecentsLongPress={() => {
               setSearchQuery("");
               setSearchOpen(true);
             }}
