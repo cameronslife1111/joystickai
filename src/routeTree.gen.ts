@@ -22,6 +22,7 @@ import { Route as ApiPublicSbSplatRouteImport } from './routes/api/public/sb/$'
 import { Route as ApiPublicMcpBridgeResultRouteImport } from './routes/api/public/mcp-bridge/result'
 import { Route as ApiPublicMcpBridgePollRouteImport } from './routes/api/public/mcp-bridge/poll'
 import { Route as ApiPublicMcpBridgePairRouteImport } from './routes/api/public/mcp-bridge/pair'
+import { Route as ApiPublicMcpBridgeInstallRouteImport } from './routes/api/public/mcp-bridge/install'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -89,6 +90,12 @@ const ApiPublicMcpBridgePairRoute = ApiPublicMcpBridgePairRouteImport.update({
   path: '/api/public/mcp-bridge/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicMcpBridgeInstallRoute =
+  ApiPublicMcpBridgeInstallRouteImport.update({
+    id: '/api/public/mcp-bridge/install',
+    path: '/api/public/mcp-bridge/install',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
   '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
@@ -113,6 +121,7 @@ export interface FileRoutesByTo {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
   '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
@@ -129,6 +138,7 @@ export interface FileRoutesById {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
   '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
     | '/api/public/mcp-bridge/result'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
     | '/api/public/mcp-bridge/result'
@@ -174,6 +186,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
     | '/api/public/mcp-bridge/result'
@@ -188,6 +201,7 @@ export interface RootRouteChildren {
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
   ApiPublicTtsRoute: typeof ApiPublicTtsRoute
+  ApiPublicMcpBridgeInstallRoute: typeof ApiPublicMcpBridgeInstallRoute
   ApiPublicMcpBridgePairRoute: typeof ApiPublicMcpBridgePairRoute
   ApiPublicMcpBridgePollRoute: typeof ApiPublicMcpBridgePollRoute
   ApiPublicMcpBridgeResultRoute: typeof ApiPublicMcpBridgeResultRoute
@@ -287,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMcpBridgePairRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mcp-bridge/install': {
+      id: '/api/public/mcp-bridge/install'
+      path: '/api/public/mcp-bridge/install'
+      fullPath: '/api/public/mcp-bridge/install'
+      preLoaderRoute: typeof ApiPublicMcpBridgeInstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -312,6 +333,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
   ApiPublicTtsRoute: ApiPublicTtsRoute,
+  ApiPublicMcpBridgeInstallRoute: ApiPublicMcpBridgeInstallRoute,
   ApiPublicMcpBridgePairRoute: ApiPublicMcpBridgePairRoute,
   ApiPublicMcpBridgePollRoute: ApiPublicMcpBridgePollRoute,
   ApiPublicMcpBridgeResultRoute: ApiPublicMcpBridgeResultRoute,
