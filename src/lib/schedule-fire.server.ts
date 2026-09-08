@@ -146,10 +146,15 @@ async function fireChatSchedule(
   }
 
   const caps = normalizeCapabilities(schedule.capabilities);
-  const docIds: string[] =
+  const { filterOwnedDocumentIds } = await import("@/lib/assistant-context.server");
+  // Only this user's own documents are ever read into a scheduled message.
+  const docIds: string[] = await filterOwnedDocumentIds(
+    supabaseAdmin,
+    userId,
     (schedule.attached_document_ids ?? []).length > 0
       ? schedule.attached_document_ids
-      : (thread.attached_document_ids ?? []);
+      : (thread.attached_document_ids ?? []),
+  );
   const imageUrls: string[] = (schedule.image_urls ?? []).slice(0, 6);
 
   // Recent history so short scheduled follow-ups still make sense.
