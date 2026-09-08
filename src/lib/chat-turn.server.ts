@@ -179,13 +179,43 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
   const capsUsed = normalizeCapabilities(payload.capabilities);
 
   try {
+    // This runner uses the service-role client, so nothing in the queued row is
+    // taken on trust: the chat must belong to the person who queued the turn,
+    // and only their own documents can be used as context.
+    const { data: ownThread } = await supabaseAdmin
+      .from("chat_threads")
+      .select("id")
+      .eq("id", threadId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!ownThread) {
+      await supabaseAdmin
+        .from("chat_turns")
+        .update({
+          status: "failed",
+          claim_at: null,
+          error: "thread_not_owned",
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", turn.id);
+      return { outcome: "thread_not_owned" };
+    }
+
+    const { filterOwnedDocumentIds } = await import("@/lib/assistant-context.server");
+    const ownedDocIds = await filterOwnedDocumentIds(
+      supabaseAdmin,
+      userId,
+      (payload.contextDocumentIds ?? []).slice(0, 20),
+    );
+
     const result = await runChatTurn(supabaseAdmin, {
       messages: payload.messages ?? [],
-      contextDocumentIds: (payload.contextDocumentIds ?? []).slice(0, 20),
+      contextDocumentIds: ownedDocIds,
       imageUrls: capsUsed.image_analysis ? (payload.imageUrls ?? []).slice(0, 6) : [],
       threadId,
       capabilities: capsUsed,
       autoCapabilities: payload.autoCapabilities === true,
+      ownerId: userId,
     } as any);
 
     // The user pressed Stop while this was thinking → throw the answer away
