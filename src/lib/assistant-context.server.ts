@@ -20,13 +20,39 @@ export type DocumentBlock = {
 };
 
 /**
+ * Keep only the documents that really belong to this user. Callers running with
+ * the service-role client (queued chat turns, schedules) bypass row security,
+ * so every id that arrived from a client payload has to be checked here before
+ * a single word of a document is read.
+ */
+export async function filterOwnedDocumentIds(
+  supabase: any,
+  userId: string | null | undefined,
+  documentIds: string[],
+): Promise<string[]> {
+  const ids = (documentIds ?? []).filter(Boolean);
+  if (!userId || ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("user_id", userId)
+    .in("id", ids);
+  if (error) return [];
+  const owned = new Set((data ?? []).map((d: any) => d.id as string));
+  return ids.filter((id) => owned.has(id));
+}
+
+/**
  * Pull the COMPLETE text of every attached document, paginating so long
  * documents are never silently truncated to their beginning.
+ *
+ * `ownerId` scopes every read to that user — pass it whenever this runs with
+ * the service-role client so a stray document id can never be read.
  */
 export async function buildDocumentBlock(
   supabase: any,
   documentIds: string[],
-  opts: { newestFirst?: boolean; maxChars?: number } = {},
+  opts: { newestFirst?: boolean; maxChars?: number; ownerId?: string | null } = {},
 ): Promise<DocumentBlock> {
   const ids = opts.newestFirst ? [...documentIds].reverse() : [...documentIds];
   if (ids.length === 0) return { text: "", included: 0, trimmed: false };
@@ -37,11 +63,10 @@ export async function buildDocumentBlock(
   let trimmed = false;
 
   for (const docId of ids) {
-    const { data: doc } = await supabase
-      .from("documents")
-      .select("title")
-      .eq("id", docId)
-      .single();
+    let docQuery = supabase.from("documents").select("title").eq("id", docId);
+    if (opts.ownerId) docQuery = docQuery.eq("user_id", opts.ownerId);
+    const { data: doc } = await docQuery.maybeSingle();
+    if (!doc) continue;
 
     const contents: string[] = [];
     let from = 0;
