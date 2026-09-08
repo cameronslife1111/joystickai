@@ -146,7 +146,9 @@ def info():
         "timeline": (t.GetName() if t else None),
         "frame_rate": (p.GetSetting("timelineFrameRate") if p else None),
         "resolution": ((str(p.GetSetting("timelineResolutionWidth")) + "x" + str(p.GetSetting("timelineResolutionHeight"))) if p else None),
+        "bridge_version": BRIDGE_VERSION,
     }
+
 
 ASPECTS = {
     "vertical": (1080, 1920), "9:16": (1080, 1920), "portrait": (1080, 1920),
