@@ -317,6 +317,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** The messages wrapper — watched so late-growing content re-pins the view. */
   const messagesListRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
+  /**
+   * Per-chat composer drafts (typed text + attached images). The composer is a
+   * single set of React state, so without this a half-written message and its
+   * image attachments would follow the user into whatever chat they open next
+   * — and get sent there. Each chat keeps its own draft instead.
+   */
+  const draftsRef = useRef<Record<string, { text: string; images: MediaAsset[] }>>({});
+  /** The thread the composer state currently belongs to. */
+  const draftThreadRef = useRef<string | null>(null);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
   /** True while 🟣 Delegate is analysing the step, before the plan appears. */
@@ -718,6 +727,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId, activeThread?.capabilities]);
 
+  // Switching chats parks the current draft (text + attached images) with the
+  // chat it was written in and restores that chat's own draft. Nothing typed or
+  // attached in one conversation can end up being sent in another.
+  useEffect(() => {
+    const prev = draftThreadRef.current;
+    if (prev === activeThreadId) return;
+    if (prev) draftsRef.current[prev] = { text: input, images: pickedImages };
+    draftThreadRef.current = activeThreadId;
+    const next = activeThreadId ? draftsRef.current[activeThreadId] : undefined;
+    setInput(next?.text ?? "");
+    setPickedImages(next?.images ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId]);
+
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
     enabled: !!activeThreadId && open,
@@ -1086,7 +1109,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // While a hands-free call is live this is a text-only conversation.
     const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
-    if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
+    // Attached images belong to the chat they were picked in. A programmatic
+    // send (🟣 Delegate) or a send aimed at another chat never carries them.
+    const imagesUsed = threadId === activeThreadId && !override?.threadId ? pickedImages : [];
+    if (capsUsed.image_analysis && imagesUsed.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
       return false;
     }
@@ -1094,6 +1120,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     markBusy(threadId);
     if (!override?.text) setInput("");
+    // The images went with this message — take them off the composer and out of
+    // this chat's saved draft so they can't be attached again.
+    if (imagesUsed.length) setPickedImages([]);
+    delete draftsRef.current[threadId];
     // Capability checkboxes are sticky — they stay on until the user unchecks.
 
 
@@ -1153,7 +1183,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             messages: history,
             contextDocumentIds: docIdsUsed,
             imageUrls: capsUsed.image_analysis
-              ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
+              ? imagesUsed.map((a) => a.url).filter((u): u is string => !!u)
               : [],
             capabilities: capsUsed,
             autoCapabilities: override?.auto === true,
