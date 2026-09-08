@@ -155,11 +155,13 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
             Just talk normally — Orby will do the work in {meta.name} for you. Keep the terminal
             window open.
           </p>
+          <McpToolCatalog provider={provider} />
           <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void drop()}>
             <Unplug className="mr-2 h-4 w-4" /> Disconnect
           </Button>
         </>
       ) : (
+
         <>
           <p className="text-[11px] leading-snug text-muted-foreground">{meta.requirement}</p>
 
