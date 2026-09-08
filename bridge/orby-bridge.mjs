@@ -115,8 +115,11 @@ if resolve is None:
     sys.exit(0)
 
 pm = resolve.GetProjectManager()
-BRIDGE_VERSION = "2"
+BRIDGE_VERSION = "3"
 
+
+def norm(s):
+    return " ".join(str(s or "").split()).lower()
 
 def project():
     p = pm.GetCurrentProject()
@@ -131,17 +134,126 @@ def timeline():
     return t
 
 def pool():
-    return project().GetMediaPool()
+    mp = project().GetMediaPool()
+    if mp is None:
+        raise Exception("Resolve returned no media pool. Make sure a project is open, then try again.")
+    return mp
+
+def root_folder():
+    f = pool().GetRootFolder()
+    if f is None:
+        raise Exception("Resolve returned no Master bin. Open the Media page once, then try again.")
+    return f
+
+def folder():
+    """The selected bin, falling back to Master when Resolve hasn't selected one."""
+    f = None
+    try:
+        f = pool().GetCurrentFolder()
+    except Exception:
+        f = None
+    if f is None:
+        log("no current bin selected; falling back to Master")
+        f = root_folder()
+    return f
+
+def clip_list(f):
+    if f is None:
+        raise Exception("Resolve returned no bin to read clips from. Open the Media page once, then try again.")
+    return f.GetClipList() or []
+
+def walk_folders(f=None, depth=0):
+    """Master bin first, then every sub-bin, depth first."""
+    f = f if f is not None else root_folder()
+    out = [f]
+    if depth < 12:
+        for s in (f.GetSubFolderList() or []):
+            if s is not None:
+                out += walk_folders(s, depth + 1)
+    return out
 
 def find_clip(name):
-    folder = pool().GetCurrentFolder()
-    for c in (folder.GetClipList() or []):
-        if (c.GetName() or "").lower() == str(name).lower():
-            return c
-    for c in (folder.GetClipList() or []):
-        if str(name).lower() in (c.GetName() or "").lower():
-            return c
-    raise Exception("No clip named '%s' in the media pool." % name)
+    want = norm(name)
+    if not want:
+        raise Exception("Tell me which clip by name.")
+    searched = []
+    bins = []
+    cur = None
+    try:
+        cur = pool().GetCurrentFolder()
+    except Exception:
+        cur = None
+    if cur is not None:
+        bins.append(cur)
+    for f in walk_folders():
+        if f not in bins:
+            bins.append(f)
+    for pass_exact in (True, False):
+        for f in bins:
+            bin_name = f.GetName() or "?"
+            if pass_exact and bin_name not in searched:
+                searched.append(bin_name)
+            for c in clip_list(f):
+                cn = norm(c.GetName())
+                if (cn == want) if pass_exact else (want in cn or cn in want):
+                    log("found clip '%s' in bin '%s'" % (c.GetName(), bin_name))
+                    return c
+    raise Exception(
+        "No clip named '%s' in the media pool. I looked in: %s." % (name, ", ".join(searched) or "Master")
+    )
+
+def find_timeline_items(name, kind="video", track=None):
+    """Every clip on the timeline whose name matches, exact first then partial."""
+    t = timeline()
+    want = norm(name)
+    tracks = [int(track)] if track else list(range(1, (t.GetTrackCount(kind) or 0) + 1))
+    rows = []
+    for i in tracks:
+        for item in (t.GetItemListInTrack(kind, i) or []):
+            if item is None:
+                continue
+            rows.append((i, item))
+    exact = [r for r in rows if norm(r[1].GetName()) == want]
+    hits = exact or [r for r in rows if want and want in norm(r[1].GetName())]
+    if not hits:
+        raise Exception(
+            "No clip named '%s' on the %s tracks of '%s'." % (name, kind, t.GetName())
+        )
+    log("matched %d timeline clip(s) for '%s'" % (len(hits), name))
+    return hits
+
+def ensure_track(t, kind, index):
+    have = t.GetTrackCount(kind) or 0
+    while have < index:
+        if not t.AddTrack(kind):
+            raise Exception("Resolve refused to add %s track %d (it has %d)." % (kind, index, have))
+        have = t.GetTrackCount(kind) or (have + 1)
+    return have
+
+def source_range(item):
+    """(startFrame, endFrame) in the source media, with fallbacks."""
+    start = None
+    end = None
+    for getter in ("GetSourceStartFrame", "GetSourceEndFrame"):
+        if not hasattr(item, getter):
+            start = None
+            break
+    if hasattr(item, "GetSourceStartFrame") and hasattr(item, "GetSourceEndFrame"):
+        try:
+            start = int(item.GetSourceStartFrame())
+            end = int(item.GetSourceEndFrame())
+        except Exception:
+            start = None
+    if start is None:
+        try:
+            left = int(item.GetLeftOffset() or 0)
+            dur = int(item.GetDuration() or 0)
+            start = left
+            end = left + max(dur - 1, 0)
+        except Exception:
+            raise Exception("Resolve wouldn't tell me the source range of '%s'." % item.GetName())
+    return start, end
+
 
 def info():
     p = pm.GetCurrentProject()
