@@ -193,7 +193,7 @@ export async function buildSharedContext(
   const transcript =
     input.includeTranscript === false
       ? ""
-      : await buildThreadTranscript(supabase, input.threadId);
+      : await buildThreadTranscript(supabase, input.threadId, TRANSCRIPT_MESSAGES, ownerId);
 
   const pieces = [wrapDocumentBlock(docs.text), memoryBlock].filter(Boolean);
   return {
