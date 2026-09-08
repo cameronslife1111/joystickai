@@ -3270,7 +3270,10 @@ function AppPageInner() {
             onNext={() => void advanceSentence()}
             onNextLongPress={handleDelegate}
             onMenu={() => setMenuOpen(true)}
-            onNextDoc={() => void onSwipeRight()}
+            onNextDoc={() => {
+              autoOpenArmedRef.current = true;
+              void onSwipeRight();
+            }}
             onNextDocLongPress={() => setLinkPickerOpen(true)}
             onRecents={() => setRecentOpen(true)}
             onRecentsLongPress={() => {
