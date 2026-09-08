@@ -147,6 +147,7 @@ const RESOLVE_TOOLS: McpTool[] = [
   { group: G_CLIPS, name: "set_playhead_timecode", description: "Move the playhead to a timecode", example: "Jump to 00:01:30:00" },
   { group: G_CLIPS, name: "get_playhead_timecode", description: "Read where the playhead is", example: "Where's my playhead?" },
   { group: G_CLIPS, name: "append_clip_to_timeline", description: "Append a media pool clip to the end of the timeline", example: "Add the beach clip to the end" },
+  { group: G_CLIPS, name: "copy_clip_to_track", description: "Copy a timeline clip onto another track at the same position, leaving the original in place", example: "Copy the x290 clip onto video track 6 at the same spot" },
 
   // -------------------------------------------------------- 63–76 media pool
   { group: G_POOL, name: "list_media_pool_clips", description: "List the clips in the current bin", example: "What's in my media pool?" },
