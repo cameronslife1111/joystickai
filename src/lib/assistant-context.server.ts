@@ -162,15 +162,19 @@ export async function buildSharedContext(
     documentIds?: string[];
     docMaxChars?: number;
     includeTranscript?: boolean;
+    /** Scope every read to this user (required on service-role paths). */
+    ownerId?: string | null;
   },
 ): Promise<SharedContext> {
+  const ownerId = input.ownerId ?? null;
   const documentIds = input.documentIds?.length
     ? input.documentIds
-    : await getThreadDocumentIds(supabase, input.threadId);
+    : await getThreadDocumentIds(supabase, input.threadId, ownerId);
 
   const docs = await buildDocumentBlock(supabase, documentIds, {
     newestFirst: true,
     maxChars: input.docMaxChars,
+    ownerId,
   });
 
   let memoryBlock = "";
@@ -178,6 +182,7 @@ export async function buildSharedContext(
     const memory = await buildPlanMemory(supabase, input.threadId ?? undefined, {
       inlineDocs: true,
       excludeDocIds: documentIds,
+      ownerId,
     });
     memoryBlock = memory.block ?? "";
   } catch (e) {
