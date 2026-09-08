@@ -72,10 +72,12 @@ export async function buildDocumentBlock(
     let from = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const { data: rows, error } = await supabase
+      let rowQuery = supabase
         .from("sentences")
         .select("content")
-        .eq("document_id", docId)
+        .eq("document_id", docId);
+      if (opts.ownerId) rowQuery = rowQuery.eq("user_id", opts.ownerId);
+      const { data: rows, error } = await rowQuery
         .order("order_index", { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) break;
