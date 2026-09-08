@@ -142,10 +142,21 @@ async function claimTurn(turn: TurnRow): Promise<boolean> {
   return false;
 }
 
+/** True when the user pressed Stop on this turn while it was running. */
+async function wasCanceled(turnId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("chat_turns")
+    .select("status")
+    .eq("id", turnId)
+    .maybeSingle();
+  return (data as any)?.status === "canceled";
+}
+
 /**
  * Run one queued turn. Safe to call concurrently and repeatedly: claiming is
  * guarded, and a finished turn is a no-op.
  */
+
 export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: string }> {
   const { data: row, error } = await supabaseAdmin
     .from("chat_turns")
@@ -155,7 +166,9 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
   if (error) return { outcome: `lookup_failed:${error.message}` };
   const turn = row as TurnRow | null;
   if (!turn) return { outcome: "missing" };
-  if (turn.status === "done" || turn.status === "failed") return { outcome: turn.status };
+  if (turn.status === "done" || turn.status === "failed" || turn.status === "canceled")
+    return { outcome: turn.status };
+
 
   if (!(await claimTurn(turn))) return { outcome: "claimed_elsewhere" };
 
@@ -175,7 +188,13 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
       autoCapabilities: payload.autoCapabilities === true,
     } as any);
 
+    // The user pressed Stop while this was thinking → throw the answer away
+    // and post nothing into the chat.
+    if (await wasCanceled(turn.id)) return { outcome: "canceled" };
+
     let assistantMessageId: string | null = null;
+
+
 
     if (result.route === "plan") {
       const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
@@ -236,6 +255,10 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
   } catch (err) {
     const message = String((err as any)?.message ?? err);
     console.error("[chat turn] failed", turn.id, message);
+
+    // Stopped by the user — no error message, no retry.
+    if (await wasCanceled(turn.id)) return { outcome: "canceled" };
+
 
     if (attempts >= TURN_MAX_ATTEMPTS) {
       await insertAssistant(
