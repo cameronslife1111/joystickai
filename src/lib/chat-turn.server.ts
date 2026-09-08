@@ -177,7 +177,13 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
       autoCapabilities: payload.autoCapabilities === true,
     } as any);
 
+    // The user pressed Stop while this was thinking → throw the answer away
+    // and post nothing into the chat.
+    if (await wasCanceled(turn.id)) return { outcome: "canceled" };
+
     let assistantMessageId: string | null = null;
+
+
 
     if (result.route === "plan") {
       const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
