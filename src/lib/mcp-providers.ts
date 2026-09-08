@@ -68,5 +68,7 @@ export type McpConnectionStatus = {
   status: "none" | "pending" | "connected" | "offline";
   pairingCode: string | null;
   lastSeenAt: string | null;
-  serverInfo: Record<string, unknown> | null;
+  /** Flattened to strings so it crosses the server-function boundary cleanly. */
+  serverInfo: Record<string, string> | null;
+
 };
