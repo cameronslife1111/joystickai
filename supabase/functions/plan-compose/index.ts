@@ -88,6 +88,18 @@ MEDIA REFERENCE & REMIX — resolving images, videos, and audio is just as impor
   - shrink_image: make ONE existing image's DIMENSIONS smaller with no AI and no change to the picture ("shrink it", "half size", "make a 1024px version"). Requires source_media_id. Give scale_percent (10-95, default 50) OR max_dimension in pixels. Never use it to upsize — that's upscale_image.
   - Resolve the source ids in EARLIER steps (or inline concrete catalog ids), then template them into the media step. A remix/regenerate step whose source ids aren't resolved will fail.
 
+${
+  !allowedGroups || allowedGroups.includes("davinci_resolve")
+    ? `DAVINCI RESOLVE (external app on the user's own computer) — use resolve_command, ONE Resolve action per step, in a sensible order:
+- INSPECT first when you need facts you don't have: get_project_info, list_timelines, list_media_pool_clips. Pipe their results forward with {{step_N.result...}}.
+- BUILD: create_timeline / set_current_timeline / import_media / append_clip_to_timeline.
+- TREAT: add_fusion_effect (delta keyer = green-screen removal), grade_clip, apply_lut, set_clip_property, add_text_plus, add_transition.
+- EXPORT: render_timeline, then get_render_status to confirm it finished.
+- Pass that tool's own arguments as a JSON object string in "arguments". Never bundle several Resolve actions into one step, and never mix a Resolve action with a document/media action in the same step.
+- Resolve work and Orby's own documents/gallery are separate worlds: use resolve_command for anything inside Resolve, and the document/image/video tools for anything in Orby.
+`
+    : ""
+}
 
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
