@@ -1575,8 +1575,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
                     Thinking…
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void stopThinking(activeThreadId)}
+                      className="h-7 rounded-full px-3 text-xs"
+                    >
+                      Stop
+                    </Button>
                   </div>
                 )}
+
               </div>
             )}
           </div>
