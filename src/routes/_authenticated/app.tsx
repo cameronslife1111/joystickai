@@ -1389,18 +1389,22 @@ function AppPageInner() {
     return true;
   }, [currentSentence?.linked_thread_id, claimSpeech]);
 
-  // Auto-open a sentence's linked chat when the preference is on. The ref keeps
-  // it from reopening on the same sentence after the user closes the chat.
+  // Auto-open a sentence's linked chat when the preference is on — but ONLY when
+  // the move came from the green (next document) button. Arrow buttons and every
+  // other navigation must never auto-open a chat.
   const autoOpenedSentenceRef = useRef<string | null>(null);
+  const autoOpenArmedRef = useRef(false);
   useEffect(() => {
     const sid = currentSentence?.id ?? null;
     if (autoOpenedSentenceRef.current && autoOpenedSentenceRef.current !== sid) {
       autoOpenedSentenceRef.current = null;
     }
+    if (!autoOpenArmedRef.current) return;
     if (!autoOpenLinkedChat || !sid) return;
     if (chatOpen || editing || quickEditing || composing) return;
     if (currentSentence?.linked_document_id || !currentSentence?.linked_thread_id) return;
     if (autoOpenedSentenceRef.current === sid) return;
+    autoOpenArmedRef.current = false;
     autoOpenedSentenceRef.current = sid;
     void openLinkedChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
