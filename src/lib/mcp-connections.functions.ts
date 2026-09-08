@@ -7,6 +7,9 @@ const providerSchema = z.object({
   provider: z.enum(["davinci_resolve"]),
 });
 
+/** How long a pairing code stays usable. */
+const PAIRING_TTL_MS = 12 * 60 * 60_000;
+
 function shape(row: any, provider: McpProviderId): McpConnectionStatus {
   const raw = row?.server_info;
   let serverInfo: Record<string, string> | null = null;
