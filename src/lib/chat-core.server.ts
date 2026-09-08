@@ -19,11 +19,12 @@ import {
 async function buildContext(
   supabase: any,
   contextDocumentIds: string[],
+  ownerId?: string | null,
 ): Promise<string> {
   if (!contextDocumentIds.length) return "";
   // Same builder the hands-free voice path uses, so both see identical text.
   const { buildDocumentBlock } = await import("./assistant-context.server");
-  const { text } = await buildDocumentBlock(supabase, contextDocumentIds);
+  const { text } = await buildDocumentBlock(supabase, contextDocumentIds, { ownerId });
   return text;
 }
 

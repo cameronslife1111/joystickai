@@ -31,7 +31,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       rationale?: string;
     }> => {
       const { runChatTurn } = await import("./chat-core.server");
-      return await runChatTurn(context.supabase, data);
+      return await runChatTurn(context.supabase, { ...data, ownerId: context.userId });
     },
   );
 
