@@ -23,7 +23,7 @@ import path from "node:path";
 
 const DEFAULT_SERVER = "https://orbyai.lovable.app";
 /** Keep in sync with BRIDGE_VERSION in the Python worker and in src/lib/mcp-providers.ts. */
-const BRIDGE_VERSION = "2";
+const BRIDGE_VERSION = "3";
 
 const HOME = os.homedir();
 const CONFIG_DIR = path.join(HOME, ".orby");
