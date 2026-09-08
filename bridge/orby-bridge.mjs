@@ -419,10 +419,22 @@ function flatInfo(info) {
 /* ------------------------------------------------------------------- flows */
 
 async function pair(server, code, worker) {
-  const r = await post(server, "pair", { code, server_info: flatInfo(worker.info) });
-  if (!r.ok) {
-    const why = r.json?.error || `Orby answered ${r.status}.`;
-    die(`Pairing failed: ${why}\nOpen Orby, turn DaVinci Resolve Mode on, and copy a fresh command.`);
+  let r = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    r = await post(server, "pair", { code, server_info: flatInfo(worker.info) });
+    if (r.ok) break;
+    if (r.status !== 404 && r.status !== 410) break;
+    if (attempt < 5) {
+      say("Waiting for a fresh code…");
+      await sleep(10_000);
+    }
+  }
+  if (!r?.ok) {
+    const why = r?.json?.error || `Orby answered ${r?.status}.`;
+    die(
+      `Pairing failed: ${why}\n` +
+        'In Orby chat, with DaVinci Resolve Mode on, tap "Get a fresh command" and run the new line.',
+    );
   }
   writeConfig({ server, token: r.json.token, provider: r.json.provider });
   say(`Paired with Orby ✅  (${r.json.provider})`);
