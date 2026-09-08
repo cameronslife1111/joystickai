@@ -312,6 +312,7 @@ export async function runChatTurn(
     memory = await buildPlanMemory(supabase, data.threadId, {
       inlineDocs: true,
       excludeDocIds: data.contextDocumentIds,
+      ownerId,
     });
   } catch (e) {
     console.warn("[chat planMemory] failed", e);
