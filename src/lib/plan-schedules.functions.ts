@@ -34,6 +34,31 @@ type ScheduleInput = z.infer<typeof scheduleInputSchema>;
 
 const MAX_SCHEDULES_PER_USER = 50;
 
+/**
+ * A schedule is later fired by the background runner with elevated rights, so
+ * anything it stores has to belong to this user at the moment it's saved.
+ */
+async function assertOwnedRefs(
+  supabase: any,
+  patch: { attached_document_ids?: string[]; thread_id?: string | null },
+) {
+  const docIds = (patch.attached_document_ids ?? []).filter(Boolean);
+  if (docIds.length) {
+    const { data } = await supabase.from("documents").select("id").in("id", docIds);
+    if ((data ?? []).length !== new Set(docIds).size) {
+      throw new Error("One of those documents isn't yours");
+    }
+  }
+  if (patch.thread_id) {
+    const { data } = await supabase
+      .from("chat_threads")
+      .select("id")
+      .eq("id", patch.thread_id)
+      .maybeSingle();
+    if (!data) throw new Error("That chat isn't yours");
+  }
+}
+
 function toSpec(s: any): ScheduleSpec {
   return {
     cadence: s.cadence as Cadence,
