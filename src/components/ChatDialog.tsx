@@ -1109,7 +1109,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // While a hands-free call is live this is a text-only conversation.
     const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
-    if (capsUsed.image_analysis && pickedImages.some((a) => !a.url)) {
+    // Attached images belong to the chat they were picked in. A programmatic
+    // send (🟣 Delegate) or a send aimed at another chat never carries them.
+    const imagesUsed = threadId === activeThreadId && !override?.threadId ? pickedImages : [];
+    if (capsUsed.image_analysis && imagesUsed.some((a) => !a.url)) {
       toast.error("One of those images has no URL yet");
       return false;
     }
@@ -1117,6 +1120,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     markBusy(threadId);
     if (!override?.text) setInput("");
+    // The images went with this message — take them off the composer and out of
+    // this chat's saved draft so they can't be attached again.
+    if (imagesUsed.length) setPickedImages([]);
+    delete draftsRef.current[threadId];
     // Capability checkboxes are sticky — they stay on until the user unchecks.
 
 
