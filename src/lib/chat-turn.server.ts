@@ -142,10 +142,21 @@ async function claimTurn(turn: TurnRow): Promise<boolean> {
   return false;
 }
 
+/** True when the user pressed Stop on this turn while it was running. */
+async function wasCanceled(turnId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from("chat_turns")
+    .select("status")
+    .eq("id", turnId)
+    .maybeSingle();
+  return (data as any)?.status === "canceled";
+}
+
 /**
  * Run one queued turn. Safe to call concurrently and repeatedly: claiming is
  * guarded, and a finished turn is a no-op.
  */
+
 export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: string }> {
   const { data: row, error } = await supabaseAdmin
     .from("chat_turns")
