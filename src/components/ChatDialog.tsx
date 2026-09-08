@@ -528,9 +528,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const stopThinking = useCallback(
     async (threadId: string | null) => {
       if (!threadId || !userId) return;
-      const ids = (qc.getQueryData<PendingTurn[]>(["chat_turns", userId]) ?? [])
-        .filter((t) => t.thread_id === threadId)
-        .map((t) => t.id);
       // Clear the indicator right away.
       qc.setQueryData<PendingTurn[]>(["chat_turns", userId], (cur) =>
         (cur ?? []).filter((t) => t.thread_id !== threadId),
