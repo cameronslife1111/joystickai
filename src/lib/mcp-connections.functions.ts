@@ -107,7 +107,7 @@ export const callMcpTool = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => callSchema.parse(input))
   .handler(
-    async ({ data, context }): Promise<{ ok: boolean; result?: unknown; error?: string }> => {
+    async ({ data, context }): Promise<{ ok: boolean; result?: string; error?: string }> => {
       const { data: conn } = await context.supabase
         .from("mcp_connections")
         .select("id, status, last_seen_at")
