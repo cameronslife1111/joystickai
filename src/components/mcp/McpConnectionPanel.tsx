@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, Copy, Loader2, Plug, RefreshCw, Unplug } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Loader2, Plug, RefreshCw, Unplug } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,8 @@ import {
   getMcpConnection,
   startMcpPairing,
 } from "@/lib/mcp-connections.functions";
-import { MCP_PROVIDERS, type McpProviderId } from "@/lib/mcp-providers";
+import { MCP_PROVIDERS, groupedTools, type McpProviderId } from "@/lib/mcp-providers";
+
 
 /**
  * Provider-agnostic connection UI for an external creative app driven through
