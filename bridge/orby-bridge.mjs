@@ -59,7 +59,7 @@ function writeConfig(cfg) {
  * scripting module and answers one JSON request per line.
  */
 const WORKER_SOURCE = String.raw`
-import json, os, sys, imp
+import json, os, sys, importlib.machinery, importlib.util
 
 def emit(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
@@ -87,7 +87,10 @@ def load_resolve():
     for l in candidates_lib:
         if l and os.path.exists(l):
             try:
-                mod = imp.load_dynamic("fusionscript", l)
+                loader = importlib.machinery.ExtensionFileLoader("fusionscript", l)
+                spec = importlib.util.spec_from_loader("fusionscript", loader)
+                mod = importlib.util.module_from_spec(spec)
+                loader.exec_module(mod)
                 sys.modules["fusionscript"] = mod
                 return mod.scriptapp("Resolve")
             except Exception:
@@ -253,10 +256,7 @@ def call(tool, a):
         raise Exception("Transitions aren't exposed by Resolve's scripting API. Add it by hand on the Edit page, or use a Fusion effect instead.")
 
     if tool == "add_text_plus":
-        t = timeline()
-        p = project()
-        pool().AppendToTimeline([{ "mediaPoolItem": None }]) if False else None
-        raise Exception("Text+ titles have to be inserted from the Edit page; Resolve's API can't create them. Ask me to build the timeline and add titles by hand.")
+        raise Exception("Text+ titles have to be inserted from the Edit page; Resolve's API can't create them. I can build the timeline and you add the title by hand.")
 
     if tool == "render_timeline":
         p = project()
