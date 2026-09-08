@@ -693,26 +693,70 @@ def call(tool, a):
         if not items: raise Exception("Resolve refused to append that clip.")
         return {"appended": clip.GetName()}
 
+    if tool == "copy_clip_to_track":
+        t = timeline()
+        k = kind_of(a)
+        name = a.get("clip") or a.get("name")
+        to_track = int(a.get("to_track") or a.get("track") or 0)
+        if to_track < 1:
+            raise Exception("Tell me which track number to copy onto (for example video track 6).")
+        hits = find_timeline_items(name, k, a.get("from_track"))
+        if not (a.get("all_matches") in (None, True, "true", 1)):
+            hits = hits[:1]
+        ensure_track(t, k, to_track)
+        copied = []
+        skipped = []
+        for src_track, item in hits:
+            if src_track == to_track:
+                skipped.append("'%s' is already on %s track %d" % (item.GetName(), k, to_track))
+                continue
+            mpi = None
+            try:
+                mpi = item.GetMediaPoolItem()
+            except Exception:
+                mpi = None
+            if mpi is None:
+                skipped.append("'%s' has no source media in the pool (compound, Fusion or title clip) — copy that one by hand" % item.GetName())
+                continue
+            s, e = source_range(item)
+            record = int(item.GetStart())
+            log("copying '%s' from %s%d to %s%d at frame %d (source %d-%d)" % (item.GetName(), k[0].upper(), src_track, k[0].upper(), to_track, record, s, e))
+            added = pool().AppendToTimeline([{
+                "mediaPoolItem": mpi,
+                "startFrame": s,
+                "endFrame": e,
+                "trackIndex": to_track,
+                "recordFrame": record,
+            }])
+            if not added:
+                skipped.append("Resolve refused to place '%s' on %s track %d — that spot may already be occupied" % (item.GetName(), k, to_track))
+                continue
+            copied.append({"clip": item.GetName(), "from_track": src_track, "record_frame": record})
+        if not copied:
+            raise Exception("Nothing was copied. " + ("; ".join(skipped) if skipped else "No matching clips had source media."))
+        return {"copied": copied, "to_track": "%s%d" % (k[0].upper(), to_track), "skipped": skipped, "original_left_in_place": True}
+
     # ------------------------------------------------------------ media pool
     if tool == "list_media_pool_clips":
-        folder = pool().GetCurrentFolder()
+        f = folder()
         out = []
-        for c in (folder.GetClipList() or []):
+        for c in clip_list(f):
             out.append({"name": c.GetName(), "duration": c.GetClipProperty("Duration"), "resolution": c.GetClipProperty("Resolution")})
-        return {"folder": folder.GetName(), "clips": out}
+        return {"folder": f.GetName(), "clips": out}
 
     if tool == "list_media_pool_folders":
-        root = pool().GetRootFolder()
         def walk(f, depth=0):
-            rows = [{"name": f.GetName(), "depth": depth, "clips": len(f.GetClipList() or [])}]
+            rows = [{"name": f.GetName(), "depth": depth, "clips": len(clip_list(f))}]
             for s in (f.GetSubFolderList() or []):
-                rows += walk(s, depth + 1)
+                if s is not None:
+                    rows += walk(s, depth + 1)
             return rows
-        return {"folders": walk(root)}
+        return {"folders": walk(root_folder())}
 
     if tool == "create_media_pool_folder":
-        parent = pool().GetCurrentFolder()
+        parent = folder()
         f = pool().AddSubFolder(parent, str(a.get("name", "Orby")))
+
         if not f: raise Exception("Resolve refused to create that bin.")
         return {"created": f.GetName()}
 
