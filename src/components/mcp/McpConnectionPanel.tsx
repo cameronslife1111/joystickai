@@ -207,6 +207,20 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
                 >
                   <Copy className="mr-2 h-4 w-4" /> Copy the command
                 </Button>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10.5px] text-muted-foreground">
+                    {timeLeft ? `Code good for another ${timeLeft}` : "Code ready"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10.5px]"
+                    disabled={busy}
+                    onClick={() => void begin()}
+                  >
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Get a fresh command
+                  </Button>
+                </div>
               </div>
 
               <div>
