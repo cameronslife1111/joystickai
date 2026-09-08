@@ -105,13 +105,12 @@ export async function buildDocumentBlock(
 export async function getThreadDocumentIds(
   supabase: any,
   threadId: string | null | undefined,
+  ownerId?: string | null,
 ): Promise<string[]> {
   if (!threadId) return [];
-  const { data } = await supabase
-    .from("chat_threads")
-    .select("attached_document_ids")
-    .eq("id", threadId)
-    .maybeSingle();
+  let q = supabase.from("chat_threads").select("attached_document_ids").eq("id", threadId);
+  if (ownerId) q = q.eq("user_id", ownerId);
+  const { data } = await q.maybeSingle();
   return ((data?.attached_document_ids as string[] | null) ?? []).filter(Boolean);
 }
 
@@ -123,14 +122,15 @@ export async function buildThreadTranscript(
   supabase: any,
   threadId: string | null | undefined,
   limit = TRANSCRIPT_MESSAGES,
+  ownerId?: string | null,
 ): Promise<string> {
   if (!threadId) return "";
-  const { data } = await supabase
+  let q = supabase
     .from("chat_messages")
     .select("role, content, created_at")
-    .eq("thread_id", threadId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .eq("thread_id", threadId);
+  if (ownerId) q = q.eq("user_id", ownerId);
+  const { data } = await q.order("created_at", { ascending: false }).limit(limit);
   const rows = ((data ?? []) as Array<{ role: string; content: string }>).slice().reverse();
   return rows
     .filter((m) => (m.content ?? "").trim())
@@ -163,15 +163,19 @@ export async function buildSharedContext(
     documentIds?: string[];
     docMaxChars?: number;
     includeTranscript?: boolean;
+    /** Scope every read to this user (required on service-role paths). */
+    ownerId?: string | null;
   },
 ): Promise<SharedContext> {
+  const ownerId = input.ownerId ?? null;
   const documentIds = input.documentIds?.length
     ? input.documentIds
-    : await getThreadDocumentIds(supabase, input.threadId);
+    : await getThreadDocumentIds(supabase, input.threadId, ownerId);
 
   const docs = await buildDocumentBlock(supabase, documentIds, {
     newestFirst: true,
     maxChars: input.docMaxChars,
+    ownerId,
   });
 
   let memoryBlock = "";
@@ -179,6 +183,7 @@ export async function buildSharedContext(
     const memory = await buildPlanMemory(supabase, input.threadId ?? undefined, {
       inlineDocs: true,
       excludeDocIds: documentIds,
+      ownerId,
     });
     memoryBlock = memory.block ?? "";
   } catch (e) {
@@ -188,7 +193,7 @@ export async function buildSharedContext(
   const transcript =
     input.includeTranscript === false
       ? ""
-      : await buildThreadTranscript(supabase, input.threadId);
+      : await buildThreadTranscript(supabase, input.threadId, TRANSCRIPT_MESSAGES, ownerId);
 
   const pieces = [wrapDocumentBlock(docs.text), memoryBlock].filter(Boolean);
   return {

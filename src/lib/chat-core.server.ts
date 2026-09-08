@@ -19,11 +19,12 @@ import {
 async function buildContext(
   supabase: any,
   contextDocumentIds: string[],
+  ownerId?: string | null,
 ): Promise<string> {
   if (!contextDocumentIds.length) return "";
   // Same builder the hands-free voice path uses, so both see identical text.
   const { buildDocumentBlock } = await import("./assistant-context.server");
-  const { text } = await buildDocumentBlock(supabase, contextDocumentIds);
+  const { text } = await buildDocumentBlock(supabase, contextDocumentIds, { ownerId });
   return text;
 }
 
@@ -255,7 +256,7 @@ async function classifyTurn(
  */
 export async function runChatTurn(
   supabase: any,
-  data: ChatTurnInput,
+  data: ChatTurnInput & { ownerId?: string | null },
 ): Promise<{
   route: ChatRoute;
   text?: string;
@@ -264,7 +265,8 @@ export async function runChatTurn(
 }> {
   
   const caps = data.capabilities;
-  const contextText = await buildContext(supabase, data.contextDocumentIds);
+  const ownerId = data.ownerId ?? null;
+  const contextText = await buildContext(supabase, data.contextDocumentIds, ownerId);
 
   const lastUser = [...data.messages].reverse().find((m) => m.role === "user");
   const latestText = lastUser?.content ?? data.messages[data.messages.length - 1].content;
@@ -273,11 +275,13 @@ export async function runChatTurn(
   // treat this message as the answer, resume the plan in the background, and
   // stay silent in the chat (the plan itself will post follow-ups).
   if (data.threadId) {
-    const { data: pending } = await supabase
+    let pendingQuery = supabase
       .from("plans")
       .select("id, steps, current_step")
       .eq("thread_id", data.threadId)
-      .eq("status", "awaiting_user")
+      .eq("status", "awaiting_user");
+    if (ownerId) pendingQuery = pendingQuery.eq("user_id", ownerId);
+    const { data: pending } = await pendingQuery
       .order("awaiting_since", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -308,6 +312,7 @@ export async function runChatTurn(
     memory = await buildPlanMemory(supabase, data.threadId, {
       inlineDocs: true,
       excludeDocIds: data.contextDocumentIds,
+      ownerId,
     });
   } catch (e) {
     console.warn("[chat planMemory] failed", e);

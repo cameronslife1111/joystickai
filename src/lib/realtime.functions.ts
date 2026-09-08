@@ -50,6 +50,7 @@ export const createRealtimeSession = createServerFn({ method: "POST" })
       threadId: data.threadId ?? null,
       documentIds: data.documentIds,
       docMaxChars: MAX_DOC_CHARS,
+      ownerId: context.userId,
     });
     // Prefer the server-built transcript; fall back to what the client had.
     const instructions = composeRealtimeInstructions(
@@ -117,6 +118,7 @@ export const buildRealtimeDocContext = createServerFn({ method: "POST" })
         documentIds: data.documentIds,
         docMaxChars: MAX_DOC_CHARS,
         includeTranscript: false,
+        ownerId: context.userId,
       });
       return {
         block: shared.block,

@@ -104,16 +104,18 @@ export type PlanMemory = {
 export async function buildPlanMemory(
   supabase: any,
   threadId: string | undefined,
-  opts: { inlineDocs?: boolean; excludeDocIds?: string[] } = {},
+  opts: { inlineDocs?: boolean; excludeDocIds?: string[]; ownerId?: string | null } = {},
 ): Promise<PlanMemory> {
   const empty: PlanMemory = { block: "", digest: "", documentIds: [] };
   if (!threadId) return empty;
 
-  const { data: plans } = await supabase
+  let plansQuery = supabase
     .from("plans")
     .select("id, user_request, plan_summary, result_summary, error_message, status, steps, completed_at, created_at")
     .eq("thread_id", threadId)
-    .in("status", ["completed", "failed", "cancelled"])
+    .in("status", ["completed", "failed", "cancelled"]);
+  if (opts.ownerId) plansQuery = plansQuery.eq("user_id", opts.ownerId);
+  const { data: plans } = await plansQuery
     .order("created_at", { ascending: false })
     .limit(MAX_PLANS);
 
