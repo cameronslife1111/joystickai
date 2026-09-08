@@ -105,13 +105,12 @@ export async function buildDocumentBlock(
 export async function getThreadDocumentIds(
   supabase: any,
   threadId: string | null | undefined,
+  ownerId?: string | null,
 ): Promise<string[]> {
   if (!threadId) return [];
-  const { data } = await supabase
-    .from("chat_threads")
-    .select("attached_document_ids")
-    .eq("id", threadId)
-    .maybeSingle();
+  let q = supabase.from("chat_threads").select("attached_document_ids").eq("id", threadId);
+  if (ownerId) q = q.eq("user_id", ownerId);
+  const { data } = await q.maybeSingle();
   return ((data?.attached_document_ids as string[] | null) ?? []).filter(Boolean);
 }
 
