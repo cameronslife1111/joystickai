@@ -245,6 +245,10 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
     const message = String((err as any)?.message ?? err);
     console.error("[chat turn] failed", turn.id, message);
 
+    // Stopped by the user — no error message, no retry.
+    if (await wasCanceled(turn.id)) return { outcome: "canceled" };
+
+
     if (attempts >= TURN_MAX_ATTEMPTS) {
       await insertAssistant(
         userId,
