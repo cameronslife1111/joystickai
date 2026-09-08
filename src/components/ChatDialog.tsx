@@ -1808,13 +1808,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => void handleSend()}
-                  disabled={isActiveBusy || !input.trim()}
-                  aria-label="Send"
+                  onClick={() =>
+                    isActiveBusy ? void stopThinking(activeThreadId) : void handleSend()
+                  }
+                  disabled={!isActiveBusy && !input.trim()}
+                  aria-label={isActiveBusy ? "Stop" : "Send"}
+                  title={isActiveBusy ? "Stop thinking" : "Send"}
                   className="bg-aurora-1 text-foreground hover:bg-aurora-1/90"
                 >
-                  <Send className="h-4 w-4" />
+                  {isActiveBusy ? <span aria-hidden>⬛️</span> : <Send className="h-4 w-4" />}
                 </Button>
+
               </div>
             </div>
           </div>
