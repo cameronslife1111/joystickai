@@ -64,10 +64,11 @@ export const getMcpConnection = createServerFn({ method: "POST" })
 export const startMcpPairing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => providerSchema.parse(input))
-  .handler(async ({ data, context }): Promise<{ code: string; command: string }> => {
+  .handler(
+    async ({ data, context }): Promise<{ code: string; command: string; expiresAt: string }> => {
     const { makePairingCode } = await import("./mcp-bridge.server");
     const code = makePairingCode();
-    const expires = new Date(Date.now() + 30 * 60_000).toISOString();
+    const expires = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
 
     const { error } = await context.supabase
       .from("mcp_connections")
