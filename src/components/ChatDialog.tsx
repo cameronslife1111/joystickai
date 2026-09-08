@@ -79,6 +79,8 @@ import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
+import { McpConnectionPanel, McpStatusPill } from "./mcp/McpConnectionPanel";
+
 
 interface Props {
   open: boolean;
@@ -158,6 +160,7 @@ const DEFAULT_CAPS: ChatCapabilities = {
   video_generation: true,
   document_editing: true,
   scheduling: true,
+  davinci_resolve: false,
 };
 
 /** Nothing checked → Orby just replies with text. */
@@ -169,6 +172,7 @@ const NO_CAPS: ChatCapabilities = {
   video_generation: false,
   document_editing: false,
   scheduling: false,
+  davinci_resolve: false,
 };
 
 
@@ -181,6 +185,11 @@ const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[]
   { key: "scheduling", label: "Scheduling", hint: "Create, edit, pause scheduled plans" },
   { key: "web_search", label: "Web search", hint: "Look up current info online" },
   { key: "image_analysis", label: "Image analysis", hint: "Describe & analyze attached images" },
+  {
+    key: "davinci_resolve",
+    label: "🎬 DaVinci Resolve Mode",
+    hint: "Edit, grade and export in DaVinci Resolve",
+  },
 ];
 
 // action groups that map to plan tool groups
@@ -190,7 +199,9 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "video_generation",
   "scheduling",
   "web_search",
+  "davinci_resolve",
 ];
+
 
 const stripEmoji = (s: string) =>
   s
@@ -1318,7 +1329,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           </button>
                         ))}
                       </div>
+                      {caps.davinci_resolve && (
+                        <div className="mt-2">
+                          <McpConnectionPanel provider="davinci_resolve" />
+                        </div>
+                      )}
                     </div>
+
 
                     <div>
                       <p className="mb-2 text-sm font-medium">Attach</p>
@@ -1621,6 +1638,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               </div>
             )}
 
+            {caps.davinci_resolve && (
+              <div className="mb-2 flex">
+                <McpStatusPill provider="davinci_resolve" />
+              </div>
+            )}
+
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
               {enabledCapCount === 0
@@ -1629,6 +1652,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     .map(({ label }) => label)
                     .join(" · ")}
             </div>
+
 
             <div className="flex items-stretch gap-2">
               <Textarea

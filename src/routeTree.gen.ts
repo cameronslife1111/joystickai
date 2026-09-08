@@ -19,6 +19,9 @@ import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-
 import { Route as ApiPublicPlanSchedulerTickRouteImport } from './routes/api/public/plan-scheduler-tick'
 import { Route as ApiPublicMediaPollTickRouteImport } from './routes/api/public/media-poll-tick'
 import { Route as ApiPublicSbSplatRouteImport } from './routes/api/public/sb/$'
+import { Route as ApiPublicMcpBridgeResultRouteImport } from './routes/api/public/mcp-bridge/result'
+import { Route as ApiPublicMcpBridgePollRouteImport } from './routes/api/public/mcp-bridge/poll'
+import { Route as ApiPublicMcpBridgePairRouteImport } from './routes/api/public/mcp-bridge/pair'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -70,6 +73,22 @@ const ApiPublicSbSplatRoute = ApiPublicSbSplatRouteImport.update({
   path: '/api/public/sb/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicMcpBridgeResultRoute =
+  ApiPublicMcpBridgeResultRouteImport.update({
+    id: '/api/public/mcp-bridge/result',
+    path: '/api/public/mcp-bridge/result',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicMcpBridgePollRoute = ApiPublicMcpBridgePollRouteImport.update({
+  id: '/api/public/mcp-bridge/poll',
+  path: '/api/public/mcp-bridge/poll',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicMcpBridgePairRoute = ApiPublicMcpBridgePairRouteImport.update({
+  id: '/api/public/mcp-bridge/pair',
+  path: '/api/public/mcp-bridge/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -80,6 +99,9 @@ export interface FileRoutesByFullPath {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
+  '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
+  '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
   '/api/public/sb/$': typeof ApiPublicSbSplatRoute
 }
 export interface FileRoutesByTo {
@@ -91,6 +113,9 @@ export interface FileRoutesByTo {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
+  '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
+  '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
   '/api/public/sb/$': typeof ApiPublicSbSplatRoute
 }
 export interface FileRoutesById {
@@ -104,6 +129,9 @@ export interface FileRoutesById {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
+  '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
+  '/api/public/mcp-bridge/result': typeof ApiPublicMcpBridgeResultRoute
   '/api/public/sb/$': typeof ApiPublicSbSplatRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +145,9 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/pair'
+    | '/api/public/mcp-bridge/poll'
+    | '/api/public/mcp-bridge/result'
     | '/api/public/sb/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -128,6 +159,9 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/pair'
+    | '/api/public/mcp-bridge/poll'
+    | '/api/public/mcp-bridge/result'
     | '/api/public/sb/$'
   id:
     | '__root__'
@@ -140,6 +174,9 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/mcp-bridge/pair'
+    | '/api/public/mcp-bridge/poll'
+    | '/api/public/mcp-bridge/result'
     | '/api/public/sb/$'
   fileRoutesById: FileRoutesById
 }
@@ -151,6 +188,9 @@ export interface RootRouteChildren {
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
   ApiPublicTtsRoute: typeof ApiPublicTtsRoute
+  ApiPublicMcpBridgePairRoute: typeof ApiPublicMcpBridgePairRoute
+  ApiPublicMcpBridgePollRoute: typeof ApiPublicMcpBridgePollRoute
+  ApiPublicMcpBridgeResultRoute: typeof ApiPublicMcpBridgeResultRoute
   ApiPublicSbSplatRoute: typeof ApiPublicSbSplatRoute
 }
 
@@ -226,6 +266,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSbSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mcp-bridge/result': {
+      id: '/api/public/mcp-bridge/result'
+      path: '/api/public/mcp-bridge/result'
+      fullPath: '/api/public/mcp-bridge/result'
+      preLoaderRoute: typeof ApiPublicMcpBridgeResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/mcp-bridge/poll': {
+      id: '/api/public/mcp-bridge/poll'
+      path: '/api/public/mcp-bridge/poll'
+      fullPath: '/api/public/mcp-bridge/poll'
+      preLoaderRoute: typeof ApiPublicMcpBridgePollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/mcp-bridge/pair': {
+      id: '/api/public/mcp-bridge/pair'
+      path: '/api/public/mcp-bridge/pair'
+      fullPath: '/api/public/mcp-bridge/pair'
+      preLoaderRoute: typeof ApiPublicMcpBridgePairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -251,6 +312,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
   ApiPublicTtsRoute: ApiPublicTtsRoute,
+  ApiPublicMcpBridgePairRoute: ApiPublicMcpBridgePairRoute,
+  ApiPublicMcpBridgePollRoute: ApiPublicMcpBridgePollRoute,
+  ApiPublicMcpBridgeResultRoute: ApiPublicMcpBridgeResultRoute,
   ApiPublicSbSplatRoute: ApiPublicSbSplatRoute,
 }
 export const routeTree = rootRouteImport
