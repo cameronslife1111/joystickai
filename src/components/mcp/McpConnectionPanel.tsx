@@ -252,6 +252,8 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
               <p className="text-[11px] leading-snug text-muted-foreground">
                 This card turns green by itself as soon as it connects.
               </p>
+
+              <McpToolCatalog provider={provider} />
             </div>
           ) : (
             <Button size="sm" className="mt-2" disabled={busy} onClick={() => void begin()}>
@@ -263,4 +265,47 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     </div>
   );
 }
+
+/**
+ * The numbered "What can I ask for?" list, straight from the provider registry
+ * so what the user reads is exactly what Orby can run.
+ */
+export function McpToolCatalog({ provider }: { provider: McpProviderId }) {
+  const meta = MCP_PROVIDERS[provider];
+  const [open, setOpen] = useState(false);
+  const groups = groupedTools(meta);
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-md border border-foreground/10 bg-background/60 px-2.5 py-2 text-left text-[11px] font-medium"
+      >
+        <span>What can I ask for? ({meta.tools.length} things)</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div className="mt-2 max-h-72 space-y-3 overflow-y-auto rounded-md border border-foreground/10 bg-background/60 p-2.5">
+          {groups.map(({ group, tools }) => (
+            <div key={group}>
+              <p className="mb-1 text-[11px] font-semibold">{group}</p>
+              <ol className="space-y-1">
+                {tools.map(({ n, tool }) => (
+                  <li key={tool.name} className="text-[11px] leading-snug">
+                    <span className="text-muted-foreground">{n}. </span>
+                    <span>{tool.description}</span>
+                    <span className="block text-muted-foreground">“{tool.example}”</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
