@@ -240,7 +240,7 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
           user_id: userId,
           status: "composing",
           user_request: payload.userText ?? "",
-          attached_document_ids: payload.contextDocumentIds ?? [],
+          attached_document_ids: ownedDocIds,
           thread_id: threadId,
           review_in_chat: true,
           proposed_capabilities: mergedCaps as any,
