@@ -87,23 +87,10 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
     ],
     installCommand: (code: string) =>
       `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs connect ${code}`,
-    tools: [
-      { name: "get_project_info", description: "Current project, timeline, frame rate and resolution" },
-      { name: "list_timelines", description: "List the timelines in the current project" },
-      { name: "create_timeline", description: "Create a new timeline (name, resolution, frame rate)" },
-      { name: "set_current_timeline", description: "Switch to a timeline by name" },
-      { name: "list_media_pool_clips", description: "List clips in the media pool" },
-      { name: "import_media", description: "Import files from disk into the media pool" },
-      { name: "append_clip_to_timeline", description: "Append a media pool clip to the current timeline" },
-      { name: "add_fusion_effect", description: "Add a Fusion effect to a clip (delta keyer for green screen, etc.)" },
-      { name: "set_clip_property", description: "Set a clip property (scale, position, retime, opacity)" },
-      { name: "apply_lut", description: "Apply a LUT or colour preset to a clip" },
-      { name: "grade_clip", description: "Adjust saturation and colour settings on a clip" },
-      { name: "render_timeline", description: "Render/export the timeline with a preset (e.g. vertical 9:16 short)" },
-      { name: "get_render_status", description: "Check whether a render job has finished" },
-    ],
+    tools: RESOLVE_TOOLS,
   },
 };
+
 
 
 export const MCP_PROVIDER_LIST = Object.values(MCP_PROVIDERS);
