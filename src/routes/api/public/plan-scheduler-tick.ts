@@ -69,12 +69,22 @@ export const Route = createFileRoute("/api/public/plan-scheduler-tick")({
           }),
         );
 
+        // Same minute-by-minute tick also rescues queued chat turns whose
+        // client went away mid-flight, so no new scheduled job is needed.
+        const { runStaleChatTurns } = await import("@/lib/chat-turn.server");
+        const chatTurns = await runStaleChatTurns(5).catch((err) => {
+          console.error("[scheduler tick] chat turn recovery failed", err);
+          return [] as { id: string; outcome: string }[];
+        });
+
         return Response.json({
           ok: true,
           considered: due?.length ?? 0,
           fired: results.filter((r) => r.outcome === "fired").length,
           results,
+          chat_turns: chatTurns,
         });
+
       },
       GET: async () => {
         const { count } = await supabaseAdmin

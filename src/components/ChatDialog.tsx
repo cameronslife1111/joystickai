@@ -56,7 +56,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
+import { processChatTurn } from "@/lib/chat-turn.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
@@ -256,9 +257,12 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/** A chat turn the server is still working on. */
+type PendingTurn = { id: string; thread_id: string | null; status: string };
+
 export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
   const qc = useQueryClient();
-  const send = useServerFn(sendChatMessage);
+  const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
   const listSchedulesFn = useServerFn(listSchedules);
   const deleteScheduleFn = useServerFn(deleteSchedule);
@@ -462,6 +466,32 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     },
   });
 
+  // Chat turns still being written by the server. This is what makes a sent
+  // message safe: the reply is produced server-side, so this list (not the
+  // in-flight request) is the source of truth for "Orby is thinking", and it
+  // keeps working after the app was closed, locked or switched away from.
+  const { data: pendingTurns = [], refetch: refetchTurns } = useQuery({
+    queryKey: ["chat_turns", userId],
+    enabled: !!userId && open,
+    refetchInterval: (q) => ((q.state.data as PendingTurn[] | undefined)?.length ? 2_000 : 8_000),
+    refetchOnWindowFocus: true,
+    queryFn: async (): Promise<PendingTurn[]> => {
+      const { data, error } = await supabase
+        .from("chat_turns")
+        .select("id, thread_id, status")
+        .in("status", ["pending", "running"]);
+      if (error) throw error;
+      return (data ?? []) as PendingTurn[];
+    },
+  });
+
+  /** Threads with work in flight — local optimism plus queued server turns. */
+  const busyThreads = useMemo(() => {
+    const set = new Set(busyThreadIds);
+    for (const t of pendingTurns) if (t.thread_id) set.add(t.thread_id);
+    return set;
+  }, [busyThreadIds, pendingTurns]);
+
   const activeThread = useMemo(
     () => threads.find((t) => t.id === activeThreadId) ?? null,
     [threads, activeThreadId],
@@ -488,7 +518,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       ),
     [scheduleData, activeThreadId],
   );
-  const isActiveBusy = activeThreadId ? busyThreadIds.has(activeThreadId) : false;
+  const isActiveBusy = activeThreadId ? busyThreads.has(activeThreadId) : false;
 
   const unreadCount = useMemo(() => threads.filter(isUnread).length, [threads]);
 
@@ -815,6 +845,75 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, autoSpeak, activeThreadId, drawerOpen, messages]);
 
+  /**
+   * Pull in replies the server finished. A turn leaving the pending list means
+   * its answer (or plan card) has been written, so refresh that chat's messages
+   * and — only when the user is actually looking at that chat — read it aloud.
+   */
+  const knownTurnsRef = useRef<Map<string, string>>(new Map());
+  const landedMessageRef = useRef<Set<string>>(new Set());
+
+  const syncThreadMessages = useCallback(
+    async (threadId: string) => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("id, role, content, created_at, kind, plan_id")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
+      const rows = ((data ?? []) as ChatRow[]).map((m) =>
+        m.role === "assistant" ? { ...m, content: toPlainText(m.content) } : m,
+      );
+      qc.setQueryData<ChatRow[]>(["chat_messages", threadId], rows);
+      return rows;
+    },
+    [qc],
+  );
+
+  useEffect(() => {
+    const current = new Map(
+      pendingTurns.filter((t) => t.thread_id).map((t) => [t.id, t.thread_id as string]),
+    );
+    const finishedThreads = new Set<string>();
+    knownTurnsRef.current.forEach((threadId, turnId) => {
+      if (!current.has(turnId)) finishedThreads.add(threadId);
+    });
+    knownTurnsRef.current = current;
+    if (finishedThreads.size === 0) return;
+
+    for (const threadId of finishedThreads) {
+      markIdle(threadId);
+      void (async () => {
+        const rows = await syncThreadMessages(threadId);
+        const viewing = open && !drawerOpen && threadId === activeThreadId;
+        bumpThread(threadId, { assistant: true, read: viewing });
+        if (!viewing || !autoSpeak || voice.live) return;
+        const last = [...rows]
+          .reverse()
+          .find((m) => m.role === "assistant" && (m.content ?? "").trim());
+        if (!last || landedMessageRef.current.has(last.id)) return;
+        landedMessageRef.current.add(last.id);
+        if (last.kind === "plan") speakCue("Writing a plan for you to review.");
+        else speakMessage(last.id, last.content);
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTurns, open, drawerOpen, activeThreadId, autoSpeak, voice.live]);
+
+  // Coming back from another app: check for anything that finished while away,
+  // and poke the server to finish anything still queued.
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refetchTurns();
+      if (activeThreadId) void syncThreadMessages(activeThreadId);
+      void fetch("/api/public/chat-turn-tick", { method: "POST" }).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeThreadId]);
+
   // Speak a short cue not tied to a specific message bubble.
   const speakCue = (text: string) => {
     setSpeakingId(null);
@@ -952,7 +1051,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const text = (override?.text ?? input).trim();
     const threadId = override?.threadId ?? activeThreadId;
     if (!text || !userId || !threadId) return false;
-    if (busyThreadIds.has(threadId)) return false;
+    if (busyThreads.has(threadId)) return false;
     // While a hands-free call is live this is a text-only conversation.
     const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
     const docIdsUsed = override?.docIds ?? contextDocIds;
@@ -998,121 +1097,56 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         )
         .filter((m) => (m.content ?? "").trim().length > 0);
 
-      const result = await send({
-        data: {
-          messages: history,
-          contextDocumentIds: docIdsUsed,
-          imageUrls: capsUsed.image_analysis
-            ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
-            : [],
-          threadId,
-          capabilities: capsUsed,
-          autoCapabilities: override?.auto === true,
-        },
-      });
-
-      let insertedAssistant: ChatRow | null;
-      if (result.route === "resumed") {
-        // User's message became the answer to a paused plan; the plan itself
-        // will post follow-ups. Don't insert a synthetic assistant bubble.
-        insertedAssistant = null;
-      } else if (result.route === "plan") {
-        // Per-chat "Auto approve plans": read from the live cache so a
-        // programmatic send picks up the current setting.
-        const autoApproveForThread = !!(
-          qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? []
-        ).find((t) => t.id === threadId)?.auto_approve_plans;
-        // Create + auto-run a plan tied to this thread.
-        // Orby decides the capabilities itself; anything the user ticked is
-        // kept on top of that. The plan waits for review in this chat.
-        const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
-        const mergedCaps = { ...decided } as ChatCapabilities;
-        for (const g of ACTION_TOOL_GROUPS) if (capsUsed[g]) mergedCaps[g] = true;
-        // "Planning" alone still needs somewhere to put the work — document
-        // tools are the baseline so the planner is never left with no tools.
-        if (!ACTION_TOOL_GROUPS.some((g) => mergedCaps[g])) mergedCaps.document_editing = true;
-        const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => mergedCaps[g]);
-        const { data: planRow, error: planErr } = await supabase
-          .from("plans")
-          .insert({
-            user_id: userId,
-            status: "composing",
-            user_request: text,
-            attached_document_ids: docIdsUsed,
-            thread_id: threadId,
-            review_in_chat: true,
-            proposed_capabilities: mergedCaps as any,
-            // "Auto approve plans" is on for this chat → plan-compose approves
-            // and starts it as soon as the steps are written.
-            auto_approve_after_compose: autoApproveForThread,
-          })
-
-          .select("id")
-          .single();
-        if (planErr || !planRow) throw new Error(planErr?.message || "Couldn't start the plan");
-        void supabase.functions.invoke("plan-compose", {
-          body: { plan_id: planRow.id, allowed_tool_groups: allowedGroups },
-        });
-        const { data: msg, error: aErr } = await supabase
-          .from("chat_messages")
-          .insert({
-            user_id: userId,
-            thread_id: threadId,
-            role: "assistant",
-            content: autoApproveForThread
-              ? "On it — writing a plan and starting it."
-              : "On it — writing a plan for you to review.",
-            kind: "plan",
-            plan_id: planRow.id,
-          })
-          .select("id, role, content, created_at, kind, plan_id")
-          .single();
-        if (aErr) throw aErr;
-        insertedAssistant = msg as ChatRow;
-      } else {
-        const { data: msg, error: aErr } = await supabase
-          .from("chat_messages")
-          .insert({
-            user_id: userId,
-            thread_id: threadId,
-            role: "assistant",
-            content: result.text ?? "",
-            kind: "text",
-          })
-          .select("id, role, content, created_at, kind, plan_id")
-          .single();
-        if (aErr) throw aErr;
-        insertedAssistant = msg as ChatRow;
-      }
-
       qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) => {
         const base = (cur ?? []).filter((m) => m.id !== optimisticUser.id);
-        const next = [...base, insertedUser as ChatRow];
-        if (insertedAssistant) next.push(insertedAssistant);
-        return next;
+        return [...base, insertedUser as ChatRow];
       });
 
-      // Auto-read the reply aloud when enabled. Plans get a short cue; the
-      // per-step cues are handled inside PlanProgressCard. Uses live view state
-      // so nothing is spoken if the user left the chat while it was thinking.
-      const viewing =
-        viewRef.current.open &&
-        !viewRef.current.drawerOpen &&
-        threadId === viewRef.current.activeThreadId;
-      if (autoSpeak && viewing && !voice.live && insertedAssistant) {
-        if (insertedAssistant.kind === "plan") {
-          speakCue("Writing a plan for you to review.");
-        } else if (insertedAssistant.content) {
-          speakMessage(insertedAssistant.id, insertedAssistant.content);
-        }
-      }
-      // bump thread ordering; the reply counts as read only when the user is
-      // actually looking at this thread.
-      bumpThread(threadId, {
-        assistant: !!insertedAssistant,
-        read: viewing,
-      });
+      // Per-chat "Auto approve plans": read from the live cache so a
+      // programmatic send picks up the current setting.
+      const autoApproveForThread = !!(
+        qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? []
+      ).find((t) => t.id === threadId)?.auto_approve_plans;
 
+      // Queue the turn, then let the SERVER finish it. Nothing after this point
+      // depends on the phone staying awake: switching apps, locking the screen
+      // or losing the connection can no longer lose the reply.
+      const { data: turnRow, error: turnErr } = await supabase
+        .from("chat_turns")
+        .insert({
+          user_id: userId,
+          thread_id: threadId,
+          status: "pending",
+          payload: {
+            userText: text,
+            messages: history,
+            contextDocumentIds: docIdsUsed,
+            imageUrls: capsUsed.image_analysis
+              ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
+              : [],
+            capabilities: capsUsed,
+            autoCapabilities: override?.auto === true,
+            autoApprove: autoApproveForThread,
+          } as any,
+        } as any)
+        .select("id")
+        .single();
+      if (turnErr || !turnRow) throw turnErr ?? new Error("Couldn't queue that message");
+
+      const turnId = (turnRow as any).id as string;
+      // Show "thinking" straight away, before the watcher's next poll.
+      qc.setQueryData<PendingTurn[]>(["chat_turns", userId], (cur) => [
+        ...(cur ?? []).filter((t) => t.id !== turnId),
+        { id: turnId, thread_id: threadId, status: "pending" },
+      ]);
+
+      // Nudge the server to run it now. A dropped nudge is NOT an error: the
+      // turn stays queued and the watchdog tick finishes it.
+      void runTurn({ data: { turnId } })
+        .catch(() => {})
+        .finally(() => {
+          void refetchTurns();
+        });
 
       // Auto-name the thread from the first message (background, non-blocking).
       const isFirstMessage = prior.filter((m) => m.role === "user").length === 0;
@@ -1131,15 +1165,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       return true;
     } catch (err) {
       qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
+      markIdle(threadId);
       toast.error(err instanceof Error ? err.message : "Chat failed");
       return false;
     } finally {
-      markIdle(threadId);
       if (threadId === activeThreadId) {
         setTimeout(() => textareaRef.current?.focus(), 50);
       }
     }
   };
+
 
   /**
    * Always points at the current render's `handleSend`. Programmatic callers
