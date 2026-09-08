@@ -85,8 +85,13 @@ export const startMcpPairing = createServerFn({ method: "POST" })
       );
     if (error) throw new Error(error.message);
 
-    return { code, command: MCP_PROVIDERS[data.provider].installCommand(code) };
-  });
+    return {
+      code,
+      command: MCP_PROVIDERS[data.provider].installCommand(code),
+      expiresAt: expires,
+    };
+  },
+  );
 
 /** Forget the connection entirely (the user has to pair again). */
 export const disconnectMcpProvider = createServerFn({ method: "POST" })
