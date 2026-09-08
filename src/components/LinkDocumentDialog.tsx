@@ -82,21 +82,21 @@ export function LinkDocumentDialog({
   });
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     const list = freshDocs ?? documents;
     return sortDocsByTitle(
       list.filter((d) => {
         if (excludeDocumentId && d.id === excludeDocumentId) return false;
         if (!q) return true;
-        return (d.title || "").toLowerCase().includes(q);
+        return normalizeSearch(d.title).includes(q);
       })
     );
   }, [documents, freshDocs, query, excludeDocumentId]);
 
   const filteredThreads = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     if (!q) return threads;
-    return threads.filter((t) => (t.title || "").toLowerCase().includes(q));
+    return threads.filter((t) => normalizeSearch(t.title).includes(q));
   }, [threads, query]);
 
   /** Writes the link to every identical sentence in the same document. */

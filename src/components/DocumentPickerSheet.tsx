@@ -76,9 +76,9 @@ export function DocumentPickerSheet({
   };
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     if (!q) return docs;
-    return docs.filter((d) => (d.title || "Untitled").toLowerCase().includes(q));
+    return docs.filter((d) => normalizeSearch(d.title || "Untitled").includes(q));
   }, [docs, query]);
 
   return (
