@@ -23,7 +23,7 @@ import path from "node:path";
 
 const DEFAULT_SERVER = "https://orbyai.lovable.app";
 /** Keep in sync with BRIDGE_VERSION in the Python worker and in src/lib/mcp-providers.ts. */
-const BRIDGE_VERSION = "2";
+const BRIDGE_VERSION = "3";
 
 const HOME = os.homedir();
 const CONFIG_DIR = path.join(HOME, ".orby");
@@ -68,6 +68,11 @@ def emit(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
 
+def log(msg):
+    sys.stderr.write("[resolve] %s\n" % msg)
+    sys.stderr.flush()
+
+
 def load_resolve():
     api = os.environ.get("RESOLVE_SCRIPT_API")
     lib = os.environ.get("RESOLVE_SCRIPT_LIB")
@@ -110,8 +115,11 @@ if resolve is None:
     sys.exit(0)
 
 pm = resolve.GetProjectManager()
-BRIDGE_VERSION = "2"
+BRIDGE_VERSION = "3"
 
+
+def norm(s):
+    return " ".join(str(s or "").split()).lower()
 
 def project():
     p = pm.GetCurrentProject()
@@ -126,17 +134,122 @@ def timeline():
     return t
 
 def pool():
-    return project().GetMediaPool()
+    mp = project().GetMediaPool()
+    if mp is None:
+        raise Exception("Resolve returned no media pool. Make sure a project is open, then try again.")
+    return mp
+
+def root_folder():
+    f = pool().GetRootFolder()
+    if f is None:
+        raise Exception("Resolve returned no Master bin. Open the Media page once, then try again.")
+    return f
+
+def folder():
+    """The selected bin, falling back to Master when Resolve hasn't selected one."""
+    f = None
+    try:
+        f = pool().GetCurrentFolder()
+    except Exception:
+        f = None
+    if f is None:
+        log("no current bin selected; falling back to Master")
+        f = root_folder()
+    return f
+
+def clip_list(f):
+    if f is None:
+        raise Exception("Resolve returned no bin to read clips from. Open the Media page once, then try again.")
+    return f.GetClipList() or []
+
+def walk_folders(f=None, depth=0):
+    """Master bin first, then every sub-bin, depth first."""
+    f = f if f is not None else root_folder()
+    out = [f]
+    if depth < 12:
+        for s in (f.GetSubFolderList() or []):
+            if s is not None:
+                out += walk_folders(s, depth + 1)
+    return out
 
 def find_clip(name):
-    folder = pool().GetCurrentFolder()
-    for c in (folder.GetClipList() or []):
-        if (c.GetName() or "").lower() == str(name).lower():
-            return c
-    for c in (folder.GetClipList() or []):
-        if str(name).lower() in (c.GetName() or "").lower():
-            return c
-    raise Exception("No clip named '%s' in the media pool." % name)
+    want = norm(name)
+    if not want:
+        raise Exception("Tell me which clip by name.")
+    searched = []
+    bins = []
+    cur = None
+    try:
+        cur = pool().GetCurrentFolder()
+    except Exception:
+        cur = None
+    if cur is not None:
+        bins.append(cur)
+    for f in walk_folders():
+        if f not in bins:
+            bins.append(f)
+    for pass_exact in (True, False):
+        for f in bins:
+            bin_name = f.GetName() or "?"
+            if pass_exact and bin_name not in searched:
+                searched.append(bin_name)
+            for c in clip_list(f):
+                cn = norm(c.GetName())
+                if (cn == want) if pass_exact else (want in cn or cn in want):
+                    log("found clip '%s' in bin '%s'" % (c.GetName(), bin_name))
+                    return c
+    raise Exception(
+        "No clip named '%s' in the media pool. I looked in: %s." % (name, ", ".join(searched) or "Master")
+    )
+
+def find_timeline_items(name, kind="video", track=None):
+    """Every clip on the timeline whose name matches, exact first then partial."""
+    t = timeline()
+    want = norm(name)
+    tracks = [int(track)] if track else list(range(1, (t.GetTrackCount(kind) or 0) + 1))
+    rows = []
+    for i in tracks:
+        for item in (t.GetItemListInTrack(kind, i) or []):
+            if item is None:
+                continue
+            rows.append((i, item))
+    exact = [r for r in rows if norm(r[1].GetName()) == want]
+    hits = exact or [r for r in rows if want and want in norm(r[1].GetName())]
+    if not hits:
+        raise Exception(
+            "No clip named '%s' on the %s tracks of '%s'." % (name, kind, t.GetName())
+        )
+    log("matched %d timeline clip(s) for '%s'" % (len(hits), name))
+    return hits
+
+def ensure_track(t, kind, index):
+    have = t.GetTrackCount(kind) or 0
+    while have < index:
+        if not t.AddTrack(kind):
+            raise Exception("Resolve refused to add %s track %d (it has %d)." % (kind, index, have))
+        have = t.GetTrackCount(kind) or (have + 1)
+    return have
+
+def source_range(item):
+    """(startFrame, endFrame) in the source media, with fallbacks."""
+    start = None
+    end = None
+    try:
+        start = int(item.GetSourceStartFrame())
+        end = int(item.GetSourceEndFrame())
+    except Exception:
+        start = None
+
+    if start is None:
+        try:
+            left = int(item.GetLeftOffset() or 0)
+            dur = int(item.GetDuration() or 0)
+            start = left
+            end = left + max(dur - 1, 0)
+        except Exception:
+            raise Exception("Resolve wouldn't tell me the source range of '%s'." % item.GetName())
+    return start, end
+
 
 def info():
     p = pm.GetCurrentProject()
@@ -580,32 +693,76 @@ def call(tool, a):
         if not items: raise Exception("Resolve refused to append that clip.")
         return {"appended": clip.GetName()}
 
+    if tool == "copy_clip_to_track":
+        t = timeline()
+        k = kind_of(a)
+        name = a.get("clip") or a.get("name")
+        to_track = int(a.get("to_track") or a.get("track") or 0)
+        if to_track < 1:
+            raise Exception("Tell me which track number to copy onto (for example video track 6).")
+        hits = find_timeline_items(name, k, a.get("from_track"))
+        if not (a.get("all_matches") in (None, True, "true", 1)):
+            hits = hits[:1]
+        ensure_track(t, k, to_track)
+        copied = []
+        skipped = []
+        for src_track, item in hits:
+            if src_track == to_track:
+                skipped.append("'%s' is already on %s track %d" % (item.GetName(), k, to_track))
+                continue
+            mpi = None
+            try:
+                mpi = item.GetMediaPoolItem()
+            except Exception:
+                mpi = None
+            if mpi is None:
+                skipped.append("'%s' has no source media in the pool (compound, Fusion or title clip) — copy that one by hand" % item.GetName())
+                continue
+            s, e = source_range(item)
+            record = int(item.GetStart())
+            log("copying '%s' from %s%d to %s%d at frame %d (source %d-%d)" % (item.GetName(), k[0].upper(), src_track, k[0].upper(), to_track, record, s, e))
+            added = pool().AppendToTimeline([{
+                "mediaPoolItem": mpi,
+                "startFrame": s,
+                "endFrame": e,
+                "trackIndex": to_track,
+                "recordFrame": record,
+            }])
+            if not added:
+                skipped.append("Resolve refused to place '%s' on %s track %d — that spot may already be occupied" % (item.GetName(), k, to_track))
+                continue
+            copied.append({"clip": item.GetName(), "from_track": src_track, "record_frame": record})
+        if not copied:
+            raise Exception("Nothing was copied. " + ("; ".join(skipped) if skipped else "No matching clips had source media."))
+        return {"copied": copied, "to_track": "%s%d" % (k[0].upper(), to_track), "skipped": skipped, "original_left_in_place": True}
+
     # ------------------------------------------------------------ media pool
     if tool == "list_media_pool_clips":
-        folder = pool().GetCurrentFolder()
+        f = folder()
         out = []
-        for c in (folder.GetClipList() or []):
+        for c in clip_list(f):
             out.append({"name": c.GetName(), "duration": c.GetClipProperty("Duration"), "resolution": c.GetClipProperty("Resolution")})
-        return {"folder": folder.GetName(), "clips": out}
+        return {"folder": f.GetName(), "clips": out}
 
     if tool == "list_media_pool_folders":
-        root = pool().GetRootFolder()
         def walk(f, depth=0):
-            rows = [{"name": f.GetName(), "depth": depth, "clips": len(f.GetClipList() or [])}]
+            rows = [{"name": f.GetName(), "depth": depth, "clips": len(clip_list(f))}]
             for s in (f.GetSubFolderList() or []):
-                rows += walk(s, depth + 1)
+                if s is not None:
+                    rows += walk(s, depth + 1)
             return rows
-        return {"folders": walk(root)}
+        return {"folders": walk(root_folder())}
 
     if tool == "create_media_pool_folder":
-        parent = pool().GetCurrentFolder()
+        parent = folder()
         f = pool().AddSubFolder(parent, str(a.get("name", "Orby")))
+
         if not f: raise Exception("Resolve refused to create that bin.")
         return {"created": f.GetName()}
 
     if tool == "set_current_folder":
         want = str(a.get("name", "")).lower()
-        root = pool().GetRootFolder()
+        root = root_folder()
         def find(f):
             if (f.GetName() or "").lower() == want: return f
             for s in (f.GetSubFolderList() or []):
@@ -622,7 +779,7 @@ def call(tool, a):
         clips = [find_clip(n) for n in names]
         want = str(a.get("folder", "")).lower()
         target = None
-        for s in (pool().GetRootFolder().GetSubFolderList() or []):
+        for s in (root_folder().GetSubFolderList() or []):
             if (s.GetName() or "").lower() == want: target = s
         if target is None: raise Exception("No bin called '%s'." % a.get("folder"))
         if not pool().MoveClips(clips, target): raise Exception("Resolve refused to move those clips.")
