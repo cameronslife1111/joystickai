@@ -1183,7 +1183,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             messages: history,
             contextDocumentIds: docIdsUsed,
             imageUrls: capsUsed.image_analysis
-              ? pickedImages.map((a) => a.url).filter((u): u is string => !!u)
+              ? imagesUsed.map((a) => a.url).filter((u): u is string => !!u)
               : [],
             capabilities: capsUsed,
             autoCapabilities: override?.auto === true,
