@@ -101,6 +101,53 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_turns: {
+        Row: {
+          attempts: number
+          claim_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          payload: Json
+          status: string
+          thread_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          claim_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json
+          status?: string
+          thread_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          claim_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json
+          status?: string
+          thread_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_turns_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_icons: {
         Row: {
           created_at: string

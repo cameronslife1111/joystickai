@@ -64,6 +64,13 @@
       "when": 1788828924531,
       "tag": "0008_create_mcp_connections_and_commands",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788871948787,
+      "tag": "0009_create_chat_turns_queue",
+      "breakpoints": true
     }
   ]
 }

@@ -319,6 +319,16 @@ export async function recoverPlaybackContext(): Promise<AudioContext | null> {
 let recoveryListenersAttached = false;
 
 /**
+ * True only after the page has genuinely been hidden (app switch, screen lock,
+ * tab change). Ordinary focus churn — tapping a textarea, opening or closing a
+ * dialog, the iOS keyboard appearing, a click returning focus to the document —
+ * fires `focus` without ever hiding the page, and must NEVER be treated as a
+ * return from background: doing so cancelled speech mid-sentence, which is
+ * exactly the "reads a bit, stops, reads more" stutter.
+ */
+let wasHidden = false;
+
+/**
  * The app was backgrounded and is visible again. iOS ignores resume() outside
  * a user gesture, so don't try to heal the old engine here — retire it. The
  * next orb tap builds a fresh context with a guaranteed clean audio route.
@@ -331,26 +341,40 @@ export function handleAppForeground() {
   assertMixableSessionWithRetries();
 }
 
+function pageIsVisible(): boolean {
+  if (typeof document === "undefined" || !document.visibilityState) return true;
+  return document.visibilityState === "visible";
+}
+
 function attachForegroundRecovery() {
   if (recoveryListenersAttached) return;
   if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   recoveryListenersAttached = true;
   const onMaybeForeground = () => {
-    if (
-      typeof document !== "undefined" &&
-      document.visibilityState &&
-      document.visibilityState !== "visible"
-    ) {
+    if (!pageIsVisible()) {
+      wasHidden = true;
       return;
     }
+    // Visible again — but only recover when we actually left.
+    if (!wasHidden) return;
+    wasHidden = false;
     handleAppForeground();
   };
-  window.addEventListener("pageshow", onMaybeForeground);
+  // A restored page (iOS back/forward cache) really did leave; treat it as such.
+  window.addEventListener("pageshow", (event) => {
+    if ((event as PageTransitionEvent).persisted) wasHidden = true;
+    onMaybeForeground();
+  });
   window.addEventListener("focus", onMaybeForeground);
+  window.addEventListener("pagehide", () => {
+    wasHidden = true;
+  });
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener("visibilitychange", onMaybeForeground);
   }
 }
+
+
 
 /**
  * Take the audio route back from any held or dying microphone and assert the
@@ -587,8 +611,34 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         return;
       }
 
+      // Jitter buffer. Playback runs at SPEECH_RATE (faster than realtime), so
+      // scheduling each chunk the instant it lands drains the queue quicker
+      // than the network fills it and any late chunk lands after the playhead
+      // has already passed — an audible gap mid-word. Hold arriving audio until
+      // about a second is ready, then schedule it as one continuous run.
+      const PRIME_SAMPLES = Math.round(PLAYBACK_SAMPLE_RATE * 1.0);
       let playhead = 0;
+      let pendingChunks: Float32Array<ArrayBuffer>[] = [];
+      let pendingSamples = 0;
       let assertedOnFirstChunk = false;
+
+      const flushPending = (force: boolean) => {
+        if (pendingSamples === 0) return;
+        if (!force && pendingSamples < PRIME_SAMPLES) return;
+        const merged = new Float32Array(pendingSamples) as Float32Array<ArrayBuffer>;
+        let offset = 0;
+        for (const chunk of pendingChunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        pendingChunks = [];
+        pendingSamples = 0;
+        // Underrun: the queue already ran dry, so re-prime with a fresh lead-in
+        // instead of stitching audio onto a playhead that is in the past.
+        if (playhead !== 0 && playhead <= context.currentTime + 0.01) playhead = 0;
+        playhead = scheduleSamples(context, merged, playhead);
+      };
+
       const merged = await generateClip(clean, selectedVoice, controller.signal, {
         isStale: () => sequence !== requestSequence,
         onChunk: (samples) => {
@@ -600,15 +650,19 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
             // audio-session flip the microphone left behind.
             requestIosMixableSession();
           }
-          playhead = scheduleSamples(context, samples, playhead);
+          pendingChunks.push(samples);
+          pendingSamples += samples.length;
+          flushPending(false);
         },
       });
       if (!merged || sequence !== requestSequence) return;
+      flushPending(true);
 
       // Cache the decoded clip so Repeat / re-reads replay instantly and free.
       rememberClip(key, merged);
 
       const remainingMs = Math.max(0, (playhead - context.currentTime) * 1_000);
+
       finishTimer = setTimeout(() => {
         if (sequence !== requestSequence) return;
         audibleSpeaking = false;
