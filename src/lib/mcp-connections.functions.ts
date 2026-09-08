@@ -8,14 +8,24 @@ const providerSchema = z.object({
 });
 
 function shape(row: any, provider: McpProviderId): McpConnectionStatus {
+  const raw = row?.server_info;
+  let serverInfo: Record<string, string> | null = null;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    serverInfo = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (v == null) continue;
+      serverInfo[k] = typeof v === "string" ? v : JSON.stringify(v);
+    }
+  }
   return {
     provider,
     status: (row?.status ?? "none") as McpConnectionStatus["status"],
     pairingCode: row?.pairing_code ?? null,
     lastSeenAt: row?.last_seen_at ?? null,
-    serverInfo: (row?.server_info ?? null) as Record<string, unknown> | null,
+    serverInfo,
   };
 }
+
 
 /** Current connection state for one provider (used by the chat status pill). */
 export const getMcpConnection = createServerFn({ method: "POST" })
