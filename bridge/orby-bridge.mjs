@@ -68,6 +68,11 @@ def emit(obj):
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
 
+def log(msg):
+    sys.stderr.write("[resolve] %s\n" % msg)
+    sys.stderr.flush()
+
+
 def load_resolve():
     api = os.environ.get("RESOLVE_SCRIPT_API")
     lib = os.environ.get("RESOLVE_SCRIPT_LIB")
