@@ -108,6 +108,8 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     try {
       await unpair({ data: { provider } });
       setCommand(null);
+      setExpiresAt(null);
+      mintedRef.current = false;
       void qc.invalidateQueries({ queryKey: ["mcp_connection", provider] });
       toast.success(`${meta.name} disconnected`, { emoji: meta.emoji });
     } finally {
@@ -115,7 +117,18 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     }
   }, [unpair, provider, qc, meta]);
 
+  // Only ever render a code that is still good.
   const shown = command ?? (data?.pairingCode ? meta.installCommand(data.pairingCode) : null);
+  const expiry = expiresAt ?? data?.pairingExpiresAt ?? null;
+  const timeLeft = (() => {
+    if (!expiry) return null;
+    const ms = new Date(expiry).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const mins = Math.floor(ms / 60_000);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+  })();
 
   return (
     <div className="rounded-lg border border-foreground/10 bg-muted/30 p-3">
