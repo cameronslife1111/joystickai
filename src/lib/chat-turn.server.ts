@@ -155,7 +155,9 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
   if (error) return { outcome: `lookup_failed:${error.message}` };
   const turn = row as TurnRow | null;
   if (!turn) return { outcome: "missing" };
-  if (turn.status === "done" || turn.status === "failed") return { outcome: turn.status };
+  if (turn.status === "done" || turn.status === "failed" || turn.status === "canceled")
+    return { outcome: turn.status };
+
 
   if (!(await claimTurn(turn))) return { outcome: "claimed_elsewhere" };
 
