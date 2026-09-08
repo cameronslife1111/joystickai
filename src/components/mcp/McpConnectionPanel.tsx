@@ -67,11 +67,16 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
   const unpair = useServerFn(disconnectMcpProvider);
   const [busy, setBusy] = useState(false);
   const [command, setCommand] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const mintedRef = useRef(false);
 
   const status = data?.status ?? "none";
 
   useEffect(() => {
-    if (status === "connected") setCommand(null);
+    if (status === "connected") {
+      setCommand(null);
+      setExpiresAt(null);
+    }
   }, [status]);
 
   const begin = useCallback(async () => {
@@ -79,13 +84,24 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     try {
       const res = await pair({ data: { provider } });
       setCommand(res.command);
+      setExpiresAt(res.expiresAt);
       void qc.invalidateQueries({ queryKey: ["mcp_connection", provider] });
+      return true;
     } catch (e) {
       toast.error((e as Error).message || "Couldn't start the setup");
+      return false;
     } finally {
       setBusy(false);
     }
   }, [pair, provider, qc]);
+
+  // Never show a dead code: mint one automatically when there isn't a live one.
+  useEffect(() => {
+    if (isLoading || status === "connected" || mintedRef.current) return;
+    if (command || data?.pairingCode) return;
+    mintedRef.current = true;
+    void begin();
+  }, [isLoading, status, command, data?.pairingCode, begin]);
 
   const drop = useCallback(async () => {
     setBusy(true);
