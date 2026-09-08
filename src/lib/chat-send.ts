@@ -13,6 +13,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "video_generation",
   "scheduling",
   "web_search",
+  "davinci_resolve",
 ];
 
 export const CHAT_DEFAULT_CAPS: ChatCapabilities = {
@@ -23,7 +24,9 @@ export const CHAT_DEFAULT_CAPS: ChatCapabilities = {
   video_generation: true,
   document_editing: true,
   scheduling: true,
+  davinci_resolve: false,
 };
+
 
 type SendChatFn = (args: {
   data: {

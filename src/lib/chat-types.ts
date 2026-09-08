@@ -13,6 +13,8 @@ export const capabilitiesSchema = z.object({
   video_generation: z.boolean().default(true),
   document_editing: z.boolean().default(true),
   scheduling: z.boolean().default(true),
+  /** 🎬 DaVinci Resolve Mode — drive Resolve through the local MCP bridge. */
+  davinci_resolve: z.boolean().default(false),
 });
 
 export const ALL_CAPS_ON = {
@@ -23,7 +25,9 @@ export const ALL_CAPS_ON = {
   video_generation: true,
   document_editing: true,
   scheduling: true,
+  davinci_resolve: false,
 } as const;
+
 
 export const chatTurnSchema = z.object({
   messages: z.array(chatMsgSchema).min(1).max(60),
@@ -51,6 +55,7 @@ export const ACTION_GROUPS = [
   "image_generation",
   "video_generation",
   "scheduling",
+  "davinci_resolve",
 ] as const;
 
 /** Normalize a possibly-partial capabilities object from the database. */
@@ -72,5 +77,7 @@ export function normalizeCapabilities(
     video_generation: pick("video_generation"),
     document_editing: pick("document_editing"),
     scheduling: pick("scheduling"),
+    davinci_resolve: pick("davinci_resolve"),
   };
 }
+

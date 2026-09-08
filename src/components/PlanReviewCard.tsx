@@ -14,6 +14,7 @@ const CAP_TEXT: Record<string, string> = {
   video_generation: "video generation",
   scheduling: "scheduling",
   web_search: "web search",
+  davinci_resolve: "DaVinci Resolve",
 };
 
 const TOOL_GROUPS: (keyof ChatCapabilities)[] = [
@@ -22,7 +23,9 @@ const TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "video_generation",
   "scheduling",
   "web_search",
+  "davinci_resolve",
 ];
+
 
 export type ReviewPlan = {
   id: string;

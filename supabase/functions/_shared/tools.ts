@@ -390,6 +390,19 @@ export const TOOL_CATALOG: ToolDef[] = [
       context: { type: "string", description: "Optional short context (what you did so far, options to pick from). Shown alongside the question.", required: false },
     },
   },
+  {
+    name: "resolve_command",
+    description:
+      "Run ONE command in the user's local DaVinci Resolve through the Orby bridge (MCP). Use one step per Resolve action and sequence them: inspect first (get_project_info / list_timelines / list_media_pool_clips), then build (create_timeline, import_media, append_clip_to_timeline), then treat (add_fusion_effect for a delta keyer / green-screen removal, grade_clip, apply_lut, set_clip_property, add_text_plus, add_transition), then export (render_timeline, then get_render_status). " +
+      "Available Resolve tools: get_project_info, list_timelines, create_timeline, set_current_timeline, list_media_pool_clips, import_media, append_clip_to_timeline, add_transition, add_fusion_effect, set_clip_property, apply_lut, grade_clip, add_text_plus, render_timeline, get_render_status. " +
+      "Pass tool arguments as a JSON object string in `arguments`. The result is whatever Resolve returned, available to later steps as {{step_N.result}}. If Resolve isn't reachable the step fails with a clear message — never retry blindly in the same plan.",
+    args: {
+      tool: { type: "string", description: "The Resolve MCP tool name to call, e.g. render_timeline", required: true },
+      arguments: { type: "string", description: "JSON object of arguments for that tool, e.g. {\"name\":\"Short 9x16\",\"resolution\":\"1080x1920\"}", required: false },
+      why: { type: "string", description: "One short line explaining what this command achieves", required: false },
+    },
+  },
+
 ];
 
 /**

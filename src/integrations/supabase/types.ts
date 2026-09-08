@@ -167,6 +167,98 @@ export type Database = {
         }
         Relationships: []
       }
+      mcp_commands: {
+        Row: {
+          arguments: Json
+          connection_id: string
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          result: Json | null
+          started_at: string | null
+          status: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          arguments?: Json
+          connection_id: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          arguments?: Json
+          connection_id?: string
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_commands_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "mcp_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mcp_connections: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string | null
+          pairing_code: string | null
+          pairing_expires_at: string | null
+          provider: string
+          server_info: Json
+          status: string
+          token_hash: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          pairing_code?: string | null
+          pairing_expires_at?: string | null
+          provider: string
+          server_info?: Json
+          status?: string
+          token_hash?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string | null
+          pairing_code?: string | null
+          pairing_expires_at?: string | null
+          provider?: string
+          server_info?: Json
+          status?: string
+          token_hash?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       media_assets: {
         Row: {
           created_at: string

@@ -17,7 +17,9 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "video_generation",
   "scheduling",
   "web_search",
+  "davinci_resolve",
 ];
+
 
 export function toSpec(s: any): ScheduleSpec {
   return {
