@@ -317,6 +317,15 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** The messages wrapper — watched so late-growing content re-pins the view. */
   const messagesListRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
+  /**
+   * Per-chat composer drafts (typed text + attached images). The composer is a
+   * single set of React state, so without this a half-written message and its
+   * image attachments would follow the user into whatever chat they open next
+   * — and get sent there. Each chat keeps its own draft instead.
+   */
+  const draftsRef = useRef<Record<string, { text: string; images: MediaAsset[] }>>({});
+  /** The thread the composer state currently belongs to. */
+  const draftThreadRef = useRef<string | null>(null);
   /** Nonce of the last 🟣 Delegate request we already kicked off. */
   const delegateRef = useRef<string | null>(null);
   /** True while 🟣 Delegate is analysing the step, before the plan appears. */
