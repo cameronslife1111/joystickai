@@ -6,6 +6,8 @@ import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
 import { toPlainText } from "./plain-text";
 import { DOC_RULES, ORBY_BASE_RULES } from "./assistant-instructions";
+import { MCP_PROVIDERS, toolCatalogText } from "./mcp-providers";
+
 
 import {
   ACTION_GROUPS,
@@ -329,8 +331,15 @@ export async function runChatTurn(
     "When you mention one, write its title in double quotes exactly as listed — that is what makes it show up. " +
     "When the user asks to change something about a media item that already exists (\"make the sky more orange\", " +
     "\"same image but at night\"), that is a NEW plan that edits or regenerates that exact asset by id — never treat it as chit-chat.\n\n" +
+    (caps.davinci_resolve
+      ? "DAVINCI RESOLVE MODE IS ON. The user's own copy of DaVinci Resolve Studio is connected. " +
+        "You can run exactly these commands there, and nothing else — when the user asks for one of them, " +
+        "say yes and start a plan; only say something isn't possible when it truly is not on this list:\n" +
+        `${toolCatalogText(MCP_PROVIDERS.davinci_resolve)}\n\n`
+      : "") +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
+
 
 
   // Attach documents LAST — after whatever the user typed. The block is
