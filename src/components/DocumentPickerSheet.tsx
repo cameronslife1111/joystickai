@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 
 interface Props {
   open: boolean;
@@ -76,9 +77,9 @@ export function DocumentPickerSheet({
   };
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     if (!q) return docs;
-    return docs.filter((d) => (d.title || "Untitled").toLowerCase().includes(q));
+    return docs.filter((d) => normalizeSearch(d.title || "Untitled").includes(q));
   }, [docs, query]);
 
   return (

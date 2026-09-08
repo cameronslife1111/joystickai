@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 import { Input } from "@/components/ui/input";
 import { Link as LinkIcon } from "lucide-react";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
@@ -2339,8 +2340,8 @@ function AppPageInner() {
       const parsed = parseChecklists(text);
       if (parsed.length === 0) { toast.error("No checklists found"); return; }
       const existingByTitle = new Map<string, { id: string }>();
-      (docs ?? []).forEach((d: any) => existingByTitle.set(d.title.trim().toLowerCase(), { id: d.id }));
-      const updates = parsed.filter(p => existingByTitle.has(p.title.trim().toLowerCase())).length;
+      (docs ?? []).forEach((d: any) => existingByTitle.set(normalizeSearch(d.title), { id: d.id }));
+      const updates = parsed.filter(p => existingByTitle.has(normalizeSearch(p.title))).length;
       const creates = parsed.length - updates;
       if (!confirm(`Import ${parsed.length} checklist${parsed.length === 1 ? "" : "s"}? (${creates} new, ${updates} will replace existing)`)) return;
 
@@ -2353,7 +2354,7 @@ function AppPageInner() {
       let newIdx = 0;
       for (let i = 0; i < parsed.length; i++) {
         const item = parsed[i];
-        const existing = existingByTitle.get(item.title.trim().toLowerCase());
+        const existing = existingByTitle.get(normalizeSearch(item.title));
         let docId: string;
         if (existing) {
           docId = existing.id;
@@ -3516,9 +3517,9 @@ function AppPageInner() {
             )}
             <div className="-mx-1 flex-1 overflow-y-auto px-1">
               {(() => {
-                const q = pinPickerQuery.trim().toLowerCase();
+                const q = normalizeSearch(pinPickerQuery);
                 const list = sortDocsByTitle([...(docs ?? [])]).filter(
-                  (d) => !q || (d.title ?? "").toLowerCase().includes(q),
+                  (d) => !q || normalizeSearch(d.title).includes(q),
                 );
                 if (list.length === 0) {
                   return <p className="py-8 text-center text-sm text-muted-foreground">No documents.</p>;
@@ -3666,10 +3667,10 @@ function AppPageInner() {
             const targetId = favorites[pickerSlot];
             const targetDoc = targetId ? docs?.find((d) => d.id === targetId) : null;
             const matchCount = targetId ? favorites.filter((id) => id === targetId).length : 0;
-            const q = pickerQuery.trim().toLowerCase();
+            const q = normalizeSearch(pickerQuery);
             const filtered = sortDocsByTitle(
               (docs ?? []).filter((d) =>
-                q === "" ? true : d.title.toLowerCase().includes(q)
+                q === "" ? true : normalizeSearch(d.title).includes(q)
               )
             );
             const closePicker = () => {
@@ -3793,10 +3794,10 @@ function AppPageInner() {
       )}
       {/* Search-docs overlay */}
       {searchOpen && (() => {
-        const q = searchQuery.trim().toLowerCase();
+        const q = normalizeSearch(searchQuery);
         const results = sortDocsByTitle(
           (docs ?? []).filter((d) =>
-            q === "" ? true : d.title.toLowerCase().includes(q)
+            q === "" ? true : normalizeSearch(d.title).includes(q)
           )
         );
         const pickDoc = (doc: Doc) => {
@@ -4183,9 +4184,9 @@ function AppPageInner() {
                 />
                 <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
                   {(() => {
-                    const q = sendSearchQuery.trim().toLowerCase();
+                    const q = normalizeSearch(sendSearchQuery);
                     const list = q
-                      ? sendThreads.filter((t) => (t.title || "").toLowerCase().includes(q))
+                      ? sendThreads.filter((t) => normalizeSearch(t.title).includes(q))
                       : sendThreads;
                     return list.length > 0 ? (
                       list.map((t) => (
@@ -4251,11 +4252,11 @@ function AppPageInner() {
                 />
                 <div className="flex flex-col gap-1.5 overflow-y-auto p-1">
                   {(() => {
-                    const q = sendSearchQuery.trim().toLowerCase();
+                    const q = normalizeSearch(sendSearchQuery);
                     const sorted = sortDocsByTitle(docs ?? []);
                     const filtered = q
                       ? sorted.filter((d) =>
-                          (d.title || "").toLowerCase().includes(q),
+                          normalizeSearch(d.title).includes(q),
                         )
                       : sorted;
                     return filtered.length > 0 ? (

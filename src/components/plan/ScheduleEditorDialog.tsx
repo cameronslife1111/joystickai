@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createSchedule,
@@ -145,8 +146,8 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
   });
   const titleById = useMemo(() => new Map(docs.map((d) => [d.id, d.title] as const)), [docs]);
   const filteredDocs = useMemo(() => {
-    const q = docSearch.trim().toLowerCase();
-    return q ? docs.filter((d) => d.title.toLowerCase().includes(q)) : docs;
+    const q = normalizeSearch(docSearch);
+    return q ? docs.filter((d) => normalizeSearch(d.title).includes(q)) : docs;
   }, [docs, docSearch]);
 
   // Live preview (debounced).

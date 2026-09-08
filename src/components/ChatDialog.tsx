@@ -67,6 +67,7 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { useAutoAttachDocs } from "@/lib/use-auto-attach-docs";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";
@@ -466,9 +467,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     [threads, activeThreadId],
   );
   const filteredThreads = useMemo(() => {
-    const q = threadSearch.trim().toLowerCase();
+    const q = normalizeSearch(threadSearch);
     if (!q) return threads;
-    return threads.filter((t) => (t.title || "Untitled").toLowerCase().includes(q));
+    return threads.filter((t) => normalizeSearch(t.title || "Untitled").includes(q));
   }, [threads, threadSearch]);
   const caps = pendingCaps;
   const contextDocIds = activeThread?.attached_document_ids ?? [];
@@ -2452,9 +2453,9 @@ function InsertIntoDocDialog({
     }
   };
 
-  const q = searchQuery.trim().toLowerCase();
+  const q = normalizeSearch(searchQuery);
   const sorted = sortDocsByTitle(documents ?? []);
-  const filtered = q ? sorted.filter((d) => (d.title || "").toLowerCase().includes(q)) : sorted;
+  const filtered = q ? sorted.filter((d) => normalizeSearch(d.title).includes(q)) : sorted;
 
   return (
     <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
