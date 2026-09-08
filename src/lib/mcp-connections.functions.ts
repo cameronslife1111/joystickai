@@ -7,6 +7,9 @@ const providerSchema = z.object({
   provider: z.enum(["davinci_resolve"]),
 });
 
+/** How long a pairing code stays usable. */
+const PAIRING_TTL_MS = 12 * 60 * 60_000;
+
 function shape(row: any, provider: McpProviderId): McpConnectionStatus {
   const raw = row?.server_info;
   let serverInfo: Record<string, string> | null = null;
@@ -17,10 +20,15 @@ function shape(row: any, provider: McpProviderId): McpConnectionStatus {
       serverInfo[k] = typeof v === "string" ? v : JSON.stringify(v);
     }
   }
+  // An expired code is worse than no code — the UI must never offer it.
+  const expiresAt: string | null = row?.pairing_expires_at ?? null;
+  const expired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+  const code: string | null = expired ? null : (row?.pairing_code ?? null);
   return {
     provider,
     status: (row?.status ?? "none") as McpConnectionStatus["status"],
-    pairingCode: row?.pairing_code ?? null,
+    pairingCode: code,
+    pairingExpiresAt: code ? expiresAt : null,
     lastSeenAt: row?.last_seen_at ?? null,
     serverInfo,
   };
@@ -34,7 +42,7 @@ export const getMcpConnection = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<McpConnectionStatus> => {
     const { data: row } = await context.supabase
       .from("mcp_connections")
-      .select("status, pairing_code, last_seen_at, server_info")
+      .select("status, pairing_code, pairing_expires_at, last_seen_at, server_info")
       .eq("user_id", context.userId)
       .eq("provider", data.provider)
       .maybeSingle();
@@ -56,10 +64,11 @@ export const getMcpConnection = createServerFn({ method: "POST" })
 export const startMcpPairing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => providerSchema.parse(input))
-  .handler(async ({ data, context }): Promise<{ code: string; command: string }> => {
+  .handler(
+    async ({ data, context }): Promise<{ code: string; command: string; expiresAt: string }> => {
     const { makePairingCode } = await import("./mcp-bridge.server");
     const code = makePairingCode();
-    const expires = new Date(Date.now() + 30 * 60_000).toISOString();
+    const expires = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
 
     const { error } = await context.supabase
       .from("mcp_connections")
@@ -76,8 +85,13 @@ export const startMcpPairing = createServerFn({ method: "POST" })
       );
     if (error) throw new Error(error.message);
 
-    return { code, command: MCP_PROVIDERS[data.provider].installCommand(code) };
-  });
+    return {
+      code,
+      command: MCP_PROVIDERS[data.provider].installCommand(code),
+      expiresAt: expires,
+    };
+  },
+  );
 
 /** Forget the connection entirely (the user has to pair again). */
 export const disconnectMcpProvider = createServerFn({ method: "POST" })

@@ -28,7 +28,13 @@ export const Route = createFileRoute("/api/public/mcp-bridge/pair")({
           .maybeSingle();
         if (!conn) return Response.json({ error: "That pairing code isn't valid." }, { status: 404 });
         if (conn.pairing_expires_at && new Date(conn.pairing_expires_at).getTime() < Date.now()) {
-          return Response.json({ error: "That pairing code has expired." }, { status: 410 });
+          return Response.json(
+            {
+              error:
+                'That code has run out. In Orby chat, with DaVinci Resolve Mode on, tap "Get a fresh command".',
+            },
+            { status: 410 },
+          );
         }
 
         const token = makeBridgeToken();

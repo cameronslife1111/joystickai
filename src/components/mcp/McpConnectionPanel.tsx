@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, Copy, Loader2, Plug, Unplug } from "lucide-react";
+import { CheckCircle2, Copy, Loader2, Plug, RefreshCw, Unplug } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -67,11 +67,16 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
   const unpair = useServerFn(disconnectMcpProvider);
   const [busy, setBusy] = useState(false);
   const [command, setCommand] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const mintedRef = useRef(false);
 
   const status = data?.status ?? "none";
 
   useEffect(() => {
-    if (status === "connected") setCommand(null);
+    if (status === "connected") {
+      setCommand(null);
+      setExpiresAt(null);
+    }
   }, [status]);
 
   const begin = useCallback(async () => {
@@ -79,19 +84,32 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     try {
       const res = await pair({ data: { provider } });
       setCommand(res.command);
+      setExpiresAt(res.expiresAt);
       void qc.invalidateQueries({ queryKey: ["mcp_connection", provider] });
+      return true;
     } catch (e) {
       toast.error((e as Error).message || "Couldn't start the setup");
+      return false;
     } finally {
       setBusy(false);
     }
   }, [pair, provider, qc]);
+
+  // Never show a dead code: mint one automatically when there isn't a live one.
+  useEffect(() => {
+    if (isLoading || status === "connected" || mintedRef.current) return;
+    if (command || data?.pairingCode) return;
+    mintedRef.current = true;
+    void begin();
+  }, [isLoading, status, command, data?.pairingCode, begin]);
 
   const drop = useCallback(async () => {
     setBusy(true);
     try {
       await unpair({ data: { provider } });
       setCommand(null);
+      setExpiresAt(null);
+      mintedRef.current = false;
       void qc.invalidateQueries({ queryKey: ["mcp_connection", provider] });
       toast.success(`${meta.name} disconnected`, { emoji: meta.emoji });
     } finally {
@@ -99,7 +117,18 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     }
   }, [unpair, provider, qc, meta]);
 
+  // Only ever render a code that is still good.
   const shown = command ?? (data?.pairingCode ? meta.installCommand(data.pairingCode) : null);
+  const expiry = expiresAt ?? data?.pairingExpiresAt ?? null;
+  const timeLeft = (() => {
+    if (!expiry) return null;
+    const ms = new Date(expiry).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const mins = Math.floor(ms / 60_000);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+  })();
 
   return (
     <div className="rounded-lg border border-foreground/10 bg-muted/30 p-3">
@@ -178,6 +207,20 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
                 >
                   <Copy className="mr-2 h-4 w-4" /> Copy the command
                 </Button>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10.5px] text-muted-foreground">
+                    {timeLeft ? `Code good for another ${timeLeft}` : "Code ready"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10.5px]"
+                    disabled={busy}
+                    onClick={() => void begin()}
+                  >
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Get a fresh command
+                  </Button>
+                </div>
               </div>
 
               <div>
