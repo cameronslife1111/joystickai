@@ -144,7 +144,9 @@ export const callMcpTool = createServerFn({ method: "POST" })
           .select("status, result, error")
           .eq("id", cmd.id)
           .maybeSingle();
-        if (row?.status === "done") return { ok: true, result: row.result };
+        if (row?.status === "done")
+          return { ok: true, result: row.result == null ? "" : JSON.stringify(row.result) };
+
         if (row?.status === "error") return { ok: false, error: row.error ?? "The command failed." };
       }
       return { ok: false, error: "The app didn't answer in time." };
