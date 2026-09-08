@@ -731,15 +731,8 @@ def call(tool, a):
         return {"clip": item.GetName(), "deleted": a["name"]}
 
     if tool == "copy_grade":
-        t = timeline()
-        src = item_at({"track": a.get("from_track", 1), "index": a.get("from_index", 1)})
-        dst = item_at({"track": a.get("to_track", 1), "index": a.get("to_index", 2)})
-        stills = project().GetGallery().GetCurrentStillAlbum()
-        t.SetCurrentTimecode(src.GetStart() and timeline().GetCurrentTimecode() or timeline().GetCurrentTimecode())
-        grabbed = stills.GetStills() or []
-        if not dst.SetCDL(src.GetProperty() and {} or {}):
-            pass
-        raise Exception("Copying a full grade needs the Color page gallery. Grab a still from the source clip (grab_still), then apply it with apply_drx_grade, or copy CDL values with set_cdl.")
+        raise Exception("Copying a whole grade needs the Color page gallery. Grab a still from the source clip (grab_still) and apply it with apply_drx_grade, or copy the CDL values with set_cdl.")
+
 
     if tool == "grab_still":
         resolve.OpenPage("color")
