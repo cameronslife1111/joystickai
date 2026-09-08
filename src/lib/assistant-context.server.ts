@@ -122,14 +122,15 @@ export async function buildThreadTranscript(
   supabase: any,
   threadId: string | null | undefined,
   limit = TRANSCRIPT_MESSAGES,
+  ownerId?: string | null,
 ): Promise<string> {
   if (!threadId) return "";
-  const { data } = await supabase
+  let q = supabase
     .from("chat_messages")
     .select("role, content, created_at")
-    .eq("thread_id", threadId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .eq("thread_id", threadId);
+  if (ownerId) q = q.eq("user_id", ownerId);
+  const { data } = await q.order("created_at", { ascending: false }).limit(limit);
   const rows = ((data ?? []) as Array<{ role: string; content: string }>).slice().reverse();
   return rows
     .filter((m) => (m.content ?? "").trim())
