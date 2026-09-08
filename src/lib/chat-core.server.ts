@@ -6,6 +6,8 @@ import { createOpenAiProvider } from "./ai-gateway";
 import { buildPlanMemory } from "./plan-memory";
 import { toPlainText } from "./plain-text";
 import { DOC_RULES, ORBY_BASE_RULES } from "./assistant-instructions";
+import { MCP_PROVIDERS, toolCatalogText } from "./mcp-providers";
+
 
 import {
   ACTION_GROUPS,
