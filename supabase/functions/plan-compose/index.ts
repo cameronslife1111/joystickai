@@ -716,6 +716,8 @@ Deno.serve(async (req) => {
       toggle_schedule: ["schedule_id", "enabled"],
       send_chat_message: ["text"],
       ask_user: ["question"],
+      resolve_command: ["tool"],
+
     };
 
     // A value "carries the where" if it's a non-blank string/value OR a
