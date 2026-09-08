@@ -20,10 +20,15 @@ function shape(row: any, provider: McpProviderId): McpConnectionStatus {
       serverInfo[k] = typeof v === "string" ? v : JSON.stringify(v);
     }
   }
+  // An expired code is worse than no code — the UI must never offer it.
+  const expiresAt: string | null = row?.pairing_expires_at ?? null;
+  const expired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+  const code: string | null = expired ? null : (row?.pairing_code ?? null);
   return {
     provider,
     status: (row?.status ?? "none") as McpConnectionStatus["status"],
-    pairingCode: row?.pairing_code ?? null,
+    pairingCode: code,
+    pairingExpiresAt: code ? expiresAt : null,
     lastSeenAt: row?.last_seen_at ?? null,
     serverInfo,
   };
@@ -37,7 +42,7 @@ export const getMcpConnection = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<McpConnectionStatus> => {
     const { data: row } = await context.supabase
       .from("mcp_connections")
-      .select("status, pairing_code, last_seen_at, server_info")
+      .select("status, pairing_code, pairing_expires_at, last_seen_at, server_info")
       .eq("user_id", context.userId)
       .eq("provider", data.provider)
       .maybeSingle();
