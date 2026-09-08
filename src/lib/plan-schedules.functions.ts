@@ -102,6 +102,7 @@ export const createSchedule = createServerFn({ method: "POST" })
       throw new Error(`You've hit the limit of ${MAX_SCHEDULES_PER_USER} schedules. Delete one first.`);
     }
 
+    await assertOwnedRefs(supabase, data);
     const spec: ScheduleSpec = { ...toSpec(data), run_count: 0 };
     const computed = nextRunAt(spec);
     if (!computed) {
@@ -143,6 +144,7 @@ export const updateSchedule = createServerFn({ method: "POST" })
       .single();
     if (getErr || !existing) throw new Error(getErr?.message || "Schedule not found");
 
+    await assertOwnedRefs(supabase, data.patch);
     const merged = { ...existing, ...data.patch };
     const spec = toSpec(merged);
     const next = nextRunAt(spec);
