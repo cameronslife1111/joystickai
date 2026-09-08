@@ -138,18 +138,34 @@ function retireRecorderContext() {
 function installRecorderLifecycle() {
   if (lifecycleInstalled || typeof window === "undefined") return;
   lifecycleInstalled = true;
+  // Only a real app switch / screen lock counts. Plain focus churn (tapping the
+  // message box, a dialog opening, the keyboard appearing) must not tear the
+  // audio session down — that churn is what made playback stutter.
+  let wasHidden = false;
   const markStaleOnReturn = () => {
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      wasHidden = true;
+      return;
+    }
+    if (!wasHidden) return;
+    wasHidden = false;
     // Returning from another app on iOS can leave the old mic/audio session in
     // a zombie state. Drop it so the next user press starts cleanly.
     retireRecorderContext();
   };
-  window.addEventListener("pageshow", markStaleOnReturn);
+  window.addEventListener("pagehide", () => {
+    wasHidden = true;
+  });
+  window.addEventListener("pageshow", (event) => {
+    if ((event as PageTransitionEvent).persisted) wasHidden = true;
+    markStaleOnReturn();
+  });
   window.addEventListener("focus", markStaleOnReturn);
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", markStaleOnReturn);
   }
 }
+
 
 function acquireRecorderContext(): AudioContext {
   installRecorderLifecycle();
