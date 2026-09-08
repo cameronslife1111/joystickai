@@ -234,16 +234,12 @@ def source_range(item):
     """(startFrame, endFrame) in the source media, with fallbacks."""
     start = None
     end = None
-    for getter in ("GetSourceStartFrame", "GetSourceEndFrame"):
-        if not hasattr(item, getter):
-            start = None
-            break
-    if hasattr(item, "GetSourceStartFrame") and hasattr(item, "GetSourceEndFrame"):
-        try:
-            start = int(item.GetSourceStartFrame())
-            end = int(item.GetSourceEndFrame())
-        except Exception:
-            start = None
+    try:
+        start = int(item.GetSourceStartFrame())
+        end = int(item.GetSourceEndFrame())
+    except Exception:
+        start = None
+
     if start is None:
         try:
             left = int(item.GetLeftOffset() or 0)
