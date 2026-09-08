@@ -779,7 +779,7 @@ def call(tool, a):
         clips = [find_clip(n) for n in names]
         want = str(a.get("folder", "")).lower()
         target = None
-        for s in (pool().GetRootFolder().GetSubFolderList() or []):
+        for s in (root_folder().GetSubFolderList() or []):
             if (s.GetName() or "").lower() == want: target = s
         if target is None: raise Exception("No bin called '%s'." % a.get("folder"))
         if not pool().MoveClips(clips, target): raise Exception("Resolve refused to move those clips.")
