@@ -2339,8 +2339,8 @@ function AppPageInner() {
       const parsed = parseChecklists(text);
       if (parsed.length === 0) { toast.error("No checklists found"); return; }
       const existingByTitle = new Map<string, { id: string }>();
-      (docs ?? []).forEach((d: any) => existingByTitle.set(d.normalizeSearch(title), { id: d.id }));
-      const updates = parsed.filter(p => existingByTitle.has(p.normalizeSearch(title))).length;
+      (docs ?? []).forEach((d: any) => existingByTitle.set(normalizeSearch(d.title), { id: d.id }));
+      const updates = parsed.filter(p => existingByTitle.has(normalizeSearch(p.title))).length;
       const creates = parsed.length - updates;
       if (!confirm(`Import ${parsed.length} checklist${parsed.length === 1 ? "" : "s"}? (${creates} new, ${updates} will replace existing)`)) return;
 
@@ -2353,7 +2353,7 @@ function AppPageInner() {
       let newIdx = 0;
       for (let i = 0; i < parsed.length; i++) {
         const item = parsed[i];
-        const existing = existingByTitle.get(item.normalizeSearch(title));
+        const existing = existingByTitle.get(normalizeSearch(item.title));
         let docId: string;
         if (existing) {
           docId = existing.id;
