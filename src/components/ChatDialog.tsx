@@ -520,6 +520,40 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
   const isActiveBusy = activeThreadId ? busyThreads.has(activeThreadId) : false;
 
+  /**
+   * Stop Orby mid-thought, the same way a running plan can be stopped. The
+   * queued turn is marked canceled, so whichever runner is working on it throws
+   * its answer away instead of posting it into the chat.
+   */
+  const stopThinking = useCallback(
+    async (threadId: string | null) => {
+      if (!threadId || !userId) return;
+      const ids = (qc.getQueryData<PendingTurn[]>(["chat_turns", userId]) ?? [])
+        .filter((t) => t.thread_id === threadId)
+        .map((t) => t.id);
+      // Clear the indicator right away.
+      qc.setQueryData<PendingTurn[]>(["chat_turns", userId], (cur) =>
+        (cur ?? []).filter((t) => t.thread_id !== threadId),
+      );
+      markIdle(threadId);
+      const { error } = await supabase
+        .from("chat_turns")
+        .update({ status: "canceled", claim_at: null, updated_at: new Date().toISOString() } as any)
+        .eq("thread_id", threadId)
+        .in("status", ["pending", "running"]);
+      if (error) {
+        toast.error("Couldn't stop that");
+        void refetchTurns();
+        return;
+      }
+      toast("⏹️");
+      void refetchTurns();
+    },
+    [qc, userId, refetchTurns],
+  );
+
+
+
   const unreadCount = useMemo(() => threads.filter(isUnread).length, [threads]);
 
   /**
