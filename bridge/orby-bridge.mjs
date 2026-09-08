@@ -762,7 +762,7 @@ def call(tool, a):
 
     if tool == "set_current_folder":
         want = str(a.get("name", "")).lower()
-        root = pool().GetRootFolder()
+        root = root_folder()
         def find(f):
             if (f.GetName() or "").lower() == want: return f
             for s in (f.GetSubFolderList() or []):
