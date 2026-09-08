@@ -727,6 +727,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId, activeThread?.capabilities]);
 
+  // Switching chats parks the current draft (text + attached images) with the
+  // chat it was written in and restores that chat's own draft. Nothing typed or
+  // attached in one conversation can end up being sent in another.
+  useEffect(() => {
+    const prev = draftThreadRef.current;
+    if (prev === activeThreadId) return;
+    if (prev) draftsRef.current[prev] = { text: input, images: pickedImages };
+    draftThreadRef.current = activeThreadId;
+    const next = activeThreadId ? draftsRef.current[activeThreadId] : undefined;
+    setInput(next?.text ?? "");
+    setPickedImages(next?.images ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId]);
+
   const { data: messages = [] } = useQuery({
     queryKey: ["chat_messages", activeThreadId],
     enabled: !!activeThreadId && open,
