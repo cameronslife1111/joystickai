@@ -123,7 +123,8 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
       {status === "connected" ? (
         <>
           <p className="text-[11px] leading-snug text-muted-foreground">
-            Just talk normally — Orby will do the work in {meta.name} for you.
+            Just talk normally — Orby will do the work in {meta.name} for you. Keep the terminal
+            window open.
           </p>
           <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void drop()}>
             <Unplug className="mr-2 h-4 w-4" /> Disconnect
@@ -132,28 +133,79 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
       ) : (
         <>
           <p className="text-[11px] leading-snug text-muted-foreground">{meta.requirement}</p>
+
           {shown ? (
-            <div className="mt-2 space-y-2">
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                On that computer, open a terminal and run this once:
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1.5 text-[11px]">
+            <div className="mt-3 space-y-3">
+              <ol className="space-y-2">
+                {meta.steps.map((s, i) => (
+                  <li key={s.title} className="flex gap-2">
+                    <span className="mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-[9px] font-semibold">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 text-[11px] leading-snug">
+                      <span className="font-medium">{s.title}</span>
+                      <span className="text-muted-foreground"> — {s.body}</span>
+                      {i === 0 ? (
+                        <>
+                          {" "}
+                          <a
+                            className="underline"
+                            href="https://nodejs.org/en/download"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            nodejs.org
+                          </a>
+                        </>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="space-y-1.5">
+                <code className="block max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-background px-2 py-1.5 text-[10.5px] leading-snug">
                   {shown}
                 </code>
                 <Button
                   variant="outline"
                   size="sm"
+                  className="w-full"
                   onClick={() => {
                     void navigator.clipboard?.writeText(shown);
                     toast.success("Copied", { emoji: "📋" });
                   }}
                 >
-                  <Copy className="h-4 w-4" />
+                  <Copy className="mr-2 h-4 w-4" /> Copy the command
                 </Button>
               </div>
+
+              <div>
+                <p className="mb-1 text-[11px] font-medium">Check these in {meta.name}</p>
+                <ul className="space-y-1">
+                  {meta.checklist.map((c) => (
+                    <li key={c} className="flex gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                      <span>•</span>
+                      <span className="min-w-0">{c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-1 text-[11px] font-medium">If something goes wrong</p>
+                <ul className="space-y-1">
+                  {meta.troubleshooting.map((t) => (
+                    <li key={t.problem} className="text-[11px] leading-snug">
+                      <span className="font-medium">{t.problem}</span>
+                      <span className="text-muted-foreground"> — {t.fix}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <p className="text-[11px] leading-snug text-muted-foreground">
-                This page turns green by itself as soon as it connects.
+                This card turns green by itself as soon as it connects.
               </p>
             </div>
           ) : (
@@ -166,3 +218,4 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
     </div>
   );
 }
+
