@@ -1482,7 +1482,65 @@ const TOOL_HANDLERS: Record<string, any> = {
     // Sentinel — the main runner handles the pause/insert; we just return it.
     return { __ask_user: { question, context: String(args.context ?? "").trim() } };
   },
+
+  /**
+   * Drive an external creative app (DaVinci Resolve today) through the local
+   * Orby bridge: queue one MCP command and wait for the bridge to answer.
+   * Same queue the chat-side callMcpTool server function uses.
+   */
+  async resolve_command(args, { user_id, admin }) {
+    const tool = String(args.tool ?? "").trim();
+    if (!tool) throw new Error("resolve_command requires tool");
+
+    let toolArgs: Record<string, unknown> = {};
+    const raw = args.arguments;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) toolArgs = raw as any;
+    else if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) toolArgs = parsed;
+      } catch {
+        throw new Error("resolve_command arguments must be a JSON object");
+      }
+    }
+
+    const { data: conn } = await admin
+      .from("mcp_connections")
+      .select("id, status, last_seen_at")
+      .eq("user_id", user_id)
+      .eq("provider", "davinci_resolve")
+      .maybeSingle();
+    if (!conn) throw new Error("DaVinci Resolve isn't connected — turn on DaVinci Resolve Mode in the chat and pair your computer.");
+    const live =
+      !!conn.last_seen_at && Date.now() - new Date(conn.last_seen_at).getTime() < 90_000;
+    if (conn.status !== "connected" || !live) {
+      throw new Error("DaVinci Resolve isn't reachable right now — start the Orby bridge on that computer and try again.");
+    }
+
+    const { data: cmd, error: insErr } = await admin
+      .from("mcp_commands")
+      .insert({ user_id, connection_id: conn.id, tool_name: tool, arguments: toolArgs })
+      .select("id")
+      .single();
+    if (insErr || !cmd) throw new Error(insErr?.message ?? "Couldn't queue that Resolve command");
+
+    // Renders can take a while: wait ~2 minutes, then let the plan's retry path
+    // pick it up rather than hanging forever.
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const { data: row } = await admin
+        .from("mcp_commands")
+        .select("status, result, error")
+        .eq("id", cmd.id)
+        .maybeSingle();
+      if (row?.status === "done") return { tool, result: row.result ?? null };
+      if (row?.status === "error") throw new Error(row.error || `Resolve command ${tool} failed`);
+    }
+    throw new Error(`Resolve didn't answer the ${tool} command in time`);
+  },
 };
+
 
 // ---- Schedule arg parsing (accepts JSON strings OR arrays; falls back to defaults) ----
 function parseJsonArray(v: any): any[] | null {
