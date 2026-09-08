@@ -116,6 +116,8 @@ export type McpConnectionStatus = {
   provider: McpProviderId;
   status: "none" | "pending" | "connected" | "offline";
   pairingCode: string | null;
+  /** When the pairing code stops working; null when there is no live code. */
+  pairingExpiresAt: string | null;
   lastSeenAt: string | null;
   /** Flattened to strings so it crosses the server-function boundary cleanly. */
   serverInfo: Record<string, string> | null;
