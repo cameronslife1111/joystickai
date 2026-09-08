@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 import { useServerFn } from "@tanstack/react-start";
 import {
   createSchedule,

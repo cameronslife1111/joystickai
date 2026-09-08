@@ -67,6 +67,7 @@ import { DocumentPickerSheet } from "./DocumentPickerSheet";
 import { useAutoAttachDocs } from "@/lib/use-auto-attach-docs";
 import { MediaGalleryPicker, type MediaAsset } from "./MediaGalleryPicker";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 import { toPlainText } from "@/lib/plain-text";
 
 import { StepReasoning } from "./plan/StepReasoning";

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { sortDocsByTitle } from "@/lib/sortDocs";
+import { normalizeSearch } from "@/lib/docSearch";
 
 interface Props {
   open: boolean;
