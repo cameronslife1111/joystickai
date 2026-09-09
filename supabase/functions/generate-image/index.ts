@@ -135,13 +135,13 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const modelId = "openai/gpt-image-2";
+  const modelId = "openai/gpt-image-2.5/sunburst/text-to-image";
 
   // @ts-ignore EdgeRuntime is a global in Supabase Edge Functions
   EdgeRuntime.waitUntil(
     (async () => {
       try {
-        // fal's openai/gpt-image-2 occasionally returns a transient 5xx
+        // fal's GPT Image text-to-image endpoint occasionally returns a transient 5xx
         // ("Internal Server Error") on otherwise valid prompts; retry the
         // submit a few times with backoff before giving up.
         const queued = await submitToQueueWithRetry(modelId, {
