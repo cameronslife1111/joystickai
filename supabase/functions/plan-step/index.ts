@@ -323,7 +323,7 @@ function scoreCandidate(haystack: string, query: string, qTokens: string[]): num
   return score;
 }
 
-// fal's openai/gpt-image-2/edit endpoint returns 422 Unprocessable Entity when
+// fal's GPT Image edit endpoint returns 422 Unprocessable Entity when
 // the prompt is too long (observed around ~4k+ chars, especially with multiple
 // reference images). Planners often pipe entire continuity packages into the
 // prompt via {{step_N.result}} templates — cap defensively so we degrade to a
@@ -954,7 +954,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (!prompt) throw new Error("prompt is required");
     const source = await TOOL_HANDLERS._load_media(admin, user_id, args.source_media_id, "image");
 
-    // "auto" is rejected by fal openai/gpt-image-2/edit when multiple images
+    // "auto" is rejected by the fal GPT Image edit endpoint when multiple images
     // are passed and is unreliable for single-image edits — coerce it away.
     const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
     const requestedSize = args.image_size === "auto" ? "portrait_16_9" : args.image_size;
@@ -1004,7 +1004,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     }
     const sources = await Promise.all(ids.map((id) => TOOL_HANDLERS._load_media(admin, user_id, id, "image")));
 
-    // "auto" is rejected by fal openai/gpt-image-2/edit (422 Unprocessable
+    // "auto" is rejected by the fal GPT Image edit endpoint (422 Unprocessable
     // Entity) when multiple input images are supplied — coerce it to a real size.
     const validSizes = ["portrait_16_9", "portrait_4_3", "square_hd", "landscape_4_3", "landscape_16_9"];
     const requestedSize = args.image_size === "auto" ? "portrait_16_9" : args.image_size;

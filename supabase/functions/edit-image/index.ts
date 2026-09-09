@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const modelId = "openai/gpt-image-2/edit";
+  const modelId = "openai/gpt-image-2.5/sunburst/edit";
 
   // @ts-ignore EdgeRuntime is a global in Supabase Edge Functions
   EdgeRuntime.waitUntil(
