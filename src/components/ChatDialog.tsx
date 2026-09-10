@@ -82,6 +82,8 @@ import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
 import { McpConnectionPanel, McpStatusPill } from "./mcp/McpConnectionPanel";
+import { VirtualComputerCard } from "./VirtualComputerCard";
+import { forgetVirtualComputerLogins } from "@/lib/vc.functions";
 
 
 interface Props {
@@ -163,6 +165,7 @@ const DEFAULT_CAPS: ChatCapabilities = {
   document_editing: true,
   scheduling: true,
   davinci_resolve: false,
+  virtual_computer: false,
 };
 
 /** Nothing checked → Orby just replies with text. */
@@ -175,6 +178,7 @@ const NO_CAPS: ChatCapabilities = {
   document_editing: false,
   scheduling: false,
   davinci_resolve: false,
+  virtual_computer: false,
 };
 
 
@@ -192,6 +196,11 @@ const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[]
     label: "🎬 DaVinci Resolve Mode",
     hint: "Edit, grade and export in DaVinci Resolve",
   },
+  {
+    key: "virtual_computer",
+    label: "🖥️ Virtual Computer",
+    hint: "Orby uses a temporary cloud browser — never your own computer",
+  },
 ];
 
 // action groups that map to plan tool groups
@@ -202,6 +211,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "scheduling",
   "web_search",
   "davinci_resolve",
+  "virtual_computer",
 ];
 
 
@@ -331,6 +341,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** True while 🟣 Delegate is analysing the step, before the plan appears. */
   const [delegateAnalyzing, setDelegateAnalyzing] = useState(false);
   const analyzeStep = useServerFn(analyzeDelegateStep);
+  const forgetVcLoginsFn = useServerFn(forgetVirtualComputerLogins);
 
 
 
@@ -1431,6 +1442,30 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           <McpConnectionPanel provider="davinci_resolve" />
                         </div>
                       )}
+                      {caps.virtual_computer && (
+                        <div className="mt-2 rounded-xl border border-border bg-muted/40 p-2.5">
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            Orby rents a temporary computer in the cloud, does the job on the website, and shuts
+                            it down. Your own computer and browser are never touched. If a site asks for a
+                            password or a texted code, Orby asks you here and types it straight into the page.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-7 rounded-full px-3 text-[11px]"
+                            onClick={async () => {
+                              try {
+                                await forgetVcLoginsFn({});
+                                toast("🧹");
+                              } catch (e: any) {
+                                toast.error(e?.message ?? "Couldn't clear the saved logins");
+                              }
+                            }}
+                          >
+                            Forget saved logins
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
 
@@ -1750,6 +1785,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 <McpStatusPill provider="davinci_resolve" />
               </div>
             )}
+
+            {caps.virtual_computer && <VirtualComputerCard threadId={activeThreadId ?? null} />}
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />

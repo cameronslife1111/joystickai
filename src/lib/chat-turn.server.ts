@@ -18,6 +18,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "scheduling",
   "web_search",
   "davinci_resolve",
+  "virtual_computer",
 ];
 
 /** A claimed turn is considered abandoned after this long. */

@@ -808,6 +808,165 @@ export type Database = {
           },
         ]
       }
+      vc_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          provider_profile_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          provider_profile_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          provider_profile_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vc_runs: {
+        Row: {
+          allowed_domains: string[]
+          attempts: number
+          browser_id: string | null
+          cost_usd: number | null
+          created_at: string
+          deadline_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          live_view_url: string | null
+          phase_text: string | null
+          plan_id: string | null
+          poll_at: string | null
+          provider_run_id: string | null
+          result: string | null
+          secret_request: Json | null
+          session_id: string | null
+          start_url: string | null
+          started_at: string
+          status: string
+          step_index: number | null
+          task: string
+          thread_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allowed_domains?: string[]
+          attempts?: number
+          browser_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          deadline_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          live_view_url?: string | null
+          phase_text?: string | null
+          plan_id?: string | null
+          poll_at?: string | null
+          provider_run_id?: string | null
+          result?: string | null
+          secret_request?: Json | null
+          session_id?: string | null
+          start_url?: string | null
+          started_at?: string
+          status?: string
+          step_index?: number | null
+          task: string
+          thread_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allowed_domains?: string[]
+          attempts?: number
+          browser_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          deadline_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          live_view_url?: string | null
+          phase_text?: string | null
+          plan_id?: string | null
+          poll_at?: string | null
+          provider_run_id?: string | null
+          result?: string | null
+          secret_request?: Json | null
+          session_id?: string | null
+          start_url?: string | null
+          started_at?: string
+          status?: string
+          step_index?: number | null
+          task?: string
+          thread_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vc_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vc_runs_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vc_secrets: {
+        Row: {
+          alias: string
+          cipher: string
+          created_at: string
+          domain: string
+          id: string
+          label: string | null
+          one_time: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alias: string
+          cipher: string
+          created_at?: string
+          domain: string
+          id?: string
+          label?: string | null
+          one_time?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alias?: string
+          cipher?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          label?: string | null
+          one_time?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -15,6 +15,8 @@ export const capabilitiesSchema = z.object({
   scheduling: z.boolean().default(true),
   /** 🎬 DaVinci Resolve Mode — drive Resolve through the local MCP bridge. */
   davinci_resolve: z.boolean().default(false),
+  /** Virtual Computer — a temporary cloud browser Orby drives; never the user's own machine. */
+  virtual_computer: z.boolean().default(false),
 });
 
 export const ALL_CAPS_ON = {
@@ -26,6 +28,7 @@ export const ALL_CAPS_ON = {
   document_editing: true,
   scheduling: true,
   davinci_resolve: false,
+  virtual_computer: false,
 } as const;
 
 
@@ -56,6 +59,7 @@ export const ACTION_GROUPS = [
   "video_generation",
   "scheduling",
   "davinci_resolve",
+  "virtual_computer",
 ] as const;
 
 /** Normalize a possibly-partial capabilities object from the database. */
@@ -78,6 +82,7 @@ export function normalizeCapabilities(
     document_editing: pick("document_editing"),
     scheduling: pick("scheduling"),
     davinci_resolve: pick("davinci_resolve"),
+    virtual_computer: pick("virtual_computer"),
   };
 }
 

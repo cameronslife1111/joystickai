@@ -1486,6 +1486,47 @@ const TOOL_HANDLERS: Record<string, any> = {
   },
 
   /**
+   * Virtual Computer: rent a temporary cloud browser and let it do the task.
+   * This never touches the user's own computer. The row is queued here and the
+   * vc tick drives the provider, so the plan just waits (awaiting_vc).
+   */
+  async virtual_computer_task(args, { user_id, admin, plan_id, thread_id }) {
+    const task = String(args.task ?? "").trim();
+    if (!task) throw new Error("virtual_computer_task requires task");
+    const startUrl = String(args.start_url ?? "").trim() || null;
+    const domains = Array.isArray(args.allowed_domains)
+      ? args.allowed_domains.map((d: unknown) => String(d)).filter(Boolean).slice(0, 10)
+      : [];
+
+    // One machine per person at a time.
+    const { count } = await admin
+      .from("vc_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user_id)
+      .in("status", ["starting", "running", "awaiting_secret"]);
+    if ((count ?? 0) >= 1) {
+      throw new Error("A virtual computer is already running — let it finish or stop it before starting another.");
+    }
+
+    const { data: row, error } = await admin
+      .from("vc_runs")
+      .insert({
+        user_id,
+        task: task.slice(0, 8000),
+        start_url: startUrl,
+        allowed_domains: domains,
+        thread_id: thread_id ?? null,
+        plan_id: plan_id ?? null,
+        status: "starting",
+        phase_text: "Booking a machine…",
+      })
+      .select("id")
+      .single();
+    if (error || !row) throw new Error(error?.message ?? "Couldn't start the virtual computer");
+    return { __pending_vc: row.id };
+  },
+
+  /**
    * Drive an external creative app (DaVinci Resolve today) through the local
    * Orby bridge: queue one MCP command and wait for the bridge to answer.
    * Same queue the chat-side callMcpTool server function uses.
@@ -1918,7 +1959,7 @@ Deno.serve(async (req) => {
     await admin.from("plans").update({ step_claim_at: null }).eq("id", plan.id);
     return json({ status: "awaiting_user" });
   }
-  if (plan.status !== "running" && plan.status !== "awaiting_media") {
+  if (plan.status !== "running" && plan.status !== "awaiting_media" && plan.status !== "awaiting_vc") {
     await releaseClaim();
     return json({ status: plan.status });
   }
@@ -2022,6 +2063,66 @@ Deno.serve(async (req) => {
     return json({ status: updates.status, advanced_to: nextIdx });
   }
 
+  // ---- Resume path: a step handed the work to the virtual computer. ----
+  if (plan.status === "awaiting_vc") {
+    const step = steps[idx];
+    const vcId: string | undefined = step?.pending_vc_id;
+    if (!vcId) {
+      await releaseClaim({ status: "running" });
+      return json({ status: "running" });
+    }
+    const { data: run } = await admin
+      .from("vc_runs")
+      .select("id, status, result, error, phase_text, live_view_url")
+      .eq("id", vcId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!run) {
+      step.status = "failed";
+      step.error = `The virtual computer task ${vcId} disappeared`;
+      await releaseClaim({
+        steps, status: "failed", error_message: step.error,
+        error_lovable_prompt: buildLovablePrompt(plan, step, step.error),
+        completed_at: new Date().toISOString(),
+      });
+      await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
+      return json({ status: "failed", error: step.error });
+    }
+    if (run.status === "starting" || run.status === "running" || run.status === "awaiting_secret") {
+      // The vc tick owns the provider polling; just keep waiting.
+      await releaseClaim({ consecutive_no_progress: 0 });
+      return json({ status: "awaiting_vc", vc_run_id: vcId, vc_status: run.status });
+    }
+    if (run.status === "completed") {
+      step.status = "completed";
+      step.result = { virtual_computer: true, outcome: run.result ?? "" };
+      step.error = null;
+      step.pending_vc_id = null;
+      const nextIdx = idx + 1;
+      const updates: any = { steps, current_step: nextIdx, status: "running" };
+      if (nextIdx >= steps.length) {
+        updates.status = "completed";
+        updates.result_summary = summarizeRun(steps);
+        updates.completed_at = new Date().toISOString();
+      }
+      await releaseClaim(updates);
+      if (updates.status === "completed") {
+        await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
+      }
+      return json({ status: updates.status, advanced_to: nextIdx });
+    }
+    // failed or canceled
+    step.status = "failed";
+    step.error = run.error || "The virtual computer stopped before finishing.";
+    await releaseClaim({
+      steps, status: "failed", error_message: step.error,
+      error_lovable_prompt: buildLovablePrompt(plan, step, step.error),
+      completed_at: new Date().toISOString(),
+    });
+    await reportTerminal(await composeWrapUp(admin, plan, steps, "failed", step.error));
+    return json({ status: "failed", error: step.error });
+  }
+
   if (idx >= steps.length) {
     await releaseClaim({ status: "completed", result_summary: summarizeRun(steps), completed_at: new Date().toISOString() });
     await reportTerminal(await composeWrapUp(admin, plan, steps, "completed"));
@@ -2102,6 +2203,15 @@ Deno.serve(async (req) => {
     }
 
     // Async media generation: pause the plan until the media asset finishes.
+    // The virtual computer works in the background; wait for it.
+    if (result && typeof result === "object" && "__pending_vc" in result) {
+      step.status = "awaiting_vc";
+      step.pending_vc_id = (result as any).__pending_vc;
+      step.vc_started_at = new Date().toISOString();
+      await releaseClaim({ steps, status: "awaiting_vc" });
+      return json({ status: "awaiting_vc", vc_run_id: step.pending_vc_id });
+    }
+
     if (result && typeof result === "object" && "__pending_media" in result) {
       step.status = "awaiting_media";
       step.pending_media_id = result.__pending_media;
