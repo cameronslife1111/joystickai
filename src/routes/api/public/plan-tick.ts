@@ -128,7 +128,7 @@ export const Route = createFileRoute("/api/public/plan-tick")({
         const { data: candidates, error } = await supabaseAdmin
           .from("plans")
           .select("id, user_id, status, step_claim_at")
-          .in("status", ["approved", "running", "awaiting_media"])
+          .in("status", ["approved", "running", "awaiting_media", "awaiting_vc"])
           .or(`step_claim_at.is.null,step_claim_at.lt.${staleCutoff}`)
           .order("created_at", { ascending: true })
           .limit(MAX_PLANS_PER_TICK * 4);
@@ -161,6 +161,11 @@ export const Route = createFileRoute("/api/public/plan-tick")({
           .order("created_at", { ascending: true })
           .limit(MAX_COMPOSE_PER_TICK);
 
+        // Virtual-computer runs: drive the cloud browsers forward in the same
+        // tick, so a task keeps going with the app closed.
+        const { tickVcRuns } = await import("@/lib/vc.server");
+        const vcResults = await tickVcRuns(10).catch((e) => [{ error: String(e?.message ?? e) }]);
+
         // Advance plans in parallel — each call has its own atomic claim guard.
         const [results, composeResults] = await Promise.all([
           Promise.all(picked.map((p) => advancePlan(p.id, p.user_id))),
@@ -173,6 +178,7 @@ export const Route = createFileRoute("/api/public/plan-tick")({
           advanced: picked.length,
           results,
           recomposed: composeResults,
+          virtual_computers: vcResults,
         });
 
       },
@@ -181,7 +187,7 @@ export const Route = createFileRoute("/api/public/plan-tick")({
         const { count: active } = await supabaseAdmin
           .from("plans")
           .select("id", { count: "exact", head: true })
-          .in("status", ["approved", "running", "awaiting_media"]);
+          .in("status", ["approved", "running", "awaiting_media", "awaiting_vc"]);
         return Response.json({ ok: true, active_plans: active ?? 0 });
       },
     },
