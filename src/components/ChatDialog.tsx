@@ -1439,6 +1439,30 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           <McpConnectionPanel provider="davinci_resolve" />
                         </div>
                       )}
+                      {caps.virtual_computer && (
+                        <div className="mt-2 rounded-xl border border-border bg-muted/40 p-2.5">
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            Orby rents a temporary computer in the cloud, does the job on the website, and shuts
+                            it down. Your own computer and browser are never touched. If a site asks for a
+                            password or a texted code, Orby asks you here and types it straight into the page.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-7 rounded-full px-3 text-[11px]"
+                            onClick={async () => {
+                              try {
+                                await forgetVcLoginsFn({});
+                                toast("🧹");
+                              } catch (e: any) {
+                                toast.error(e?.message ?? "Couldn't clear the saved logins");
+                              }
+                            }}
+                          >
+                            Forget saved logins
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
 
