@@ -391,6 +391,18 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "virtual_computer_task",
+    description:
+      "Hand ONE web task to a temporary cloud computer (a virtual browser Orby drives itself) and wait for the outcome. Use this for anything that needs a real browser session on a website: signing in to an account the user already has, filling in a form, checking an order or a balance, reading a page behind a login, booking or scheduling on a site, copying details out of a web app. This never touches the user's own computer or their personal browser. " +
+      "Write `task` as a short but complete brief in plain English: the goal, the exact site, any values to type, and exactly what to report back. Use ONE virtual_computer_task step per errand — the cloud agent does its own clicking, typing and reading, so do NOT split it into per-click steps. Only one virtual computer runs at a time. " +
+      "If the site needs a password or a texted code Orby doesn't have, the run pauses, the user is asked in the chat, and it carries on by itself. The result is the outcome text, available to later steps as {{step_N.result.outcome}}. Never buy anything, move money, delete an account or post publicly unless the user explicitly asked for that.",
+    args: {
+      task: { type: "string", description: "The full brief for the cloud computer: goal, site, values to enter, and what to report back.", required: true },
+      start_url: { type: "string", description: "The page to start on, e.g. https://example.com/login", required: false },
+      allowed_domains: { type: "string", description: "Optional extra domains the task may visit, e.g. a separate login host.", required: false },
+    },
+  },
+  {
     name: "resolve_command",
     description:
       "Run ONE command in the user's local DaVinci Resolve through the Orby bridge (MCP). Use one step per Resolve action and sequence them: inspect first (get_project_info / get_timeline_info / list_tracks / list_timeline_clips / list_media_pool_clips), then build (create_timeline, set_timeline_aspect, import_media, append_clip_to_timeline), then treat (add_fusion_effect for a delta keyer / green-screen removal, grade_clip, apply_lut, the set_clip_* properties, track enable/disable/lock/mute), then export (render_timeline, then get_render_status). " +
@@ -458,6 +470,8 @@ export const TOOL_GROUPS: Record<string, string> = {
   ask_user: "chat_reporting",
   // davinci_resolve — external creative app driven through the local MCP bridge
   resolve_command: "davinci_resolve",
+  // virtual_computer — a temporary cloud browser Orby drives (never the user's own machine)
+  virtual_computer_task: "virtual_computer",
 };
 
 

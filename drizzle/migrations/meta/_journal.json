@@ -71,6 +71,13 @@
       "when": 1788871948787,
       "tag": "0009_create_chat_turns_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789076024269,
+      "tag": "0010_create_virtual_computer_tables",
+      "breakpoints": true
     }
   ]
 }
