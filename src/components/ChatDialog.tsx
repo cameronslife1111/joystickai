@@ -82,6 +82,8 @@ import { buildDelegatePlanPrompt } from "@/lib/delegate-prompt";
 import { ScheduleEditorDialog } from "./plan/ScheduleEditorDialog";
 import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedules.functions";
 import { McpConnectionPanel, McpStatusPill } from "./mcp/McpConnectionPanel";
+import { VirtualComputerCard } from "./VirtualComputerCard";
+import { forgetVirtualComputerLogins } from "@/lib/vc.functions";
 
 
 interface Props {
@@ -339,6 +341,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   /** True while 🟣 Delegate is analysing the step, before the plan appears. */
   const [delegateAnalyzing, setDelegateAnalyzing] = useState(false);
   const analyzeStep = useServerFn(analyzeDelegateStep);
+  const forgetVcLoginsFn = useServerFn(forgetVirtualComputerLogins);
 
 
 
@@ -1782,6 +1785,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 <McpStatusPill provider="davinci_resolve" />
               </div>
             )}
+
+            {caps.virtual_computer && <VirtualComputerCard threadId={threadId ?? null} />}
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
