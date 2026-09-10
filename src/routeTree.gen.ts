@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as ApiPublicVcProbeRouteImport } from './routes/api/public/vc-probe'
 import { Route as ApiPublicTtsRouteImport } from './routes/api/public/tts'
 import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
 import { Route as ApiPublicPlanSchedulerTickRouteImport } from './routes/api/public/plan-scheduler-tick'
@@ -48,6 +49,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+const ApiPublicVcProbeRoute = ApiPublicVcProbeRouteImport.update({
+  id: '/api/public/vc-probe',
+  path: '/api/public/vc-probe',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicTtsRoute = ApiPublicTtsRouteImport.update({
   id: '/api/public/tts',
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/vc-probe': typeof ApiPublicVcProbeRoute
   '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/vc-probe': typeof ApiPublicVcProbeRoute
   '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
+  '/api/public/vc-probe': typeof ApiPublicVcProbeRoute
   '/api/public/mcp-bridge/install': typeof ApiPublicMcpBridgeInstallRoute
   '/api/public/mcp-bridge/pair': typeof ApiPublicMcpBridgePairRoute
   '/api/public/mcp-bridge/poll': typeof ApiPublicMcpBridgePollRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/vc-probe'
     | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/vc-probe'
     | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
+    | '/api/public/vc-probe'
     | '/api/public/mcp-bridge/install'
     | '/api/public/mcp-bridge/pair'
     | '/api/public/mcp-bridge/poll'
@@ -214,6 +226,7 @@ export interface RootRouteChildren {
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
   ApiPublicTtsRoute: typeof ApiPublicTtsRoute
+  ApiPublicVcProbeRoute: typeof ApiPublicVcProbeRoute
   ApiPublicMcpBridgeInstallRoute: typeof ApiPublicMcpBridgeInstallRoute
   ApiPublicMcpBridgePairRoute: typeof ApiPublicMcpBridgePairRoute
   ApiPublicMcpBridgePollRoute: typeof ApiPublicMcpBridgePollRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/api/public/vc-probe': {
+      id: '/api/public/vc-probe'
+      path: '/api/public/vc-probe'
+      fullPath: '/api/public/vc-probe'
+      preLoaderRoute: typeof ApiPublicVcProbeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/tts': {
       id: '/api/public/tts'
@@ -354,6 +374,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
   ApiPublicTtsRoute: ApiPublicTtsRoute,
+  ApiPublicVcProbeRoute: ApiPublicVcProbeRoute,
   ApiPublicMcpBridgeInstallRoute: ApiPublicMcpBridgeInstallRoute,
   ApiPublicMcpBridgePairRoute: ApiPublicMcpBridgePairRoute,
   ApiPublicMcpBridgePollRoute: ApiPublicMcpBridgePollRoute,

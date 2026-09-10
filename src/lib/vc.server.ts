@@ -251,30 +251,25 @@ async function createProviderRun(row: VcRunRow, extra = "") {
   };
 }
 
-async function fetchLiveUrl(sessionId: string | null, providerRunId: string | null): Promise<string | null> {
-  const pick = (o: any) =>
-    o ? (o.liveViewUrl ?? o.live_view_url ?? o.liveUrl ?? o.live_url ?? o?.browser?.liveViewUrl ?? null) : null;
-  if (sessionId) {
-    const url = pick(await buSoft(`/sessions/${sessionId}`));
-    if (url) return String(url);
-  }
-  if (providerRunId) {
-    const url = pick(await buSoft(`/runs/${providerRunId}`));
-    if (url) return String(url);
-  }
-  return null;
-}
-
-/** A short, plain-language progress line for the chat card. */
-async function fetchPhase(sessionId: string | null): Promise<string | null> {
-  if (!sessionId) return null;
-  const msgs = await buSoft(`/sessions/${sessionId}/messages?limit=5`);
-  const list: any[] = Array.isArray(msgs) ? msgs : (msgs?.messages ?? msgs?.items ?? []);
-  for (let i = list.length - 1; i >= 0; i--) {
-    const text = String(list[i]?.text ?? list[i]?.content ?? list[i]?.message ?? "").trim();
-    if (text) return text.replace(/\s+/g, " ").slice(0, 180);
-  }
-  return null;
+/**
+ * The watch-along window and the machine id both live on the provider's
+ * browser list, keyed by the agent session. (Verified against the live API:
+ * GET /browsers -> items[].agentSessionId / liveUrl / id.)
+ */
+async function fetchBrowser(
+  sessionId: string | null,
+): Promise<{ liveUrl: string | null; browserId: string | null }> {
+  if (!sessionId) return { liveUrl: null, browserId: null };
+  const list = await buSoft(`/browsers`);
+  const items: any[] = Array.isArray(list) ? list : (list?.items ?? list?.browsers ?? []);
+  const hit = items.find(
+    (b) => String(b?.agentSessionId ?? b?.agent_session_id ?? "") === sessionId,
+  );
+  if (!hit) return { liveUrl: null, browserId: null };
+  return {
+    liveUrl: hit.liveUrl ? String(hit.liveUrl) : null,
+    browserId: hit.id ? String(hit.id) : null,
+  };
 }
 
 /** Always shut the machine down — this is where the money goes. */
@@ -396,17 +391,20 @@ export async function pollVcRun(runId: string) {
   }
   const status = String(detail.status ?? "running").toLowerCase();
   const sessionId = detail.sessionId ? String(detail.sessionId) : row.session_id;
-  const cost = typeof detail.totalCostUsd === "number" ? detail.totalCostUsd : null;
+  const rawCost = detail.totalCostUsd ?? detail.total_cost_usd;
+  const cost = rawCost != null && Number.isFinite(Number(rawCost)) ? Number(rawCost) : null;
 
   const updates: Record<string, unknown> = { poll_at: new Date().toISOString() };
   if (sessionId && sessionId !== row.session_id) updates["session_id"] = sessionId;
   if (cost != null) updates["cost_usd"] = cost;
-  if (!row.live_view_url) {
-    const live = await fetchLiveUrl(sessionId, row.provider_run_id);
-    if (live) updates["live_view_url"] = live;
+  if (!row.live_view_url || !row.browser_id) {
+    const br = await fetchBrowser(sessionId);
+    if (br.liveUrl && !row.live_view_url) updates["live_view_url"] = br.liveUrl;
+    if (br.browserId && !row.browser_id) updates["browser_id"] = br.browserId;
   }
-  const phase = await fetchPhase(sessionId);
-  if (phase) updates["phase_text"] = phase;
+  // Plain-language progress: the provider's own short title for the errand.
+  const title = String(detail.title ?? "").trim();
+  if (title) updates["phase_text"] = title.replace(/\s+/g, " ").slice(0, 180);
 
   const merged: VcRunRow = { ...row, ...(updates as any), session_id: sessionId };
 
