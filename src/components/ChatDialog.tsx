@@ -1786,7 +1786,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               </div>
             )}
 
-            {caps.virtual_computer && <VirtualComputerCard threadId={threadId ?? null} />}
+            {caps.virtual_computer && <VirtualComputerCard threadId={activeThreadId ?? null} />}
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <SettingsIcon className="h-3 w-3" />
