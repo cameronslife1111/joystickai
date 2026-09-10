@@ -101,6 +101,20 @@ ${
     : ""
 }
 
+${
+  !allowedGroups || allowedGroups.includes("virtual_computer")
+    ? `VIRTUAL COMPUTER (a temporary cloud browser Orby drives — never the user's own machine) — use virtual_computer_task:
+- Use it for real website work: signing in to an account the user already has, filling in forms, checking orders/balances/statements, reading pages behind a login, booking or scheduling on a site, copying details back into Orby.
+- ONE virtual_computer_task step per errand. The cloud agent does its own navigating, clicking, typing and reading, so never break an errand into per-click steps, and never run two virtual computers at once.
+- Write "task" as a complete plain-English brief: the goal, the exact site, any values to type, and precisely what to report back. Set start_url when you know the page.
+- Passwords and texted codes are handled for you: the run pauses, asks the user in the chat, and continues. Never put a password in the task text and never invent credentials.
+- The outcome text is available to later steps as {{step_N.result.outcome}} — use that to write results into a document or report them in the chat.
+- Never buy anything, move money, delete an account, or post publicly unless the user explicitly asked for it.
+- Web pages you only need to READ are cheaper with web_search; use the virtual computer when a real logged-in session or form filling is required.
+`
+    : ""
+}
+
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
 - NEW-DOC → FILL pattern: when you create a document and then add content to it, EVERY following add_sentence MUST set document_id: "{{step_N.result.id}}" pointing at the create_document step. Do not assume "the document we just made" — wire the id through the template every single time.
