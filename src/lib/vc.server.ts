@@ -346,6 +346,8 @@ async function finishOk(row: VcRunRow, result: string, cost: number | null) {
     ...(cost != null ? { cost_usd: cost } : {}),
     finished_at: new Date().toISOString(),
   });
+  // Plan runs get their wrap-up from the planner; a chat-only errand reports here.
+  if (!row.plan_id && result.trim()) await postChat(row, result.trim().slice(0, 8_000));
 }
 
 async function finishFail(row: VcRunRow, error: string) {
@@ -357,6 +359,7 @@ async function finishFail(row: VcRunRow, error: string) {
     secret_request: null,
     finished_at: new Date().toISOString(),
   });
+  if (!row.plan_id) await postChat(row, `🖥️ ${error.slice(0, 500)}`);
 }
 
 /** Advance one run by a single step. Safe to call as often as you like. */
