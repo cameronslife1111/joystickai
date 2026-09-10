@@ -342,6 +342,15 @@ export async function runChatTurn(
         "say yes and start a plan; only say something isn't possible when it truly is not on this list:\n" +
         `${toolCatalogText(MCP_PROVIDERS.davinci_resolve)}\n\n`
       : "") +
+    (caps.virtual_computer
+      ? "VIRTUAL COMPUTER IS ON. You can rent a temporary cloud browser and use a website yourself: sign in to " +
+        "an account the user already has, fill in forms, check orders or balances, read pages behind a login, book " +
+        "or schedule things, and copy details back here. It is a throwaway machine in the cloud — it is never the " +
+        "user's own computer or their personal browser. When the user asks for something like that, say yes and " +
+        "start a plan with the virtual_computer_task tool, one step per errand. If a site needs a password or a " +
+        "texted code, the run pauses and asks the user right here, then carries on. Never buy anything, move money, " +
+        "or post publicly unless the user explicitly asked for it.\n\n"
+      : "") +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
 
