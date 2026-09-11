@@ -48,6 +48,9 @@ export type McpProvider = {
   troubleshooting: { problem: string; fix: string }[];
   /** Copy/paste command for the one-time setup. */
   installCommand: (code: string) => string;
+  /** Copy/paste command that only reports what the local app offers — changes nothing. */
+  checkCommand: () => string;
+
   /** Group headings, in display order. */
   groups: string[];
   /** The full command catalogue — numbered by position. */
