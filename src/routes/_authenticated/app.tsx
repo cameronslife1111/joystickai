@@ -964,7 +964,11 @@ function AppPageInner() {
     linkPickerOpen ||
     chatOpen ||
     planApprovalOpen ||
-    plansScreenOpen;
+    plansScreenOpen ||
+    soundSettingsOpen ||
+    themeSheetOpen ||
+    pinPickerOpen ||
+    exportChooserOpen;
 
   // Track recently-opened documents (most-recent first) in localStorage.
   useEffect(() => {
