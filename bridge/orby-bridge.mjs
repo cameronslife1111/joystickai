@@ -830,8 +830,8 @@ def call(tool, a):
     if tool == "relink_clips":
         names = a.get("clips") or ([a["clip"]] if a.get("clip") else [])
         clips = [find_clip(n) for n in names]
-        folder = os.path.expanduser(str(a.get("folder", "")))
-        if not pool().RelinkClips(clips, folder): raise Exception("Resolve couldn't relink those clips from %s." % folder)
+        relink_dir = os.path.expanduser(str(a.get("folder", "")))
+        if not pool().RelinkClips(clips, relink_dir): raise Exception("Resolve couldn't relink those clips from %s." % relink_dir)
         return {"relinked": [c.GetName() for c in clips]}
 
     if tool == "unlink_clips":
