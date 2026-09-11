@@ -175,7 +175,7 @@ Rules:
 - Output STRICT JSON only: {"steps":[{"tool":"...","args":{...},"description":"..."}]}. No markdown, no fences.`;
 
 
-function stringifyForTemplate(value: any, stepIdx: number, path: string): string {
+function stringifyForTemplate(value: any, _stepIdx: number, _path: string): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -188,18 +188,31 @@ function stringifyForTemplate(value: any, stepIdx: number, path: string): string
     ) {
       return value.map((v: any) => v.content).join("\n");
     }
+    // MCP-style content arrays: [{ type: "text", text: "..." }]
+    if (value.every((v) => v && typeof v === "object" && typeof (v as any).text === "string")) {
+      return value.map((v: any) => v.text).join("\n");
+    }
   }
-  // Common single-string shapes: { text } (web_search, generate_text) and { content } (sentence rows).
   if (value && typeof value === "object" && !Array.isArray(value)) {
+    // Common single-string shapes: { text } (web_search, generate_text) and { content } (sentence rows).
     if (typeof (value as any).text === "string") return (value as any).text;
     if (typeof (value as any).content === "string") return (value as any).content;
+    // Tool envelopes that wrap the real payload (e.g. resolve_command -> { tool, result }).
+    if ("result" in (value as any)) {
+      return stringifyForTemplate((value as any).result, _stepIdx, _path);
+    }
+    if (Array.isArray((value as any).content)) {
+      return stringifyForTemplate((value as any).content, _stepIdx, _path);
+    }
   }
-  throw new Error(
-    `Template {{step_${stepIdx}.${path}}} resolved to a non-string ${
-      Array.isArray(value) ? "array" : "object"
-    }. Pipe a string field instead (e.g. {{step_${stepIdx}.result.text}} for read_document).`,
-  );
+  // Structured results are still usable downstream — serialize instead of failing the plan.
+  try {
+    return JSON.stringify(value).slice(0, 20_000);
+  } catch {
+    return String(value);
+  }
 }
+
 
 function resolveTemplates(value: any, steps: any[]): any {
   if (typeof value === "string") {
