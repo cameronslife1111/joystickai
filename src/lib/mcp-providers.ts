@@ -12,7 +12,7 @@ export type McpProviderId = "davinci_resolve";
 export const PUBLISHED_ORIGIN = "https://orbyai.lovable.app";
 
 /** Bump together with BRIDGE_VERSION in bridge/orby-bridge.mjs. */
-export const BRIDGE_VERSION = "3";
+export const BRIDGE_VERSION = "4";
 
 export function bridgeOrigin(): string {
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
@@ -48,6 +48,9 @@ export type McpProvider = {
   troubleshooting: { problem: string; fix: string }[];
   /** Copy/paste command for the one-time setup. */
   installCommand: (code: string) => string;
+  /** Copy/paste command that only reports what the local app offers — changes nothing. */
+  checkCommand: () => string;
+
   /** Group headings, in display order. */
   groups: string[];
   /** The full command catalogue — numbered by position. */
@@ -245,12 +248,20 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
         fix: "Resolve Studio must be open with a project open, and External scripting using must be set to Local.",
       },
       {
+        problem: "You're on Resolve 21.1 or newer and nothing works",
+        fix: "Resolve 21.1 removed outside control from the free version entirely, so Studio is now required. If you have Studio, open it, open a project, and run the check command below to see what your copy offers.",
+      },
+      {
         problem: "Orby says it can't do something you see listed",
         fix: "Your helper is probably an older version. Press Disconnect, then run the one-line command again to pick up the newest one.",
       },
     ],
+
     installCommand: (code: string) =>
       `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs connect ${code}`,
+    checkCommand: () =>
+      `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs check`,
+
     groups: RESOLVE_GROUPS,
     tools: RESOLVE_TOOLS,
   },
