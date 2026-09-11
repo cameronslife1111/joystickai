@@ -799,7 +799,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             )
           : Promise.resolve(),
     }),
-    [call, activeThreadId],
+    [call, activeThreadId, caps],
   );
 
   // A call belongs to one thread — switching conversations ends it.
