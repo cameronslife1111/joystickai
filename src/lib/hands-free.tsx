@@ -43,7 +43,8 @@ const RESULT_POLL_MS = 3_000;
 
 export function HandsFreeProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
-  const fetchDocContext = useServerFn(buildRealtimeDocContext);
+  const fetchDocContext = useServerFn(buildLiveDocContext);
+  const runTurn = useServerFn(processChatTurn);
 
   const [threadId, setThreadId] = useState<string | null>(null);
   const threadIdRef = useRef<string | null>(null);
@@ -54,6 +55,16 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
   const docIdsRef = useRef<string[]>([]);
   /** Serialized doc-id list currently pushed into the live session. */
   const pushedDocsRef = useRef<string>("");
+  /** Capabilities this call may use when it delegates work to the backend. */
+  const capsRef = useRef<ChatCapabilities>(normalizeCapabilities(null));
+  /** The last thing the user actually said — the delegated request. */
+  const lastUserTextRef = useRef<string>("");
+  /** One delegated backend job at a time. */
+  const pendingTurnRef = useRef(false);
+  /** Only backend results newer than this are spoken. */
+  const watermarkRef = useRef<string>(new Date().toISOString());
+  /** Assistant rows already handled (spoken by the model, or read out). */
+  const spokenIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void supabase.auth.getUser().then(({ data }) => {
@@ -92,6 +103,9 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         .select("id, role, content, created_at, kind, plan_id")
         .single();
       if (error || !row) return;
+      // Orby's own spoken words must never come back through the result
+      // watcher as if the backend had produced them.
+      if (role === "assistant") spokenIdsRef.current.add((row as any).id as string);
       qc.setQueryData<any[]>(["chat_messages", tid], (cur) => [...(cur ?? []), row]);
       // Keep the call's rolling context in step with what was actually said.
       contextRef.current = `${contextRef.current}\n${role === "user" ? "User: " : "Orby: "}${text}`
@@ -305,7 +319,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
           data: { documentIds: ids, threadId },
         });
         if (cancelled) return;
-        if (!voiceRef.current.updateContext(block)) return;
+        if (!voiceRef.current.appendInstructions(block)) return;
         if (included === 0) {
           toast.success("Orby is no longer seeing any documents");
         } else {
