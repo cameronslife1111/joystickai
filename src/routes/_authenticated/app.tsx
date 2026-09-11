@@ -1739,9 +1739,13 @@ function AppPageInner() {
 
       switch (e.key.toLowerCase()) {
         case "c":
-          setPendingChatThreadId(null);
-          setChatStartInList(true);
-          setChatOpen(true);
+          if (currentSentence?.linked_thread_id) {
+            void openLinkedChat();
+          } else {
+            setPendingChatThreadId(null);
+            setChatStartInList(true);
+            setChatOpen(true);
+          }
           break;
         case "g":
           navigate({ to: "/media" });
