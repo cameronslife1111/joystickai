@@ -257,6 +257,8 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
               </p>
 
               <McpToolCatalog provider={provider} />
+              <McpCheckBlock provider={provider} />
+
             </div>
           ) : (
             <Button size="sm" className="mt-2" disabled={busy} onClick={() => void begin()}>
