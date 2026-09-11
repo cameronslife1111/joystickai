@@ -1409,6 +1409,8 @@ function AppPageInner() {
     if (!autoOpenArmedRef.current) return;
     if (!autoOpenLinkedChat || !sid) return;
     if (chatOpen || editing || quickEditing || composing) return;
+    // Never open a chat underneath an open settings/menu overlay.
+    if (themeSheetOpen || menuOpen) return;
     if (currentSentence?.linked_document_id || !currentSentence?.linked_thread_id) return;
     if (autoOpenedSentenceRef.current === sid) return;
     autoOpenArmedRef.current = false;
