@@ -248,10 +248,15 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
         fix: "Resolve Studio must be open with a project open, and External scripting using must be set to Local.",
       },
       {
+        problem: "You're on Resolve 21.1 or newer and nothing works",
+        fix: "Resolve 21.1 removed outside control from the free version entirely, so Studio is now required. If you have Studio, open it, open a project, and run the check command below to see what your copy offers.",
+      },
+      {
         problem: "Orby says it can't do something you see listed",
         fix: "Your helper is probably an older version. Press Disconnect, then run the one-line command again to pick up the newest one.",
       },
     ],
+
     installCommand: (code: string) =>
       `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs connect ${code}`,
     checkCommand: () =>
