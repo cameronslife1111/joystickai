@@ -23,7 +23,7 @@ import path from "node:path";
 
 const DEFAULT_SERVER = "https://orbyai.lovable.app";
 /** Keep in sync with BRIDGE_VERSION in the Python worker and in src/lib/mcp-providers.ts. */
-const BRIDGE_VERSION = "3";
+const BRIDGE_VERSION = "4";
 
 const HOME = os.homedir();
 const CONFIG_DIR = path.join(HOME, ".orby");
@@ -115,7 +115,7 @@ if resolve is None:
     sys.exit(0)
 
 pm = resolve.GetProjectManager()
-BRIDGE_VERSION = "3"
+BRIDGE_VERSION = "4"
 
 
 def norm(s):
