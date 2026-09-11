@@ -795,6 +795,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 .filter((m) => (m.content ?? "").trim())
                 .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
                 .join("\n"),
+              caps,
             )
           : Promise.resolve(),
     }),
