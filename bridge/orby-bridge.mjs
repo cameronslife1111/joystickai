@@ -1408,12 +1408,19 @@ if (!cmd || !["connect", "run", "check"].includes(cmd)) {
 }
 
 
-say("Starting the Orby bridge…");
+say(cmd === "check" ? "Checking what this computer offers…" : "Starting the Orby bridge…");
 
 const worker = new ResolveWorker();
 const boot = await worker.start();
 
+// `check` reports whatever it finds — including "Resolve isn't reachable" — and stops.
+if (cmd === "check") {
+  await checkFlow(worker, boot);
+  process.exit(0);
+}
+
 if (boot.error || !worker.alive()) {
+
   die(
     `${boot.error || "Couldn't start the Resolve helper."}\n\n` +
       "Checklist:\n" +
