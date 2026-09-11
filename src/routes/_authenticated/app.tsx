@@ -1759,6 +1759,12 @@ function AppPageInner() {
         case "s":
           setSearchOpen(true);
           break;
+        case "f":
+          setFavoritesOpen(true);
+          break;
+        case "p":
+          void openPinnedDocument();
+          break;
         case "w":
           setReplaceMatching(true);
           setPickerQuery("🟢");
@@ -1785,7 +1791,7 @@ function AppPageInner() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat]);
+  }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat, openPinnedDocument]);
 
 
 
