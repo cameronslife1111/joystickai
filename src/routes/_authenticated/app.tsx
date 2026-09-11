@@ -3001,230 +3001,248 @@ function AppPageInner() {
         </div>
       </section>
 
-      {/* Quick-edit action buttons (just above the tile cluster) */}
-      {quickEditing && (
+      {/* Composer / editor / quick-edit action buttons — one emoji row above the orbs */}
+      {(composing || editing || quickEditing) && (
         <div className="relative z-10 flex justify-center pb-3">
           <div className="flex flex-wrap justify-center gap-2">
-            <button
-              type="button"
-              onClick={cancelQuickEdit}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void copyQuickEditText()}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-            >
-              Copy
-            </button>
-            <button
-              type="button"
-              onClick={() => void duplicateQuickEditSentence()}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-            >
-              Duplicate
-            </button>
-            <button
-              type="button"
-              onClick={() => void commitQuickEdit()}
-              className="rounded-full bg-aurora-2 px-5 py-2 text-sm font-medium text-background transition active:scale-95 hover:bg-aurora-2/90"
-            >
-              Done
-            </button>
+            {composing && (
+              <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const text = composeText.trim();
+                    if (text) {
+                      const ok = await copyToClipboard(text);
+                      if (ok) toast.success("Copied to clipboard");
+                      else toast.error("Failed to copy");
+                    }
+                    cancelCompose();
+                  }}
+                  aria-label="Cancel"
+                  title="Cancel"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  ❌
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof document !== "undefined") {
+                      (document.activeElement as HTMLElement | null)?.blur?.();
+                    }
+                    if (!activeDocId) return;
+                    void sendIdea(activeDocId, "current");
+                  }}
+                  disabled={!composeText.trim() || !activeDocId}
+                  aria-label="Add to current"
+                  title="Add to current"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  ➕
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setComposeText((prev) => (prev.trim() ? `🏆 ${prev}` : "🏆"));
+                  }}
+                  aria-label="Add trophy to idea"
+                  title="Add trophy to idea"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  🏆
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void askAiFromComposer();
+                  }}
+                  disabled={!composeText.trim() || askingAi}
+                  aria-label="Ask Orby about this text"
+                  title="Ask Orby about this text"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  {askingAi ? (
+                    <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground align-middle" />
+                  ) : (
+                    "🤖"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    // Keep the textarea focused (and the mobile keyboard open).
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!composeDictation.transcribing) void composeDictation.toggle();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  disabled={composeDictation.transcribing}
+                  aria-label={composeDictation.recording ? "Stop recording" : "Start voice input"}
+                  title={composeDictation.recording ? "Stop recording" : "Start voice input"}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  {composeDictation.transcribing ? "…" : composeDictation.recording ? "⬛️" : "🔴"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Blur the compose textarea so iOS dismisses the keyboard
+                    // before the destination picker (button-only UI) opens.
+                    if (typeof document !== "undefined") {
+                      (document.activeElement as HTMLElement | null)?.blur?.();
+                    }
+                    setSendOpen(true);
+                  }}
+                  disabled={!composeText.trim()}
+                  aria-label="Send to…"
+                  title="Send to…"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-xl text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+                  style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+                >
+                  📤
+                </button>
+              </>
+            )}
+            {editing && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleEditDone}
+                  aria-label="Done"
+                  title="Done"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  ✅
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    // Keep the textarea focused (and the mobile keyboard open).
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const el = editTextareaRef.current;
+                    if (el && !editDictation.recording) {
+                      editCaretRef.current = {
+                        start: el.selectionStart ?? el.value.length,
+                        end: el.selectionEnd ?? el.selectionStart ?? el.value.length,
+                      };
+                    }
+                    if (!editDictation.transcribing) void editDictation.toggle();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  disabled={editDictation.transcribing}
+                  aria-label={editDictation.recording ? "Stop recording" : "Dictate at cursor"}
+                  title={editDictation.recording ? "Stop recording" : "Dictate at cursor"}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  {editDictation.transcribing ? "…" : editDictation.recording ? "⬛️" : "🔴"}
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    // Keep the textarea focused so the caret position stays valid.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const el = editTextareaRef.current;
+                    const start = el?.selectionStart ?? editText.length;
+                    const end = el?.selectionEnd ?? start;
+                    setEditText((prev) => {
+                      const s = Math.min(start, prev.length);
+                      const en = Math.min(Math.max(end, s), prev.length);
+                      const before = prev.slice(0, s);
+                      const after = prev.slice(en);
+                      const insert = "🏆";
+                      const caret = s + insert.length;
+                      editCaretRef.current = { start: caret, end: caret };
+                      requestAnimationFrame(() => {
+                        const t = editTextareaRef.current;
+                        if (!t) return;
+                        t.focus();
+                        try { t.setSelectionRange(caret, caret); } catch {}
+                      });
+                      return before + insert + after;
+                    });
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Add trophy at cursor"
+                  title="Add trophy at cursor"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  🏆
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEditJump}
+                  disabled={!editText.trim()}
+                  aria-label="Jump to top"
+                  title="Jump to top"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-xl text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
+                  style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
+                >
+                  ⬆️
+                </button>
+              </>
+            )}
+            {quickEditing && (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelQuickEdit}
+                  aria-label="Cancel"
+                  title="Cancel"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  ❌
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyQuickEditText()}
+                  aria-label="Copy"
+                  title="Copy"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  📋
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void duplicateQuickEditSentence()}
+                  aria-label="Duplicate"
+                  title="Duplicate"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                >
+                  📑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void commitQuickEdit()}
+                  aria-label="Done"
+                  title="Done"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-aurora-2 text-xl text-background transition active:scale-95 hover:bg-aurora-2/90"
+                >
+                  ✅
+                </button>
+              </>
+            )}
           </div>
         </div>
-
-      )}
-
-
-
-      {/* Compose action buttons (above orb) */}
-      {composing && (
-        <div className="pointer-events-none flex justify-center pb-4">
-          <div className="pointer-events-auto flex gap-3">
-            <button
-              onClick={async () => {
-                const text = composeText.trim();
-                if (text) {
-                  const ok = await copyToClipboard(text);
-                  if (ok) toast.success("Copied to clipboard");
-                  else toast.error("Failed to copy");
-                }
-                cancelCompose();
-              }}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                if (typeof document !== "undefined") {
-                  (document.activeElement as HTMLElement | null)?.blur?.();
-                }
-                if (!activeDocId) return;
-                void sendIdea(activeDocId, "current");
-              }}
-              disabled={!composeText.trim() || !activeDocId}
-              className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
-              style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-            >
-              Add to current
-            </button>
-            <button
-              onClick={() => {
-                // Blur the compose textarea so iOS dismisses the keyboard
-                // before the destination picker (button-only UI) opens.
-                if (typeof document !== "undefined") {
-                  (document.activeElement as HTMLElement | null)?.blur?.();
-                }
-                setSendOpen(true);
-              }}
-              disabled={!composeText.trim()}
-              className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
-              style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
-            >
-              Send to…
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Floating robot button while the New idea composer is open — asks Orby
-          about the current text and appends the answer below it. */}
-      {composing && (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            void askAiFromComposer();
-          }}
-          disabled={!composeText.trim() || askingAi}
-          aria-label="Ask Orby about this text"
-          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
-          style={{ bottom: "76svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-        >
-          {askingAi ? (
-            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground align-middle" />
-          ) : (
-            "🤖"
-          )}
-        </button>
-      )}
-
-      {/* Floating trophy button while the New idea composer is open — prepends a
-          trophy emoji to the beginning of the composer text. */}
-      {composing && (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setComposeText((prev) => (prev.trim() ? `🏆 ${prev}` : "🏆"));
-          }}
-          aria-label="Add trophy to idea"
-          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-          style={{ bottom: "68svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-        >
-          🏆
-        </button>
-      )}
-
-      {/* Floating dictation button while the New idea composer is open, so the
-          mobile keyboard can't cover it. */}
-      {composing && (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            // Keep the textarea focused (and the mobile keyboard open).
-            e.preventDefault();
-            e.stopPropagation();
-            if (!composeDictation.transcribing) void composeDictation.toggle();
-          }}
-          onClick={(e) => e.stopPropagation()}
-          disabled={composeDictation.transcribing}
-          aria-label={composeDictation.recording ? "Stop recording" : "Start voice input"}
-          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
-          style={{ bottom: "60svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-        >
-          {composeDictation.transcribing ? "…" : composeDictation.recording ? "⬛️" : "🔴"}
-        </button>
-      )}
-
-      {/* Edit action buttons (above orb) */}
-
-      {/* Floating dictation button while the document editor is open. */}
-      {editing && (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            // Keep the textarea focused (and the mobile keyboard open).
-            e.preventDefault();
-            e.stopPropagation();
-            const el = editTextareaRef.current;
-            if (el && !editDictation.recording) {
-              editCaretRef.current = {
-                start: el.selectionStart ?? el.value.length,
-                end: el.selectionEnd ?? el.selectionStart ?? el.value.length,
-              };
-            }
-            if (!editDictation.transcribing) void editDictation.toggle();
-          }}
-          onClick={(e) => e.stopPropagation()}
-          disabled={editDictation.transcribing}
-          aria-label={editDictation.recording ? "Stop recording" : "Dictate at cursor"}
-          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-50"
-          style={{ bottom: "60svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-        >
-          {editDictation.transcribing ? "…" : editDictation.recording ? "⬛️" : "🔴"}
-        </button>
-      )}
-
-      {/* Floating trophy button while the document editor is open — inserts a
-          trophy emoji at the current caret position. */}
-      {editing && (
-        <button
-          type="button"
-          onPointerDown={(e) => {
-            // Keep the textarea focused so the caret position stays valid.
-            e.preventDefault();
-            e.stopPropagation();
-            const el = editTextareaRef.current;
-            const start = el?.selectionStart ?? editText.length;
-            const end = el?.selectionEnd ?? start;
-            setEditText((prev) => {
-              const s = Math.min(start, prev.length);
-              const en = Math.min(Math.max(end, s), prev.length);
-              const before = prev.slice(0, s);
-              const after = prev.slice(en);
-              const insert = "🏆";
-              const caret = s + insert.length;
-              editCaretRef.current = { start: caret, end: caret };
-              requestAnimationFrame(() => {
-                const t = editTextareaRef.current;
-                if (!t) return;
-                t.focus();
-                try { t.setSelectionRange(caret, caret); } catch {}
-              });
-              return before + insert + after;
-            });
-          }}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Add trophy at cursor"
-          className="fixed right-[4vw] z-50 rounded-full border border-foreground/15 bg-card/80 px-4 py-3 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-          style={{ bottom: "68svh", boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-        >
-          🏆
-        </button>
       )}
 
 
@@ -3309,29 +3327,6 @@ function AppPageInner() {
         </section>
       )}
 
-      {/* Edit action buttons pinned to the bottom while editing. */}
-      {editing && (
-        <div
-          className="flex shrink-0 items-center justify-center gap-3 border-t border-foreground/10 bg-background/80 px-4 py-3 backdrop-blur"
-          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-        >
-          <button
-            onClick={handleEditDone}
-            className="rounded-full border border-foreground/15 bg-card/70 px-5 py-2 text-sm backdrop-blur transition active:scale-95 hover:bg-foreground/10"
-            style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
-          >
-            Done
-          </button>
-          <button
-            onClick={handleEditJump}
-            disabled={!editText.trim()}
-            className="rounded-full border border-primary/40 bg-primary/15 px-5 py-2 text-sm text-primary backdrop-blur transition active:scale-95 hover:bg-primary/25 disabled:opacity-40"
-            style={{ boxShadow: "0 0 28px -6px var(--aurora-2)" }}
-          >
-            Jump to top
-          </button>
-        </div>
-      )}
 
 
       {/* Grid menu overlay */}
