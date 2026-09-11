@@ -1676,6 +1676,60 @@ function AppPageInner() {
     };
   }, [onDoubleTap, openNewIdea]);
 
+  // Letter shortcuts for the reading screen. Same guard sequence as the arrow
+  // keys, so nothing fires while any text field, editor or dialog is active.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (busyRef.current) return; // editor / dialog open
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+
+      switch (e.key.toLowerCase()) {
+        case "c":
+          setPendingChatThreadId(null);
+          setChatStartInList(true);
+          setChatOpen(true);
+          break;
+        case "g":
+          navigate({ to: "/media" });
+          break;
+        case "m":
+          setMoveOpen(true);
+          break;
+        case "j":
+          setJumpOpen(true);
+          break;
+        case "s":
+          setReplaceMatching(true);
+          setPickerQuery("🟢");
+          setFavoritesOpen(true);
+          setPickerSlot(0);
+          break;
+        case "l":
+          if (!currentSentence) {
+            toast.error("No sentence selected");
+            return;
+          }
+          setLinkPickerOpen(true);
+          break;
+        case "i":
+          openNewIdea();
+          break;
+        case "d":
+          void deleteCurrent();
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate, openNewIdea, deleteCurrent, currentSentence]);
+
+
 
   // Parse the full-doc editor text into sentence parts.
   // Supports punctuation-based splitting (. ! ?) while still respecting
