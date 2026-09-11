@@ -1739,9 +1739,13 @@ function AppPageInner() {
 
       switch (e.key.toLowerCase()) {
         case "c":
-          setPendingChatThreadId(null);
-          setChatStartInList(true);
-          setChatOpen(true);
+          if (currentSentence?.linked_thread_id) {
+            void openLinkedChat();
+          } else {
+            setPendingChatThreadId(null);
+            setChatStartInList(true);
+            setChatOpen(true);
+          }
           break;
         case "g":
           navigate({ to: "/media" });
@@ -1778,7 +1782,7 @@ function AppPageInner() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, openNewIdea, deleteCurrent, currentSentence]);
+  }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat]);
 
 
 
