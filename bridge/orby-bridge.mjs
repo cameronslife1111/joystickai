@@ -115,7 +115,7 @@ if resolve is None:
     sys.exit(0)
 
 pm = resolve.GetProjectManager()
-BRIDGE_VERSION = "4"
+BRIDGE_VERSION = "5"
 
 
 def norm(s):
