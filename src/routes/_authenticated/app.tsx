@@ -1782,7 +1782,7 @@ function AppPageInner() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, openNewIdea, deleteCurrent, currentSentence]);
+  }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat]);
 
 
 
