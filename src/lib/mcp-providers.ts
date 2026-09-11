@@ -254,6 +254,9 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
     ],
     installCommand: (code: string) =>
       `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs connect ${code}`,
+    checkCommand: () =>
+      `curl -fsSL ${bridgeOrigin()}/api/public/mcp-bridge/install -o ~/orby-bridge.mjs && node ~/orby-bridge.mjs check`,
+
     groups: RESOLVE_GROUPS,
     tools: RESOLVE_TOOLS,
   },
