@@ -1237,6 +1237,159 @@ async function loop(server, token, worker) {
   }
 }
 
+/* -------------------------------------------------------- read-only check */
+
+/**
+ * `check` is a look-but-don't-touch probe. It reports which Resolve is running,
+ * whether anything MCP-shaped is listening locally, and what that thing says it
+ * can do. It never changes a project, a preference or a file in Resolve.
+ */
+
+function runCmd(bin, args, timeoutMs = 8000) {
+  return new Promise((done) => {
+    let out = "";
+    let child;
+    try {
+      child = spawn(bin, args, { stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return done("");
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {}
+      done(out);
+    }, timeoutMs);
+    child.stdout.on("data", (d) => (out += String(d)));
+    child.on("error", () => {
+      clearTimeout(timer);
+      done("");
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      done(out);
+    });
+  });
+}
+
+/** TCP ports that Resolve's own processes are listening on. */
+async function resolveListeningPorts() {
+  if (process.platform === "win32") return { ports: [], note: "port listing not supported on Windows yet" };
+  const pgrep = await runCmd("pgrep", ["-f", "-i", "resolve"]);
+  const pids = pgrep
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter((s) => /^\d+$/.test(s));
+  if (!pids.length) return { ports: [], note: "no Resolve process found" };
+  const lsof = await runCmd("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-p", pids.join(",")]);
+  const ports = new Set();
+  for (const m of lsof.matchAll(/:(\d+)\s+\(LISTEN\)/g)) ports.add(Number(m[1]));
+  return { ports: [...ports].sort((a, b) => a - b), note: null, pids };
+}
+
+/** Files in the Resolve install whose names mention MCP — a strong hint. */
+async function mcpFilesInInstall() {
+  const roots =
+    process.platform === "darwin"
+      ? ["/Applications/DaVinci Resolve", `${HOME}/Library/Application Support/Blackmagic Design/DaVinci Resolve`]
+      : process.platform === "win32"
+        ? ["C:\\Program Files\\Blackmagic Design\\DaVinci Resolve"]
+        : ["/opt/resolve"];
+  const hits = [];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const out = await runCmd("find", [root, "-maxdepth", "6", "-iname", "*mcp*"], 15_000);
+    for (const line of out.split("\n")) if (line.trim()) hits.push(line.trim());
+  }
+  return hits.slice(0, 40);
+}
+
+/** One JSON-RPC `initialize` attempt against a candidate local MCP endpoint. */
+async function tryMcpEndpoint(url) {
+  const body = {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "orby-bridge-check", version: BRIDGE_VERSION },
+    },
+  };
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Required by the MCP streamable-HTTP spec.
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const text = (await res.text()).slice(0, 600);
+    return { url, status: res.status, contentType: res.headers.get("content-type"), body: text };
+  } catch (e) {
+    return { url, error: String(e?.message || e) };
+  }
+}
+
+async function checkFlow(worker, boot) {
+  const report = { bridge_version: BRIDGE_VERSION, platform: process.platform, node: process.version };
+
+  console.log("\n=== Orby / DaVinci Resolve check ===\n");
+
+  if (boot.error || !worker.alive()) {
+    report.resolve = { reachable: false, error: boot.error || "helper wouldn't start" };
+    console.log(`Resolve scripting: NOT reachable — ${report.resolve.error}`);
+  } else {
+    report.resolve = { reachable: true, ...flatInfo(worker.info) };
+    console.log(`Resolve scripting: reachable`);
+    console.log(`  product : ${worker.info?.product || "?"}`);
+    console.log(`  version : ${worker.info?.version || "?"}`);
+    console.log(`  project : ${worker.info?.project || "(none open)"}`);
+    const studio = String(worker.info?.product || "").toLowerCase().includes("studio");
+    console.log(`  edition : ${studio ? "Studio" : "looks like the free edition (scripting is Studio-only)"}`);
+    report.resolve.studio = studio;
+  }
+
+  const { ports, note, pids } = await resolveListeningPorts();
+  report.listening_ports = ports;
+  report.listening_note = note;
+  report.pids = pids || [];
+  console.log(`\nPorts Resolve is listening on: ${ports.length ? ports.join(", ") : `none found${note ? ` (${note})` : ""}`}`);
+
+  const files = await mcpFilesInInstall();
+  report.mcp_files = files;
+  console.log(`Files in the Resolve install mentioning MCP: ${files.length}`);
+  for (const f of files.slice(0, 10)) console.log(`  ${f}`);
+
+  // Probe Resolve's own ports first, then a short list of plausible defaults.
+  const guesses = [15000, 15001, 8765, 9010, 3333];
+  const candidates = [...new Set([...ports, ...guesses])];
+  const paths = ["/mcp", "/", "/api/mcp"];
+  const probes = [];
+  console.log(`\nProbing ${candidates.length} port(s) for an MCP endpoint…`);
+  for (const port of candidates) {
+    for (const p of paths) {
+      const r = await tryMcpEndpoint(`http://127.0.0.1:${port}${p}`);
+      if (r.error) continue; // nothing listening / refused
+      probes.push(r);
+      console.log(`  ${r.url} → HTTP ${r.status} ${r.contentType || ""}`);
+      console.log(`    ${r.body.replace(/\s+/g, " ").slice(0, 240)}`);
+    }
+  }
+  report.probes = probes;
+  if (!probes.length) console.log("  nothing answered on any candidate port.");
+
+  console.log("\n--- copy everything below this line back to Orby ---");
+  console.log(JSON.stringify(report, null, 2));
+  console.log("--- end ---\n");
+}
+
 /* -------------------------------------------------------------------- main */
 
 const argv = process.argv.slice(2);
@@ -1244,14 +1397,16 @@ const cmd = argv[0];
 const serverFlag = argv.indexOf("--server");
 const server = (serverFlag >= 0 ? argv[serverFlag + 1] : DEFAULT_SERVER).replace(/\/+$/, "");
 
-if (!cmd || !["connect", "run"].includes(cmd)) {
+if (!cmd || !["connect", "run", "check"].includes(cmd)) {
   die(
     "Orby Bridge\n\n" +
       "  node orby-bridge.mjs connect <pairing-code>\n" +
-      "  node orby-bridge.mjs run\n\n" +
+      "  node orby-bridge.mjs run\n" +
+      "  node orby-bridge.mjs check      (read-only: reports what Resolve offers)\n\n" +
       "Get the pairing code from Orby: turn on DaVinci Resolve Mode in chat.",
   );
 }
+
 
 say("Starting the Orby bridge…");
 
