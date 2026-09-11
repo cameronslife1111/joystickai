@@ -309,4 +309,50 @@ export function McpToolCatalog({ provider }: { provider: McpProviderId }) {
   );
 }
 
+/**
+ * A copy/paste line that only *reports* what the local app offers — Resolve
+ * version, edition, and whether the app's own AI connection is listening.
+ * Nothing is changed on the user's machine, so it's safe to run any time.
+ */
+export function McpCheckBlock({ provider }: { provider: McpProviderId }) {
+  const meta = MCP_PROVIDERS[provider];
+  const [open, setOpen] = useState(false);
+  const cmd = meta.checkCommand();
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-md border border-foreground/10 bg-background/60 px-2.5 py-2 text-left text-[11px] font-medium"
+      >
+        <span>Check what your {meta.name} offers</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open ? (
+        <div className="mt-2 space-y-1.5 rounded-md border border-foreground/10 bg-background/60 p-2.5">
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Run this in a terminal with {meta.name} open. It only looks — it changes nothing. Paste
+            what it prints back into this chat.
+          </p>
+          <code className="block max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-background px-2 py-1.5 text-[10.5px] leading-snug">
+            {cmd}
+          </code>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              void navigator.clipboard?.writeText(cmd);
+              toast.success("Copied", { emoji: "📋" });
+            }}
+          >
+            <Copy className="mr-2 h-4 w-4" /> Copy the check command
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
