@@ -12,7 +12,7 @@ export type McpProviderId = "davinci_resolve";
 export const PUBLISHED_ORIGIN = "https://orbyai.lovable.app";
 
 /** Bump together with BRIDGE_VERSION in bridge/orby-bridge.mjs. */
-export const BRIDGE_VERSION = "4";
+export const BRIDGE_VERSION = "5";
 
 export function bridgeOrigin(): string {
   if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
