@@ -593,13 +593,20 @@ function AppPageInner() {
 
   const saveAutoOpenLinkedChat = useCallback(async (next: boolean) => {
     setAutoOpenLinkedChat(next);
+    // Flipping the setting must never itself open a chat: disarm any pending
+    // green-button arming so the auto-open effect stays quiet here.
+    autoOpenArmedRef.current = false;
     qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), auto_open_linked_chat: next }));
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    await supabase.from("user_preferences").upsert(
-      { user_id: u.user.id, auto_open_linked_chat: next, favorites: favorites as any },
-      { onConflict: "user_id" },
-    );
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      await supabase.from("user_preferences").upsert(
+        { user_id: u.user.id, auto_open_linked_chat: next, favorites: favorites as any },
+        { onConflict: "user_id" },
+      );
+    } catch {
+      // keep the local choice; it re-syncs on the next save
+    }
   }, [qc, favorites]);
 
 
