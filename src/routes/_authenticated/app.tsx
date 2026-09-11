@@ -964,7 +964,11 @@ function AppPageInner() {
     linkPickerOpen ||
     chatOpen ||
     planApprovalOpen ||
-    plansScreenOpen;
+    plansScreenOpen ||
+    soundSettingsOpen ||
+    themeSheetOpen ||
+    pinPickerOpen ||
+    exportChooserOpen;
 
   // Track recently-opened documents (most-recent first) in localStorage.
   useEffect(() => {
@@ -1645,6 +1649,53 @@ function AppPageInner() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Left arrow doubles as the universal "Back" button: whenever any popup is
+  // open, pressing it closes the topmost one instead of opening the menu.
+  // When nothing is open, the arrow-key handler above still maps it to Menu.
+  // Typing surfaces are respected via the same target checks.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+      // Editing surfaces involve typing — left arrow keeps its caret behavior.
+      if (editing || quickEditing || composing) return;
+
+      // Close the topmost open popup first (nested sheets before their parents).
+      if (soundSettingsOpen) setSoundSettingsOpen(false);
+      else if (themeSheetOpen) setThemeSheetOpen(false);
+      else if (pinPickerOpen) setPinPickerOpen(false);
+      else if (exportChooserOpen) setExportChooserOpen(false);
+      else if (linkPickerOpen) setLinkPickerOpen(false);
+      else if (sendOpen) setSendOpen(false);
+      else if (planApprovalOpen) setPlanApprovalOpen(false);
+      else if (plansScreenOpen) setPlansScreenOpen(false);
+      else if (moveOpen) setMoveOpen(false);
+      else if (jumpOpen) setJumpOpen(false);
+      else if (renameOpen) setRenameOpen(false);
+      else if (newDocOpen) setNewDocOpen(false);
+      else if (deleteDocOpen) setDeleteDocOpen(false);
+      else if (searchOpen) { setSearchOpen(false); setSearchQuery(""); }
+      else if (recentOpen) setRecentOpen(false);
+      else if (favoritesOpen) { setFavoritesOpen(false); setPickerSlot(null); }
+      else if (chatOpen) setChatOpen(false);
+      else if (menuOpen) setMenuOpen(false);
+      else return; // nothing open — let the navigation handler open the menu
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    editing, quickEditing, composing,
+    soundSettingsOpen, themeSheetOpen, pinPickerOpen, exportChooserOpen,
+    linkPickerOpen, sendOpen, planApprovalOpen, plansScreenOpen,
+    moveOpen, jumpOpen, renameOpen, newDocOpen, deleteDocOpen,
+    searchOpen, recentOpen, favoritesOpen, chatOpen, menuOpen,
+  ]);
 
   // Spacebar mirrors the center face: single press = new idea, double = edit.
   useEffect(() => {
