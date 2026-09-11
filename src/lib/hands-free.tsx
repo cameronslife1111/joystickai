@@ -103,15 +103,90 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
     [qc, bumpThread],
   );
 
-  const voice = useRealtimeVoice({
+  /**
+   * GPT-Live asked for real work. It only runs the conversation, so the request
+   * goes into Orby's own queued chat turn — same runner, same planner, same
+   * ownership checks as a typed message.
+   */
+  const runDelegated = useCallback(
+    async (delegationId: string) => {
+      const tid = threadIdRef.current;
+      const uid = userIdRef.current;
+      const text = lastUserTextRef.current.trim();
+      if (!tid || !uid || !text) return;
+      if (pendingTurnRef.current) return; // one backend job per call at a time
+      pendingTurnRef.current = true;
+      voiceRef.current.appendThinking(
+        "Your backend has started this request. Nothing is finished yet — keep the user company and " +
+          "report the outcome only when a result arrives.",
+        delegationId,
+      );
+      try {
+        const history = ((qc.getQueryData<any[]>(["chat_messages", tid]) ?? []) as any[])
+          .slice(-20)
+          .map((m) => ({
+            role: m.kind === "plan" ? "assistant" : m.role,
+            content:
+              m.kind === "plan"
+                ? "[A plan was kicked off here and ran in the background.]"
+                : (m.content ?? ""),
+          }))
+          .filter((m) => (m.content ?? "").trim().length > 0);
+
+        const { data: threadRow } = await supabase
+          .from("chat_threads")
+          .select("auto_approve_plans")
+          .eq("id", tid)
+          .maybeSingle();
+
+        const { data: turnRow, error } = await supabase
+          .from("chat_turns")
+          .insert({
+            user_id: uid,
+            thread_id: tid,
+            status: "pending",
+            payload: {
+              userText: text,
+              messages: history,
+              contextDocumentIds: docIdsRef.current,
+              imageUrls: [],
+              capabilities: capsRef.current,
+              autoCapabilities: false,
+              autoApprove: !!(threadRow as any)?.auto_approve_plans,
+            } as any,
+          } as any)
+          .select("id")
+          .single();
+        if (error || !turnRow) throw error ?? new Error("Couldn't start that");
+        await runTurn({ data: { turnId: (turnRow as any).id as string } }).catch(() => {});
+      } catch (e) {
+        voiceRef.current.appendCommentary(
+          "That request couldn't be started just now. Tell the user briefly and offer to try again.",
+          delegationId,
+        );
+      } finally {
+        pendingTurnRef.current = false;
+      }
+    },
+    [qc, runTurn],
+  );
+
+  const voice = useLiveVoice({
     buildContext: useCallback(() => contextRef.current, []),
     buildDocumentIds: useCallback(() => docIdsRef.current, []),
     buildThreadId: useCallback(() => threadIdRef.current, []),
-    onUserText: useCallback((t: string) => void appendMessage("user", t), [appendMessage]),
+    onUserText: useCallback(
+      (t: string) => {
+        lastUserTextRef.current = t;
+        void appendMessage("user", t);
+      },
+      [appendMessage],
+    ),
     onAssistantText: useCallback(
       (t: string) => void appendMessage("assistant", t),
       [appendMessage],
     ),
+    onDelegation: useCallback((id: string) => void runDelegated(id), [runDelegated]),
     onError: useCallback((m: string) => toast.error(m), []),
   });
 
@@ -123,27 +198,80 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
     setThreadId(null);
     docIdsRef.current = [];
     pushedDocsRef.current = "";
+    spokenIdsRef.current = new Set();
+    pendingTurnRef.current = false;
   }, []);
 
   const start = useCallback(
-    async (tid: string, context: string) => {
+    async (tid: string, context: string, caps?: ChatCapabilities) => {
       if (!tid) return;
       // Nothing else in the app may speak over the call.
       cancelSpeech();
       contextRef.current = context;
       const { data } = await supabase
         .from("chat_threads")
-        .select("attached_document_ids")
+        .select("attached_document_ids, capabilities")
         .eq("id", tid)
         .single();
       docIdsRef.current = (data?.attached_document_ids as string[] | null) ?? [];
       pushedDocsRef.current = docIdsRef.current.join(",");
+      capsRef.current = normalizeCapabilities(caps ?? (data as any)?.capabilities);
+      // Only results created after the call starts get spoken.
+      watermarkRef.current = new Date().toISOString();
+      spokenIdsRef.current = new Set();
+      lastUserTextRef.current = "";
       threadIdRef.current = tid;
       setThreadId(tid);
       await voiceRef.current.start();
     },
     [],
   );
+
+  // Anything Orby's backend posts into this thread while the call is live —
+  // a plan kickoff line, a finished plan's wrap-up, a normal reply — is handed
+  // to the live voice so she can say it in her own words.
+  useEffect(() => {
+    if (!voice.live || !threadId) return;
+    let cancelled = false;
+    let busy = false;
+
+    const tick = async () => {
+      if (cancelled || busy) return;
+      busy = true;
+      try {
+        const { data } = await supabase
+          .from("chat_messages")
+          .select("id, role, content, created_at, kind")
+          .eq("thread_id", threadId)
+          .eq("role", "assistant")
+          .gt("created_at", watermarkRef.current)
+          .order("created_at", { ascending: true })
+          .limit(10);
+        for (const row of (data ?? []) as any[]) {
+          if (cancelled) return;
+          if (spokenIdsRef.current.has(row.id)) continue;
+          spokenIdsRef.current.add(row.id);
+          const text = toPlainText(row.content ?? "").trim();
+          if (!text) continue;
+          voiceRef.current.appendCommentary(
+            `Result from your backend — tell the user this in your own words, briefly:\n${text}`,
+          );
+          qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
+        }
+      } catch {
+        /* transient — the next tick retries */
+      } finally {
+        busy = false;
+      }
+    };
+
+    const timer = setInterval(() => void tick(), RESULT_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [voice.live, threadId, qc]);
+
 
   // While a call is live nothing else in the app is allowed to speak, so
   // sentence reading, cues and chat read-aloud never talk over Orby.
