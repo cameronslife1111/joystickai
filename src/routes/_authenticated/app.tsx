@@ -1757,6 +1757,9 @@ function AppPageInner() {
           setJumpOpen(true);
           break;
         case "s":
+          setSearchOpen(true);
+          break;
+        case "w":
           setReplaceMatching(true);
           setPickerQuery("🟢");
           setFavoritesOpen(true);
