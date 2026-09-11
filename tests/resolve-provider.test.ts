@@ -60,6 +60,21 @@ describe("resolve provider registry", () => {
     expect(resolve.installCommand("ABC12345")).toMatch(/connect ABC12345$/);
   });
 
+  it("never shadows a worker helper with a local variable", () => {
+    // A local named after a helper makes it local for the whole function in Python,
+    // which caused "local variable 'folder' referenced before assignment".
+    const helpers = [
+      ...bridgeSource.matchAll(/^def ([a-z_]+)\(/gm),
+    ].map((m) => m[1]!);
+    expect(helpers).toContain("folder");
+    const shadowing: string[] = [];
+    for (const line of bridgeSource.split("\n")) {
+      const m = /^\s+([a-z_]+)\s*(?:,\s*[a-z_]+\s*)*=[^=]/.exec(line);
+      if (m && helpers.includes(m[1]!)) shadowing.push(line.trim());
+    }
+    expect(shadowing).toEqual([]);
+  });
+
   it("tells the user Studio is required and where the setting lives", () => {
     const text = [...resolve.checklist, ...resolve.troubleshooting.map((t) => `${t.problem} ${t.fix}`)].join(" ");
     expect(text).toMatch(/Studio/);
