@@ -14,8 +14,10 @@ import { toast } from "@/lib/toast";
 import { PhoneOff } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useRealtimeVoice, type CallState } from "@/lib/use-realtime-voice";
-import { buildRealtimeDocContext } from "@/lib/realtime.functions";
+import { useLiveVoice, type CallState } from "@/lib/use-live-voice";
+import { buildLiveDocContext } from "@/lib/live.functions";
+import { processChatTurn } from "@/lib/chat-turn.functions";
+import { normalizeCapabilities, type ChatCapabilities } from "@/lib/chat-types";
 import { toPlainText } from "@/lib/plain-text";
 import { cancelSpeech, setSpeechSuppressed } from "@/lib/speech";
 
@@ -27,7 +29,7 @@ type HandsFreeApi = {
   /** Thread the live (or connecting) call belongs to. */
   threadId: string | null;
   /** Start a call for `threadId`; `context` is the recent conversation text. */
-  start: (threadId: string, context: string) => Promise<void>;
+  start: (threadId: string, context: string, caps?: ChatCapabilities) => Promise<void>;
   stop: () => void;
 };
 
@@ -35,6 +37,9 @@ const HandsFreeContext = createContext<HandsFreeApi | null>(null);
 
 /** How often the live call re-checks its thread's attached documents. */
 const DOC_POLL_MS = 2_500;
+/** How often the call looks for new backend results to speak. */
+const RESULT_POLL_MS = 3_000;
+
 
 export function HandsFreeProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
