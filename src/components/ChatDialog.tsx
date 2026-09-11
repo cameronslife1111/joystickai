@@ -795,10 +795,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 .filter((m) => (m.content ?? "").trim())
                 .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
                 .join("\n"),
+              caps,
             )
           : Promise.resolve(),
     }),
-    [call, activeThreadId],
+    [call, activeThreadId, caps],
   );
 
   // A call belongs to one thread — switching conversations ends it.
@@ -1117,8 +1118,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const threadId = override?.threadId ?? activeThreadId;
     if (!text || !userId || !threadId) return false;
     if (busyThreads.has(threadId)) return false;
-    // While a hands-free call is live this is a text-only conversation.
-    const capsUsed = voice.live ? NO_CAPS : (override?.caps ?? caps);
+    // A live call uses the same capabilities as the chat — spoken requests can
+    // plan, edit documents and make media just like typed ones.
+    const capsUsed = override?.caps ?? caps;
+
     const docIdsUsed = override?.docIds ?? contextDocIds;
     // Attached images belong to the chat they were picked in. A programmatic
     // send (🟣 Delegate) or a send aimed at another chat never carries them.
@@ -1538,9 +1541,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </DialogTitle>
             {voice.live && (
               <p className="px-1 text-[11px] text-muted-foreground">
-                Hands-free is live — just talk, and talk over Orby to interrupt. Planning and
-                document editing are paused until you end the call.
+                Hands-free is live — just talk, and talk over Orby to interrupt. Ask for plans,
+                edits or images and she'll get them going while you keep talking.
               </p>
+
             )}
           </DialogHeader>
 
