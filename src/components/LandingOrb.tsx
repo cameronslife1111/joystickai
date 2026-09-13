@@ -31,7 +31,7 @@ const COLOR_ICON: Record<OrbColor, LucideIcon> = {
   red: Trash2,
   orange: Pin,
   pink: ArrowUpDown,
-  gray: Image,
+  gray: MessageSquare,
 };
 
 /** Approximate hex per orb color, for dots/glows outside the orb itself. */

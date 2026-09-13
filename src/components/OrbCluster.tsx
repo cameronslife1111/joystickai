@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Lightbulb, Menu, Pin, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Lightbulb, Menu, MessageSquare, Pin, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -296,11 +296,11 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-gray"
-        Icon={Image}
-        label="Media gallery (hold for chat)"
+        Icon={MessageSquare}
+        label="Chat (hold for media gallery)"
         badge={grayBadge}
-        onPress={onMediaGallery}
-        onLongPress={onChat}
+        onPress={onChat}
+        onLongPress={onMediaGallery}
         placement={{ gridColumn: 3, gridRow: "5 / span 2" }}
       />
     </div>
