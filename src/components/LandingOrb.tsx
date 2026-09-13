@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, MessageSquare, Pin, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Lightbulb, MessageSquare, Pin, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,7 +26,7 @@ const COLOR_CLASS: Record<OrbColor, string> = {
 const COLOR_ICON: Record<OrbColor, LucideIcon> = {
   blue: ArrowUp,
   purple: ArrowDown,
-  yellow: Menu,
+  yellow: Lightbulb,
   green: FileText,
   red: Trash2,
   orange: Pin,

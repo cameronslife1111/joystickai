@@ -3414,7 +3414,7 @@ function AppPageInner() {
             onPrevLongPress={() => toggleListLock(false)}
             onNext={() => void advanceSentence()}
             onNextLongPress={handleDelegate}
-            onMenu={() => setMenuOpen(true)}
+            onMenu={() => openNewIdea()}
             onNextDoc={() => {
               autoOpenArmedRef.current = true;
               void onSwipeRight();
@@ -3425,7 +3425,7 @@ function AppPageInner() {
               setSearchOpen(true);
             }}
             onRecentDocs={() => setRecentOpen(true)}
-            onMenuLongPress={() => openNewIdea()}
+            onMenuLongPress={() => setMenuOpen(true)}
             onPinnedDoc={() => {
               if (lockFavorites) {
                 toast.error("List is locked");
