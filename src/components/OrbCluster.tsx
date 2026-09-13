@@ -296,11 +296,11 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-gray"
-        Icon={Image}
-        label="Media gallery (hold for chat)"
+        Icon={MessageSquare}
+        label="Chat (hold for media gallery)"
         badge={grayBadge}
-        onPress={onMediaGallery}
-        onLongPress={onChat}
+        onPress={onChat}
+        onLongPress={onMediaGallery}
         placement={{ gridColumn: 3, gridRow: "5 / span 2" }}
       />
     </div>

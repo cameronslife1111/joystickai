@@ -3445,9 +3445,13 @@ function AppPageInner() {
             onJumpTo={() => setJumpOpen(true)}
             onMediaGallery={() => navigate({ to: "/media" })}
             onChat={() => {
-              setPendingChatThreadId(null);
-              setChatStartInList(true);
-              setChatOpen(true);
+              if (currentSentence?.linked_thread_id) {
+                void openLinkedChat();
+              } else {
+                setPendingChatThreadId(null);
+                setChatStartInList(true);
+                setChatOpen(true);
+              }
             }}
             grayBadge={unseenCount}
           />
