@@ -190,7 +190,7 @@ const CLUSTER: Array<{
   rowSpan: number;
 }> = [
   { color: "red", label: "Search docs / recent docs", col: 1, row: 1, rowSpan: 2 },
-  { color: "yellow", label: "Open the menu (hold for New idea)", col: 1, row: 3, rowSpan: 2 },
+  { color: "yellow", label: "New idea (hold for menu)", col: 1, row: 3, rowSpan: 2 },
   { color: "pink", label: "Jump to / move sentence", col: 1, row: 5, rowSpan: 2 },
   { color: "blue", label: "Previous sentence", col: 2, row: 1, rowSpan: 3 },
   { color: "purple", label: "Next sentence (hold to delegate)", col: 2, row: 4, rowSpan: 3 },

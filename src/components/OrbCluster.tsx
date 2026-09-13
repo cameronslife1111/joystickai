@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Lightbulb, Menu, Pin, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -243,10 +243,10 @@ export function OrbCluster({
       />
       <ClusterOrb
         orbClass="glow-orb-yellow"
-        Icon={Menu}
-        label="Open menu (hold for New idea)"
-        onPress={onMenu}
-        onLongPress={onMenuLongPress}
+        Icon={Lightbulb}
+        label="New idea (hold for menu)"
+        onPress={onMenuLongPress}
+        onLongPress={onMenu}
         buttonRef={setButton("menu")}
         placement={{ gridColumn: 1, gridRow: "3 / span 2" }}
       />
