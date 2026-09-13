@@ -27,6 +27,7 @@ import {
   Clock,
   StickyNote,
   Pause,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { useServerFn } from "@tanstack/react-start";
@@ -1263,6 +1264,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
    */
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
+
+  /**
+   * Retry one of your own messages: rewind the chat to just before it (the
+   * bubble and everything after it is deleted) and re-send the same text with
+   * whatever capability checkboxes / attached documents / per-chat settings
+   * are in effect RIGHT NOW — handy when the first send had the wrong toggles.
+   */
+  const retryMessage = useCallback(
+    async (msg: ChatRow) => {
+      if (!userId || msg.id.startsWith("tmp-")) return;
+      const threadId = msg.thread_id;
+      // If Orby is still thinking in this chat, stop that run first so it
+      // can't post a stray reply into the rewound conversation.
+      if (busyThreads.has(threadId)) await stopThinking(threadId);
+      const cutoff = msg.created_at;
+      const { error } = await supabase
+        .from("chat_messages")
+        .delete()
+        .eq("thread_id", threadId)
+        .gte("created_at", cutoff);
+      if (error) {
+        toast.error("Couldn't rewind the chat");
+        return;
+      }
+      qc.setQueryData<ChatRow[]>(["chat_messages", threadId], (cur) =>
+        (cur ?? []).filter((m) => m.created_at < cutoff),
+      );
+      toast("🔁");
+      void handleSendRef.current?.({ text: msg.content, threadId });
+    },
+    [userId, busyThreads, stopThinking, qc],
+  );
 
   // 🟣 Delegate (menu slot 15 / purple orb hold): fresh thread + attached doc,
   // Orby analyses the step and proposes one plan for review. Once per tap.
