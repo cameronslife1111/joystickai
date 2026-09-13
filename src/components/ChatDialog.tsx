@@ -186,13 +186,13 @@ const NO_CAPS: ChatCapabilities = {
 
 
 const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[] = [
-  { key: "planning", label: "Planning / multi-step", hint: "Combine steps to complete bigger tasks" },
-  { key: "document_editing", label: "Document editing", hint: "Create, edit, organize your documents" },
-  { key: "image_generation", label: "Image generation", hint: "Create & remix images to your gallery" },
-  { key: "video_generation", label: "Video generation", hint: "Make videos to your gallery" },
-  { key: "scheduling", label: "Scheduling", hint: "Create, edit, pause scheduled plans" },
-  { key: "web_search", label: "Web search", hint: "Look up current info online" },
-  { key: "image_analysis", label: "Image analysis", hint: "Describe & analyze attached images" },
+  { key: "planning", label: "🗺️ Planning / multi-step", hint: "Combine steps to complete bigger tasks" },
+  { key: "document_editing", label: "📝 Document editing", hint: "Create, edit, organize your documents" },
+  { key: "image_generation", label: "🖼️ Image generation", hint: "Create & remix images to your gallery" },
+  { key: "video_generation", label: "🎥 Video generation", hint: "Make videos to your gallery" },
+  { key: "scheduling", label: "📅 Scheduling", hint: "Create, edit, pause scheduled plans" },
+  { key: "web_search", label: "🌐 Web search", hint: "Look up current info online" },
+  { key: "image_analysis", label: "👁️ Image analysis", hint: "Describe & analyze attached images" },
   {
     key: "davinci_resolve",
     label: "🎬 DaVinci Resolve Mode",
