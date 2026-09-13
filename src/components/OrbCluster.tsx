@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, PointerEvent, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText, History, Image, Menu, Pin } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, Image, Menu, Pin, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,10 +32,10 @@ interface OrbClusterProps {
 
   /** Green orb hold: open the Link this sentence popup (slot 18). */
   onNextDocLongPress: () => void;
-  /** Red orb tap: open the Recent docs list. */
-  onRecents: () => void;
-  /** Red orb hold: open Search docs. */
-  onRecentsLongPress: () => void;
+  /** Red orb tap: open Search docs. */
+  onSearchDocs: () => void;
+  /** Red orb hold: open the Recent docs popup. */
+  onRecentDocs: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
@@ -203,8 +203,8 @@ export function OrbCluster({
   onMenu,
   onNextDoc,
   onNextDocLongPress,
-  onRecents,
-  onRecentsLongPress,
+  onSearchDocs,
+  onRecentDocs,
   onPrevLongPress,
   onMenuLongPress,
   onNextLongPress,
@@ -235,10 +235,10 @@ export function OrbCluster({
     <div className="orb-cluster">
       <ClusterOrb
         orbClass="glow-orb-red"
-        Icon={History}
-        label="Recent docs (hold to search docs)"
-        onPress={onRecents}
-        onLongPress={onRecentsLongPress}
+        Icon={Search}
+        label="Search docs (hold for Recent docs)"
+        onPress={onSearchDocs}
+        onLongPress={onRecentDocs}
         placement={{ gridColumn: 1, gridRow: "1 / span 2" }}
       />
       <ClusterOrb
