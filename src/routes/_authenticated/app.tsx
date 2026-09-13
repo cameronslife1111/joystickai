@@ -1738,15 +1738,6 @@ function AppPageInner() {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
 
       switch (e.key.toLowerCase()) {
-        case "c":
-          if (currentSentence?.linked_thread_id) {
-            void openLinkedChat();
-          } else {
-            setPendingChatThreadId(null);
-            setChatStartInList(true);
-            setChatOpen(true);
-          }
-          break;
         case "g":
           navigate({ to: "/media" });
           break;
