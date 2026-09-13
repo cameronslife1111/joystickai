@@ -1647,6 +1647,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
+                        {m.role === "user" && !m.id.startsWith("tmp-") && (
+                          <button
+                            type="button"
+                            onClick={() => void retryMessage(m)}
+                            aria-label="Retry from here"
+                            title="Retry from here — deletes this and everything after, then re-sends with your current settings"
+                            className="rounded-md p-1 text-muted-foreground transition hover:text-foreground"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {m.role === "assistant" && (
                           <button
                             type="button"
