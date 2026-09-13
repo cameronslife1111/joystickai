@@ -114,6 +114,7 @@ interface Props {
 
 type ChatRow = {
   id: string;
+  thread_id: string;
   role: "user" | "assistant";
   content: string;
   created_at: string;
@@ -758,7 +759,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     queryFn: async (): Promise<ChatRow[]> => {
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .eq("thread_id", activeThreadId as string)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -904,9 +905,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     // Thread picker is covering the chat — don't read until a chat is open.
     if (!autoSpeak || !activeThreadId || drawerOpen || voice.live) return;
     if (autoSpokeThreadRef.current === activeThreadId) return;
-    if (messages.length === 0) return;
+    // Only ever read rows that provably belong to the chat on screen — stale
+    // cache entries from another thread must never be spoken.
+    const own = messages.filter((m) => m.thread_id === activeThreadId);
+    if (own.length === 0) return;
     autoSpokeThreadRef.current = activeThreadId;
-    const last = [...messages].reverse().find((m) => m.role === "assistant" && m.content?.trim());
+    const last = [...own].reverse().find((m) => m.role === "assistant" && m.content?.trim());
     if (last) speakMessage(last.id, last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, autoSpeak, activeThreadId, drawerOpen, messages]);
@@ -923,7 +927,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     async (threadId: string) => {
       const { data } = await supabase
         .from("chat_messages")
-        .select("id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .eq("thread_id", threadId)
         .order("created_at", { ascending: true });
       const rows = ((data ?? []) as ChatRow[]).map((m) =>
@@ -1144,6 +1148,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
     const optimisticUser: ChatRow = {
       id: `tmp-${Date.now()}`,
+      thread_id: threadId,
       role: "user",
       content: text,
       created_at: new Date().toISOString(),
@@ -1157,7 +1162,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data: insertedUser, error: userErr } = await supabase
         .from("chat_messages")
         .insert({ user_id: userId, thread_id: threadId, role: "user", content: text, kind: "text" })
-        .select("id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .single();
       if (userErr) throw userErr;
 
