@@ -1391,6 +1391,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               <Button
                 size="icon"
                 variant="ghost"
+                aria-label="Rename chat"
+                disabled={!activeThread}
+                onClick={() => {
+                  if (!activeThread) return;
+                  setRenameThread(activeThread);
+                  setRenameValue(activeThread.title);
+                }}
+              >
+                <Pencil className="h-5 w-5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
                 aria-label="Clear chat"
                 className="text-destructive hover:text-destructive"
                 onClick={() => setClearConfirmOpen(true)}
