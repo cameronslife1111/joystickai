@@ -1784,6 +1784,41 @@ function AppPageInner() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat, openPinnedDocument]);
 
+  // Shift opens the chat: linked chat for the current sentence if one exists,
+  // otherwise the chat list. Uses the same reading-mode guards as the letter
+  // shortcuts, and ignores auto-repeat while Shift is held.
+  useEffect(() => {
+    const shiftHeldRef = { current: false };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Shift") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (busyRef.current) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+      if (shiftHeldRef.current) return;
+      shiftHeldRef.current = true;
+      if (currentSentence?.linked_thread_id) {
+        void openLinkedChat();
+      } else {
+        setPendingChatThreadId(null);
+        setChatStartInList(true);
+        setChatOpen(true);
+      }
+      e.preventDefault();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") shiftHeldRef.current = false;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      shiftHeldRef.current = false;
+    };
+  }, [currentSentence, openLinkedChat]);
+
 
 
   // Parse the full-doc editor text into sentence parts.
