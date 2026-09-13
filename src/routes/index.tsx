@@ -196,7 +196,7 @@ const CLUSTER: Array<{
   { color: "purple", label: "Next sentence (hold to delegate)", col: 2, row: 4, rowSpan: 3 },
   { color: "orange", label: "Pinned document / pin a doc", col: 3, row: 1, rowSpan: 2 },
   { color: "green", label: "Next document (hold to link this sentence)", col: 3, row: 3, rowSpan: 2 },
-  { color: "gray", label: "Media gallery (hold for chat)", col: 3, row: 5, rowSpan: 2 },
+  { color: "gray", label: "Chat (hold for media gallery)", col: 3, row: 5, rowSpan: 2 },
 ];
 
 
