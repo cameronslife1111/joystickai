@@ -438,6 +438,41 @@ const TOOL_HANDLERS: Record<string, any> = {
     });
     return scored.slice(0, 5).map(({ d }) => ({ id: d.id, title: d.title }));
   },
+  async find_chat_by_title(args, { user_id, admin }) {
+    const query = String(args.query ?? "").trim();
+    const qTokens = tokenize(query);
+    let threads: any[] = [];
+    if (qTokens.length > 0) {
+      const orFilter = qTokens.map((t) => `title.ilike.%${t}%`).join(",");
+      const { data } = await admin
+        .from("chat_threads")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .or(orFilter)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      threads = data ?? [];
+    }
+    if (threads.length === 0) {
+      const { data } = await admin
+        .from("chat_threads")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      threads = data ?? [];
+    }
+    if (threads.length === 0) return [];
+    const scored = threads.map((t: any) => ({
+      t,
+      score: scoreCandidate(String(t.title ?? ""), query, qTokens),
+    }));
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.t.updated_at ?? "").localeCompare(String(a.t.updated_at ?? ""));
+    });
+    return scored.slice(0, 5).map(({ t }) => ({ id: t.id, title: t.title }));
+  },
   async find_documents_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
     const rawLimit = Number(args.limit);
