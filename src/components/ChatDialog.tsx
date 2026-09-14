@@ -1747,11 +1747,18 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       key={m.id}
                       className={m.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}
                     >
+                      {m.author === "orchestrator" && (
+                        <span className="mb-1 mr-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                          Orchestrator
+                        </span>
+                      )}
                       <div
                         className={
-                          m.role === "user"
-                            ? "max-w-[85%] rounded-2xl bg-chat-user px-3.5 py-2 text-base text-chat-user-foreground"
-                            : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
+                          m.author === "orchestrator"
+                            ? "max-w-[85%] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-base text-foreground"
+                            : m.role === "user"
+                              ? "max-w-[85%] rounded-2xl bg-chat-user px-3.5 py-2 text-base text-chat-user-foreground"
+                              : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
                         }
                       >
                         <DocLinkText
