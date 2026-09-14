@@ -391,9 +391,11 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "send_chat_message",
     description:
-      "Post a short status/check-in message from Orby into the chat thread that started this plan. Use this to keep the user in the loop during long-running plans — announce a milestone, share a finding, or explain what you're about to do next. Purely informational: the plan continues to the next step without waiting. Only available when the plan was started from a chat thread. Keep messages under ~2 sentences.",
+      "Post a short status/check-in message from Orby into a chat. By default it goes into the chat thread that started this plan — use this to keep the user in the loop during long-running plans. Purely informational: the plan continues to the next step without waiting. Keep messages under ~2 sentences. " +
+      "ORCHESTRATOR USE: pass target_thread_id to write into ANOTHER chat on the user's behalf (a briefing, context, or instructions for that chat). Such a message appears as a green bubble labelled Orchestrator. It does NOT make that chat do anything — to make a chat actually work on something, use delegate_plan_to_chat.",
     args: {
       text: { type: "string", description: "The status message to post in the chat", required: true },
+      target_thread_id: { type: "string", description: "Optional UUID of another chat thread to post into (from the CHAT CATALOG or a {{step_N.result.id}} template from create_chat / find_chat_by_title). Omit to post into the chat that started this plan.", required: false },
     },
   },
   {
