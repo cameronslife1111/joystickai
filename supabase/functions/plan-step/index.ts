@@ -132,6 +132,10 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     delete_schedule: ["schedule_id"],
     toggle_schedule: ["schedule_id", "enabled"],
     resolve_command: ["tool"],
+    create_chat: ["title"],
+    rename_chat: ["thread_id", "new_title"],
+    attach_documents_to_chat: ["thread_id", "document_ids"],
+    delegate_plan_to_chat: ["thread_id", "request"],
 
   };
   const has = (v: unknown) =>
