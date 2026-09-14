@@ -523,7 +523,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   useEffect(() => {
     if (!open || !orchestrator?.threadId || ensuredOrchestratorRef.current) return;
     ensuredOrchestratorRef.current = true;
-    void queryClient.invalidateQueries({ queryKey: ["chat_threads", userId] });
+    void qc.invalidateQueries({ queryKey: ["chat_threads", userId] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, orchestrator?.threadId]);
 
