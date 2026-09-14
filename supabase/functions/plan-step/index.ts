@@ -772,16 +772,40 @@ const TOOL_HANDLERS: Record<string, any> = {
     return { moved_to: args.target_document_id, position: insertAt, new_sentence: inserted };
   },
   async link_sentence_to_document(args, { user_id, admin }) {
-    const target = args.target_document_id === null ? null : args.target_document_id;
-    const { data, error } = await admin
-      .from("sentences")
-      .update({ linked_document_id: target })
-      .eq("id", args.sentence_id)
-      .eq("user_id", user_id)
-      .select("id, linked_document_id")
-      .single();
-    if (error) throw new Error(error.message);
-    return data;
+    const target = args.target_document_id === null || args.target_document_id === "null"
+      ? null
+      : String(args.target_document_id);
+    if (target) {
+      const { data: doc } = await admin
+        .from("documents")
+        .select("id, title")
+        .eq("id", target)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!doc) throw new Error(`No document found with id ${target}`);
+    }
+    return await applySentenceLink(admin, user_id, String(args.sentence_id), {
+      linked_document_id: target,
+      linked_thread_id: null,
+    });
+  },
+  async link_sentence_to_chat(args, { user_id, admin }) {
+    const target = args.target_thread_id === null || args.target_thread_id === "null"
+      ? null
+      : String(args.target_thread_id);
+    if (target) {
+      const { data: thread } = await admin
+        .from("chat_threads")
+        .select("id, title")
+        .eq("id", target)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!thread) throw new Error(`No chat found with id ${target}`);
+    }
+    return await applySentenceLink(admin, user_id, String(args.sentence_id), {
+      linked_thread_id: target,
+      linked_document_id: null,
+    });
   },
   async delete_sentence(args, { user_id, admin, user_request }) {
     if (!hasDeletionConsent(user_request)) {
