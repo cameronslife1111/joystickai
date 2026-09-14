@@ -173,6 +173,8 @@ function AppPageInner() {
     documentId: string;
     title: string;
     index: number;
+    /** Sentence the user was on; the new delegate chat links to it. */
+    sentenceId?: string;
   } | null>(null);
 
 
@@ -2708,6 +2710,7 @@ function AppPageInner() {
       documentId: activeDoc.id,
       title: activeDoc.title,
       index: idx,
+      sentenceId: list[idx]?.id,
     });
     setChatOpen(true);
   }, [activeDoc, sentences, currentIdx]);

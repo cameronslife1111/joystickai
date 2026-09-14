@@ -108,6 +108,8 @@ interface Props {
     documentId: string;
     title: string;
     index: number;
+    /** Sentence the user was on; the new delegate chat links to it. */
+    sentenceId?: string;
   } | null;
 
 
@@ -1343,6 +1345,30 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       await updateThread(t.id, {
         attached_document_ids: Array.from(new Set([delegate.documentId, ...autoAttachIds])),
       });
+      // Link the brand-new delegate chat to the sentence it was launched
+      // from — same write the Link popup performs (all identical sentences
+      // in the document get the link). Best-effort: the delegate chat still
+      // works if the link fails.
+      if (delegate.sentenceId) {
+        try {
+          const { data: row } = await supabase
+            .from("sentences")
+            .select("content, document_id")
+            .eq("id", delegate.sentenceId)
+            .maybeSingle();
+          const patch = { linked_document_id: null, linked_thread_id: t.id };
+          if (row) {
+            await supabase
+              .from("sentences")
+              .update(patch)
+              .eq("document_id", row.document_id)
+              .eq("content", row.content);
+          } else {
+            await supabase.from("sentences").update(patch).eq("id", delegate.sentenceId);
+          }
+          qc.invalidateQueries({ queryKey: ["sentences", delegate.documentId] });
+        } catch { /* linking is best-effort */ }
+      }
       await runDelegate(t.id, delegate.documentId, delegate.index);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
