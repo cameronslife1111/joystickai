@@ -400,6 +400,37 @@ async function findMediaMatches(
   }));
 }
 
+/**
+ * Write a sentence link (document OR chat) to every identical sentence in the
+ * same document — exactly what the app's Link popup does. Falls back to the
+ * single row when the sentence can't be read.
+ */
+async function applySentenceLink(
+  admin: any,
+  user_id: string,
+  sentence_id: string,
+  patch: { linked_document_id?: string | null; linked_thread_id?: string | null },
+) {
+  const { data: row } = await admin
+    .from("sentences")
+    .select("id, content, document_id")
+    .eq("id", sentence_id)
+    .eq("user_id", user_id)
+    .maybeSingle();
+
+  const q = admin.from("sentences").update(patch).eq("user_id", user_id);
+  const { data, error } = row
+    ? await q
+        .eq("document_id", row.document_id)
+        .eq("content", row.content)
+        .select("id, linked_document_id, linked_thread_id")
+    : await q.eq("id", sentence_id).select("id, linked_document_id, linked_thread_id");
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  const first = rows[0] ?? { id: sentence_id, ...patch };
+  return { ...first, sentences_updated: rows.length };
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
