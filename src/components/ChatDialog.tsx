@@ -2203,9 +2203,12 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     {filteredThreads.map((t) => (
                       <li
                         key={t.id}
-                        className={`flex items-center gap-2 rounded-lg px-2 ${
-                          t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5"
-                        }`}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg px-2",
+                          t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5",
+                          t.is_orchestrator &&
+                            "border border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_14px_rgba(16,185,129,0.35)]",
+                        )}
                       >
                         <button
                           type="button"
@@ -2214,9 +2217,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             bumpThread(t.id);
                             setDrawerOpen(false);
                           }}
-                          className={`flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base ${
-                            isUnread(t) ? "font-semibold text-foreground" : ""
-                          }`}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base",
+                            isUnread(t) && "font-semibold text-foreground",
+                            t.is_orchestrator && "font-semibold",
+                          )}
                         >
                           {isUnread(t) && (
                             <span
@@ -2225,26 +2230,35 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             />
                           )}
                           <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
+                          {t.is_orchestrator && proposals.length > 0 && (
+                            <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                              {proposals.length} to approve
+                            </span>
+                          )}
                         </button>
-                        <button
-                          type="button"
-                          aria-label="Rename"
-                          onClick={() => {
-                            setRenameThread(t);
-                            setRenameValue(t.title);
-                          }}
-                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-foreground"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Delete thread"
-                          onClick={() => setDeleteThreadId(t.id)}
-                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {!t.is_orchestrator && (
+                          <>
+                            <button
+                              type="button"
+                              aria-label="Rename"
+                              onClick={() => {
+                                setRenameThread(t);
+                                setRenameValue(t.title);
+                              }}
+                              className="shrink-0 rounded p-2 text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Delete thread"
+                              onClick={() => setDeleteThreadId(t.id)}
+                              className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
