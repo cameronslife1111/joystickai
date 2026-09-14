@@ -42,9 +42,11 @@ export type ReviewPlan = {
  * note (which triggers a full replan), or cancels.
  */
 export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
+  const qc = useQueryClient();
   const [busy, setBusy] = useState<null | "approve" | "note" | "cancel">(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
+
 
   const caps = plan.proposed_capabilities ?? {};
   const capList = Object.keys(CAP_TEXT).filter((k) => caps[k]);
