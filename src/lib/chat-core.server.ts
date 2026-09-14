@@ -318,6 +318,34 @@ export async function runChatTurn(
     console.warn("[chat planMemory] failed", e);
   }
 
+  // The pinned Orchestrator chat: Orby speaks as the user's chief of staff and
+  // decides its own capabilities, because it works through the other chats.
+  let isOrchestrator = false;
+  let workerChats: { id: string; title: string }[] = [];
+  if (data.threadId) {
+    try {
+      const { data: t } = await supabase
+        .from("chat_threads")
+        .select("is_orchestrator")
+        .eq("id", data.threadId)
+        .maybeSingle();
+      isOrchestrator = !!(t as any)?.is_orchestrator;
+      if (isOrchestrator) {
+        let q = supabase
+          .from("chat_threads")
+          .select("id, title, updated_at")
+          .eq("is_orchestrator", false)
+          .order("updated_at", { ascending: false })
+          .limit(40);
+        if (ownerId) q = q.eq("user_id", ownerId);
+        const { data: rows } = await q;
+        workerChats = ((rows ?? []) as any[]).map((r) => ({ id: r.id, title: r.title }));
+      }
+    } catch (e) {
+      console.warn("[chat orchestrator lookup] failed", e);
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const provider = createOpenAiProvider(apiKey);
