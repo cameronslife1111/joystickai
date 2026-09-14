@@ -512,6 +512,38 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     },
   });
 
+  // The pinned Orchestrator chat exists for every account — create it once.
+  const ensuredOrchestratorRef = useRef(false);
+  const { data: orchestrator, refetch: refetchOrchestrator } = useQuery({
+    queryKey: ["orchestrator", userId],
+    enabled: !!userId && open,
+    staleTime: 60_000,
+    queryFn: async () => await getOrchestratorFn({}),
+  });
+  useEffect(() => {
+    if (!open || !orchestrator?.threadId || ensuredOrchestratorRef.current) return;
+    ensuredOrchestratorRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: ["chat_threads", userId] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, orchestrator?.threadId]);
+
+  // Plans the autopilot drafted while the user was away, waiting for approval.
+  const { data: proposals = [], refetch: refetchProposals } = useQuery({
+    queryKey: ["plan_proposals", userId],
+    enabled: !!userId && open,
+    refetchInterval: 30_000,
+    queryFn: async (): Promise<Proposal[]> => {
+      const { data, error } = await supabase
+        .from("plan_proposals")
+        .select("id, title, plan_summary, user_request, created_at")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []) as Proposal[];
+    },
+  });
+
   // Chat turns still being written by the server. This is what makes a sent
   // message safe: the reply is produced server-side, so this list (not the
   // in-flight request) is the source of truth for "Orby is thinking", and it
