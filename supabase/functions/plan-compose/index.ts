@@ -116,7 +116,8 @@ ${
 }
 
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
-- EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
+- EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, link_sentence_to_chat, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / target_thread_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
+- SENTENCE LINKS: "link this sentence to <doc>" → link_sentence_to_document; "link this sentence to <chat>" / "link it to my Delegate chat" → link_sentence_to_chat with target_thread_id resolved from the CHAT CATALOG in the WORKSPACE SNAPSHOT (or a {{step_N.result.id}} template from find_chat_by_title). A sentence holds exactly ONE link, so linking replaces any existing link — never emit both link tools for the same sentence. "Unlink" → the same tool with the target id set to null. Always resolve the sentence_id first (from the snapshot or a find_sentence_by_content step), and never create a new chat or document just to link it.
 - NEW-DOC → FILL pattern: when you create a document and then add content to it, EVERY following add_sentence MUST set document_id: "{{step_N.result.id}}" pointing at the create_document step. Do not assume "the document we just made" — wire the id through the template every single time.
 - Each step's "description" MUST name the destination in plain language (e.g. "Add the intro line to the \"Trip Plan\" document", not "Add the intro line"). The user reads these during approval and they double as a self-check that the where is set.
 - ONE destination per step. If the same content belongs in multiple documents, emit one step per document, each with its own explicit document_id.
@@ -600,6 +601,18 @@ Deno.serve(async (req) => {
     if (mediaCatalog.length) {
       userContext += `\n\nMEDIA CATALOG (id — kind — title — parsed emoji/code — src) — a LOOKUP TABLE ONLY for resolving images/videos/audio the request explicitly names or describes${totalMedia > mediaCatalog.length ? ` (showing ${mediaCatalog.length} of ${totalMedia} most-recent assets; if the item you need isn't here, call find_media_by_title / find_all_media_by_title)` : ""}. Match LOOSELY: never require an exact title — pick the closest id by keywords, emoji, or words from its src prompt. Do NOT act on an asset just because it appears here; if the request doesn't reference it, ignore it (this list is mostly leftover output from unrelated past plans):\n${mediaCatalog.join("\n")}`;
     }
+    // CHAT CATALOG — the user's existing chat threads, so "link this sentence to
+    // my Delegate chat" resolves to a real thread id without an extra lookup
+    // step. Lookup table only, exactly like MEDIA CATALOG.
+    const { data: allThreads } = await admin
+      .from("chat_threads").select("id, title, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(40);
+    const chatCatalog = (allThreads ?? []).map(
+      (t: any) => `  ${t.id} — ${JSON.stringify(t.title ?? "Chat")}`,
+    );
+    if (chatCatalog.length) {
+      userContext += `\n\nCHAT CATALOG (id — title, most recent first) — a LOOKUP TABLE ONLY for resolving chat threads the request explicitly names or describes (e.g. link_sentence_to_chat). Match LOOSELY: never require an exact title. Do NOT act on a chat just because it appears here; if the request doesn't reference it, ignore it. If the chat you need isn't listed, call find_chat_by_title:\n${chatCatalog.join("\n")}`;
+    }
     if (mediaList.length) {
       userContext += `\n\nSTRONGLY-MATCHED MEDIA (assets this request appears to operate on directly — prefer these ids when the request references existing media${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
@@ -786,6 +799,7 @@ Deno.serve(async (req) => {
       update_sentence_content: ["sentence_id", "new_content"],
       move_sentence: ["sentence_id", "target_document_id"],
       link_sentence_to_document: ["sentence_id"],
+      link_sentence_to_chat: ["sentence_id"],
       delete_sentence: ["sentence_id"],
       mark_sentence_for_deletion: ["sentence_id"],
       mark_document_for_deletion: ["document_id"],

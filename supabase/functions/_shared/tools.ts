@@ -119,10 +119,25 @@ export const TOOL_CATALOG: ToolDef[] = [
   },
   {
     name: "link_sentence_to_document",
-    description: "Set the linked_document_id metadata on a sentence so it points to another document. Pass null as target_document_id to unlink. The sentence_id is REQUIRED and (unless unlinking) target_document_id must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied target.",
+    description: "Link a sentence to another DOCUMENT (sets linked_document_id and clears any linked chat — a sentence has exactly one link). Applies to every identical sentence in the same document, exactly like the app's Link popup. Pass null as target_document_id to unlink. The sentence_id is REQUIRED and (unless unlinking) target_document_id must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied target.",
     args: {
       sentence_id: { type: "string", description: "UUID of the sentence", required: true },
       target_document_id: { type: "string", description: "UUID of the document to link to, or null to remove the link", required: true },
+    },
+  },
+  {
+    name: "link_sentence_to_chat",
+    description: "Link a sentence to an existing CHAT THREAD (sets linked_thread_id and clears any linked document — a sentence has exactly one link). After this runs, the sentence shows its chat pill and opens that chat. Applies to every identical sentence in the same document, exactly like the app's Link popup. Pass null as target_thread_id to unlink. The sentence_id is REQUIRED and (unless unlinking) target_thread_id must be a concrete thread id from the CHAT CATALOG in the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template from find_chat_by_title; never invent a thread id and never create a chat just to link it.",
+    args: {
+      sentence_id: { type: "string", description: "UUID of the sentence", required: true },
+      target_thread_id: { type: "string", description: "UUID of the chat thread to link to, or null to remove the link", required: true },
+    },
+  },
+  {
+    name: "find_chat_by_title",
+    description: "Find the user's existing chat threads whose title fuzzily matches the query. Tokenized and scored — tolerates loose wording, never requires the exact chat name. Returns up to 5 results ({ id, title }), best match first. PREFER picking the id directly from the CHAT CATALOG in the WORKSPACE SNAPSHOT over calling this tool.",
+    args: {
+      query: { type: "string", description: "Rough description of the chat — title fragments, keywords, or topic", required: true },
     },
   },
   {
@@ -430,6 +445,7 @@ export const TOOL_GROUPS: Record<string, string> = {
   find_documents_by_title: "base",
   read_document: "base",
   find_sentence_by_content: "base",
+  find_chat_by_title: "base",
   find_media_by_title: "base",
   find_all_media_by_title: "base",
   expand_plan: "base",
@@ -441,6 +457,7 @@ export const TOOL_GROUPS: Record<string, string> = {
   update_sentence_content: "document_editing",
   move_sentence: "document_editing",
   link_sentence_to_document: "document_editing",
+  link_sentence_to_chat: "document_editing",
   delete_sentence: "document_editing",
   mark_sentence_for_deletion: "document_editing",
   mark_document_for_deletion: "document_editing",

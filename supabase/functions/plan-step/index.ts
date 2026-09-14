@@ -112,6 +112,7 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     update_sentence_content: ["sentence_id", "new_content"],
     move_sentence: ["sentence_id", "target_document_id"],
     link_sentence_to_document: ["sentence_id"],
+    link_sentence_to_chat: ["sentence_id"],
     delete_sentence: ["sentence_id"],
     mark_sentence_for_deletion: ["sentence_id"],
     mark_document_for_deletion: ["document_id"],
@@ -400,6 +401,37 @@ async function findMediaMatches(
   }));
 }
 
+/**
+ * Write a sentence link (document OR chat) to every identical sentence in the
+ * same document — exactly what the app's Link popup does. Falls back to the
+ * single row when the sentence can't be read.
+ */
+async function applySentenceLink(
+  admin: any,
+  user_id: string,
+  sentence_id: string,
+  patch: { linked_document_id?: string | null; linked_thread_id?: string | null },
+) {
+  const { data: row } = await admin
+    .from("sentences")
+    .select("id, content, document_id")
+    .eq("id", sentence_id)
+    .eq("user_id", user_id)
+    .maybeSingle();
+
+  const q = admin.from("sentences").update(patch).eq("user_id", user_id);
+  const { data, error } = row
+    ? await q
+        .eq("document_id", row.document_id)
+        .eq("content", row.content)
+        .select("id, linked_document_id, linked_thread_id")
+    : await q.eq("id", sentence_id).select("id, linked_document_id, linked_thread_id");
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  const first = rows[0] ?? { id: sentence_id, ...patch };
+  return { ...first, sentences_updated: rows.length };
+}
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
@@ -437,6 +469,41 @@ const TOOL_HANDLERS: Record<string, any> = {
       return String(b.d.updated_at ?? "").localeCompare(String(a.d.updated_at ?? ""));
     });
     return scored.slice(0, 5).map(({ d }) => ({ id: d.id, title: d.title }));
+  },
+  async find_chat_by_title(args, { user_id, admin }) {
+    const query = String(args.query ?? "").trim();
+    const qTokens = tokenize(query);
+    let threads: any[] = [];
+    if (qTokens.length > 0) {
+      const orFilter = qTokens.map((t) => `title.ilike.%${t}%`).join(",");
+      const { data } = await admin
+        .from("chat_threads")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .or(orFilter)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      threads = data ?? [];
+    }
+    if (threads.length === 0) {
+      const { data } = await admin
+        .from("chat_threads")
+        .select("id, title, updated_at")
+        .eq("user_id", user_id)
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      threads = data ?? [];
+    }
+    if (threads.length === 0) return [];
+    const scored = threads.map((t: any) => ({
+      t,
+      score: scoreCandidate(String(t.title ?? ""), query, qTokens),
+    }));
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(b.t.updated_at ?? "").localeCompare(String(a.t.updated_at ?? ""));
+    });
+    return scored.slice(0, 5).map(({ t }) => ({ id: t.id, title: t.title }));
   },
   async find_documents_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
@@ -737,16 +804,40 @@ const TOOL_HANDLERS: Record<string, any> = {
     return { moved_to: args.target_document_id, position: insertAt, new_sentence: inserted };
   },
   async link_sentence_to_document(args, { user_id, admin }) {
-    const target = args.target_document_id === null ? null : args.target_document_id;
-    const { data, error } = await admin
-      .from("sentences")
-      .update({ linked_document_id: target })
-      .eq("id", args.sentence_id)
-      .eq("user_id", user_id)
-      .select("id, linked_document_id")
-      .single();
-    if (error) throw new Error(error.message);
-    return data;
+    const target = args.target_document_id === null || args.target_document_id === "null"
+      ? null
+      : String(args.target_document_id);
+    if (target) {
+      const { data: doc } = await admin
+        .from("documents")
+        .select("id, title")
+        .eq("id", target)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!doc) throw new Error(`No document found with id ${target}`);
+    }
+    return await applySentenceLink(admin, user_id, String(args.sentence_id), {
+      linked_document_id: target,
+      linked_thread_id: null,
+    });
+  },
+  async link_sentence_to_chat(args, { user_id, admin }) {
+    const target = args.target_thread_id === null || args.target_thread_id === "null"
+      ? null
+      : String(args.target_thread_id);
+    if (target) {
+      const { data: thread } = await admin
+        .from("chat_threads")
+        .select("id, title")
+        .eq("id", target)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!thread) throw new Error(`No chat found with id ${target}`);
+    }
+    return await applySentenceLink(admin, user_id, String(args.sentence_id), {
+      linked_thread_id: target,
+      linked_document_id: null,
+    });
   },
   async delete_sentence(args, { user_id, admin, user_request }) {
     if (!hasDeletionConsent(user_request)) {
