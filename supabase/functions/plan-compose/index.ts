@@ -144,7 +144,8 @@ SELF-CHECK before emitting each step: restate the step's target in one phrase, c
 
 Return your output as JSON with this exact shape:
 {
-  "summary": "A one-or-two-sentence plain-language summary of what you'll do.",
+  "summary": "🏆 Let's <4-5 words naming the overall task>.",
+  "notes": ["optional plain-text special notes the user gave, one per entry"],
   "steps": [
     {
       "tool": "<tool_name from the catalog>",
