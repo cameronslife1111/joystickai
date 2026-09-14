@@ -793,8 +793,8 @@ Deno.serve(async (req) => {
     }
 
     const effectiveSystemPrompt = userContext
-      ? `${systemPrompt}${checkInContract}${threadContext}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
-      : `${systemPrompt}${checkInContract}${threadContext}`;
+      ? `${systemPrompt}${orchestratorContract}${checkInContract}${threadContext}\n\nWORKSPACE SNAPSHOT (the user's actual data right now — resolve references like "the Cameron inbox doc" or "the reference image" by fuzzy-matching titles/content/media here; if an id is present, use it directly and do NOT call a find_* tool for it; if a referenced document's sentences are inlined here, you may inline their text directly into later step args instead of calling read_document. This snapshot does NOT include any "current" doc or sentence — that concept does not exist for plans.):${userContext}`
+      : `${systemPrompt}${orchestratorContract}${checkInContract}${threadContext}`;
     // Hand the conversation to the planner alongside the request itself, so a
     // mid-conversation "ok do it" is planned from the whole discussion.
     const plannerInput = conversationSoFar
