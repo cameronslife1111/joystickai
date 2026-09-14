@@ -159,7 +159,7 @@ Return your output as JSON with this exact shape:
         "capability": "<same tool_name>",
         "lookup": "what to look up first, or 'none'"
       },
-      "description": "A short plain-language sentence (naming the source and destination) that the user will see during approval."
+      "description": "Go to the X and Y."
     }
   ]
 }
@@ -177,7 +177,7 @@ Filled example of one step:
     "capability": "add_sentence — adds one sentence to a known document",
     "lookup": "none"
   },
-  "description": "Add the intro line to the new \"Trip Plan\" document."
+  "description": "Go to the Trip Plan document and add the intro line."
 }
 
 If the user's request is impossible, ambiguous, or would require deletion, respond with:
@@ -187,12 +187,17 @@ If the user's request is impossible, ambiguous, or would require deletion, respo
   "explanation": "<one short sentence explaining why>"
 }
 
-WORDING CONTRACT (the user reads this before approving):
-- "summary" must name the task you detected in one plain sentence (for a step inside a document, say whether it is a substep of a bigger task and what that parent task is).
-- "explanation" must list one short line per capability you will use, each in the form "Orby will use <capability> to <do Y> and put the output in <Z>".
-- Every step "description" must also read as "Orby will use <capability> to <do Y> and put the output in <Z>".
+GO TO FORMAT — this is exactly how the user reads a plan. No other wording is acceptable:
+- "summary" is always one line: "🏆 Let's " followed by 4-5 words describing the overall task, ending with a period. Nothing else on that line.
+- Every step "description" is exactly one sentence in the form "Go to the X and Y." where X is WHERE to go (the real destination: the document by its exact title, the Media Gallery, this chat, the timeline in DaVinci Resolve — include the location detail the user gave) and Y is WHAT to do there in FEWER THAN 7 words, ending with a period.
+- If an action needs more than 6 words in Y, split it into several baby steps, each its own "Go to the X and Y." sentence.
+- Use the USER'S OWN WORDING for X and Y. If they said "the funky blue button", write "the funky blue button" — never paraphrase, never fancy it up. Fix only obvious transcription slips.
+- Never write "Orby will…", never name a tool or capability in the description, never number or bullet the steps.
+- Special notes the user gave (things to remember, not actions) go in the "notes" array as plain sentences, in the order they belong. Never bend a note into "Go to…" shape.
+- Plain text only in every field: no markdown, no asterisks, no headings, no numbering.
 
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
+
 
 
 
