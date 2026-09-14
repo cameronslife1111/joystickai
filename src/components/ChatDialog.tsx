@@ -2474,6 +2474,32 @@ function PlanProgressCard({
     toast.success("Plan stopped");
   };
 
+  // A plan that has been "Planning…" for too long is stalled, not slow — offer
+  // a way out instead of an endless spinner.
+  const [composeStalled, setComposeStalled] = useState(false);
+  const [recomposing, setRecomposing] = useState(false);
+  useEffect(() => {
+    if (plan?.status !== "composing") {
+      setComposeStalled(false);
+      return;
+    }
+    const id = window.setTimeout(() => setComposeStalled(true), 90_000);
+    return () => window.clearTimeout(id);
+  }, [plan?.status]);
+
+  const retryPlanning = async () => {
+    setRecomposing(true);
+    try {
+      await supabase.functions.invoke("plan-compose", { body: { plan_id: planId } });
+      setComposeStalled(false);
+      void qc.invalidateQueries({ queryKey: ["chat_plan", planId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't retry planning");
+    } finally {
+      setRecomposing(false);
+    }
+  };
+
 
   const steps = Array.isArray(plan?.steps) ? plan.steps : [];
   const artifacts = extractArtifacts(steps);
