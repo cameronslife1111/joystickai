@@ -59,6 +59,12 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { processChatTurn } from "@/lib/chat-turn.functions";
+import {
+  getOrchestrator,
+  setOrchestratorFocus,
+  approveProposal,
+  dismissProposal,
+} from "@/lib/orchestrator.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
@@ -302,6 +308,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const listSchedulesFn = useServerFn(listSchedules);
   const deleteScheduleFn = useServerFn(deleteSchedule);
   const toggleScheduleFn = useServerFn(toggleSchedule);
+  const getOrchestratorFn = useServerFn(getOrchestrator);
+  const setFocusFn = useServerFn(setOrchestratorFocus);
+  const approveProposalFn = useServerFn(approveProposal);
+  const dismissProposalFn = useServerFn(dismissProposal);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
