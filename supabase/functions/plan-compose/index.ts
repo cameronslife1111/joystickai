@@ -198,7 +198,47 @@ GO TO FORMAT — this is exactly how the user reads a plan. No other wording is 
 
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
 
+/** Strip markdown noise, numbering and bullets — plans are plain text only. */
+function plainLine(s: string): string {
+  return String(s ?? "")
+    .replace(/[*_`#>]/g, "")
+    .replace(/^\s*(?:\d+[.)]|[-•])\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
+function words(s: string): string[] {
+  return plainLine(s).split(" ").filter(Boolean);
+}
+
+/** "🏆 Let's <4-5 words>." — rebuilt from whatever the planner returned. */
+function goToSummary(raw: string, fallback: string): string {
+  let body = plainLine(raw).replace(/^🏆\s*/, "").replace(/^let'?s\s+/i, "");
+  if (!body) body = plainLine(fallback);
+  body = body.replace(/[.!?]+$/, "");
+  const w = words(body).slice(0, 5);
+  if (!w.length) return "🏆 Let's do this task.";
+  return `🏆 Let's ${w.join(" ")}.`;
+}
+
+/**
+ * Force one step's description into "Go to the X and Y." with Y under 7 words.
+ * A description that already complies is only tidied; anything else is rebuilt
+ * from the step's own io.destination + io.operation, so a vague line can never
+ * reach the review card.
+ */
+function goToStep(description: unknown, io: any): string {
+  const clean = plainLine(typeof description === "string" ? description : "");
+  const m = /^go to (.+?) and (.+?)[.!]?$/i.exec(clean);
+  if (m) {
+    const where = plainLine(m[1]);
+    const what = words(m[2]).slice(0, 6).join(" ");
+    if (where && what) return `Go to the ${where.replace(/^the\s+/i, "")} and ${what}.`;
+  }
+  const where = plainLine(String(io?.destination ?? "")).replace(/^the\s+/i, "") || "chat";
+  const what = words(String(io?.operation ?? "do this")).slice(0, 6).join(" ") || "do this";
+  return `Go to the ${where} and ${what}.`;
+}
 
 
 function buildLovablePrompt(plan: any, failedStep: any | null, errorMessage: string): string {
