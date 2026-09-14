@@ -52,17 +52,27 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
 
   const approve = async () => {
     setBusy("approve");
-    const { error } = await supabase
-      .from("plans")
-      .update({ status: "approved", approved_at: new Date().toISOString() })
-      .eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from("plans")
+        .update({ status: "approved", approved_at: new Date().toISOString() })
+        .eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't start: ${error.message}`);
+        return;
+      }
+      // Move this card off "waiting for review" immediately — the poll that
+      // would otherwise notice is what used to leave it spinning forever.
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "approved" } : cur,
+      );
+      void qc.invalidateQueries({ queryKey: ["plans"] });
+      void qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+      void supabase.functions.invoke("plan-step", { body: { plan_id: plan.id } });
+      toast.success("Plan started — running in the background");
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't start: ${error.message}`);
-      return;
     }
-    void supabase.functions.invoke("plan-step", { body: { plan_id: plan.id } });
-    toast.success("Plan started — running in the background");
   };
 
   /**
@@ -73,38 +83,53 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
     const text = note.trim();
     if (!text) return;
     setBusy("note");
-    const { error } = await supabase
-      .from("plans")
-      .update({
-        status: "composing",
-        user_request: `${plan.user_request}\n\nNOTE FROM ME: ${text}`,
-        steps: null,
-        current_step: 0,
-        total_steps: 0,
-        auto_approve_after_compose: autoRun,
-      })
-      .eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from("plans")
+        .update({
+          status: "composing",
+          user_request: `${plan.user_request}\n\nNOTE FROM ME: ${text}`,
+          steps: null,
+          current_step: 0,
+          total_steps: 0,
+          auto_approve_after_compose: autoRun,
+        })
+        .eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't send that note: ${error.message}`);
+        return;
+      }
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "composing", steps: null, total_steps: 0 } : cur,
+      );
+      void supabase.functions.invoke("plan-compose", {
+        body: { plan_id: plan.id, allowed_tool_groups: allowedGroups.length ? allowedGroups : null },
+      });
+      setNote("");
+      setNoteOpen(false);
+      toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't send that note: ${error.message}`);
-      return;
     }
-    void supabase.functions.invoke("plan-compose", {
-      body: { plan_id: plan.id, allowed_tool_groups: allowedGroups.length ? allowedGroups : null },
-    });
-    setNote("");
-    setNoteOpen(false);
-    toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
   };
 
   const cancel = async () => {
     setBusy("cancel");
-    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't cancel: ${error.message}`);
+        return;
+      }
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "cancelled" } : cur,
+      );
+      void qc.invalidateQueries({ queryKey: ["plans"] });
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't cancel: ${error.message}`);
     }
   };
+
 
   if (steps.length === 0) {
     return (
