@@ -502,7 +502,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     queryFn: async (): Promise<PendingTurn[]> => {
       const { data, error } = await supabase
         .from("chat_turns")
-        .select("id, thread_id, status")
+        .select("id, thread_id, status, created_at")
         .in("status", ["pending", "running"]);
       if (error) throw error;
       return (data ?? []) as PendingTurn[];
@@ -515,6 +515,63 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     for (const t of pendingTurns) if (t.thread_id) set.add(t.thread_id);
     return set;
   }, [busyThreadIds, pendingTurns]);
+
+  /**
+   * Nothing may think forever. The server's queued-turn list is the truth: a
+   * locally-optimistic busy thread with no queued turn behind it is released,
+   * a turn sitting too long gets the finisher poked, and past a hard timeout
+   * the chat says so instead of spinning.
+   */
+  const turnsRef = useRef<PendingTurn[]>(pendingTurns);
+  turnsRef.current = pendingTurns;
+  const optimisticSinceRef = useRef<Map<string, number>>(new Map());
+  const lastNudgeRef = useRef(0);
+  const [stuckThreads, setStuckThreads] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open || !userId) return;
+    const check = () => {
+      const now = Date.now();
+      const live = new Set(
+        turnsRef.current.map((t) => t.thread_id).filter((id): id is string => !!id),
+      );
+      // Release optimistic "thinking" the server never confirmed.
+      for (const id of busyThreadIds) {
+        if (live.has(id)) {
+          optimisticSinceRef.current.delete(id);
+          continue;
+        }
+        const since = optimisticSinceRef.current.get(id);
+        if (!since) optimisticSinceRef.current.set(id, now);
+        else if (now - since > 20_000) {
+          optimisticSinceRef.current.delete(id);
+          markIdle(id);
+        }
+      }
+      // Poke the finisher for anything queued too long, then flag real stalls.
+      const stale = turnsRef.current.filter(
+        (t) => t.created_at && now - new Date(t.created_at).getTime() > 25_000,
+      );
+      if (stale.length && now - lastNudgeRef.current > 30_000) {
+        lastNudgeRef.current = now;
+        void fetch("/api/public/chat-turn-tick", { method: "POST" }).catch(() => {});
+        void refetchTurns();
+      }
+      const stuck = new Set(
+        turnsRef.current
+          .filter((t) => t.thread_id && t.created_at && now - new Date(t.created_at).getTime() > 180_000)
+          .map((t) => t.thread_id as string),
+      );
+      setStuckThreads((cur) =>
+        cur.size === stuck.size && [...stuck].every((id) => cur.has(id)) ? cur : stuck,
+      );
+    };
+    check();
+    const id = window.setInterval(check, 5_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userId, busyThreadIds]);
+
 
   const activeThread = useMemo(
     () => threads.find((t) => t.id === activeThreadId) ?? null,
