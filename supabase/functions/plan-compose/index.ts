@@ -665,10 +665,33 @@ Deno.serve(async (req) => {
     // planner can post check-ins (send_chat_message) and pause for approval
     // (ask_user). This is the "Queen Bee" pattern — long plans can report
     // progress and ask questions without the user having to babysit them.
+    // Is this the pinned Orchestrator chat? Then the planner may also work
+    // THROUGH the user's other chats (create/rename/brief/delegate).
+    let isOrchestrator = false;
+    if (plan.thread_id) {
+      const { data: ot } = await admin
+        .from("chat_threads")
+        .select("is_orchestrator")
+        .eq("id", plan.thread_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      isOrchestrator = !!ot?.is_orchestrator;
+    }
     const effectiveGroups: string[] | null = plan.thread_id
-      ? (allowedGroups ? [...new Set([...allowedGroups, "chat_reporting"])] : null)
+      ? (allowedGroups
+          ? [...new Set([...allowedGroups, "chat_reporting", ...(isOrchestrator ? ["orchestration"] : [])])]
+          : null)
       : allowedGroups;
     const systemPrompt = buildSystemPrompt(effectiveGroups);
+    const orchestratorContract = isOrchestrator
+      ? `\n\nORCHESTRATOR CONTRACT (this plan was started from the user's pinned Orchestrator chat — you are their chief of staff and you work THROUGH their other chats):
+- You may create chats (create_chat), rename them (rename_chat), attach documents to them (attach_documents_to_chat), brief them (send_chat_message with target_thread_id), and hand them real work (delegate_plan_to_chat).
+- ONE WORKER PER JOB: give each distinct job its own chat with a clear human title ("Business plan", "Brand images", "Market research"). Reuse an existing chat from the CHAT CATALOG when one already fits — do not create a duplicate.
+- Set a worker up before you use it: create_chat (optionally with instructions describing its role), then attach the documents it needs, THEN delegate_plan_to_chat with a complete instruction — the goal, the specifics, and what to report back. Always pass the worker's id as {{step_N.result.id}} from its create_chat step or a concrete id from the CHAT CATALOG; never invent a thread id.
+- delegate_plan_to_chat hands the work over and returns immediately; that chat plans and runs it in the background and reports in its own chat. Do NOT try to read its output in a later step of this plan, and never delegate back into the Orchestrator chat itself.
+- Keep the user informed in the Orchestrator chat with a send_chat_message (no target_thread_id) when you hand out a batch of work, and use ask_user only for a genuine decision you cannot make.
+- Still Go To Format, still concrete ids in every step's args.`
+      : "";
     const checkInContract = plan.thread_id
       ? `\n\nCHECK-IN CONTRACT (this plan was started from a chat thread — treat it like an assistant reporting back to their manager):
 - For LONG plans (5+ steps, image/video batches, multi-doc edits): add 1–3 send_chat_message steps at meaningful milestones to keep the user in the loop (e.g. "Reviewed the brain dump — starting on 8 image prompts now.", "6 of 8 images done, moving to the video pass."). Keep each message under 2 sentences.
