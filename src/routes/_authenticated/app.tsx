@@ -4548,7 +4548,14 @@ function AppPageInner() {
         startInThreadList={chatStartInList}
         delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
-
+        onThreadDeleted={() => {
+          setChatOpen(false);
+          setPendingChatThreadId(null);
+          setChatStartInList(false);
+          setDelegatePayload(null);
+          const text = currentSentence?.content;
+          if (text) speak(text, claimSpeech());
+        }}
       />
       {currentSentence && (
         <LinkDocumentDialog

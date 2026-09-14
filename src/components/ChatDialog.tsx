@@ -2206,22 +2206,32 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear this chat?</AlertDialogTitle>
+            <AlertDialogTitle>Clear or delete this chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. All messages in this thread will be permanently deleted.
+              Clearing removes every message but keeps the chat. Deleting removes the whole chat and
+              takes you back to your document. Neither can be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 void handleClear();
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Clear
+              🧹 Clear this chat
             </AlertDialogAction>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (activeThreadId) void handleDeleteThread(activeThreadId, true);
+              }}
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              🗑️ Delete this chat
+            </AlertDialogAction>
+            <AlertDialogCancel className="w-full">Cancel</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
