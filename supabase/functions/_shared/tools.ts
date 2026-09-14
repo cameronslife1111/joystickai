@@ -527,6 +527,11 @@ export const TOOL_GROUPS: Record<string, string> = {
   // chat_reporting — only available when the plan was started from a chat thread
   send_chat_message: "chat_reporting",
   ask_user: "chat_reporting",
+  // orchestration — only the pinned Orchestrator chat gets these
+  create_chat: "orchestration",
+  rename_chat: "orchestration",
+  attach_documents_to_chat: "orchestration",
+  delegate_plan_to_chat: "orchestration",
   // davinci_resolve — external creative app driven through the local MCP bridge
   resolve_command: "davinci_resolve",
   // virtual_computer — a temporary cloud browser Orby drives (never the user's own machine)
