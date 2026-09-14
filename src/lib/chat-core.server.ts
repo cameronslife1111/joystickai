@@ -318,34 +318,6 @@ export async function runChatTurn(
     console.warn("[chat planMemory] failed", e);
   }
 
-  // The pinned Orchestrator chat: Orby speaks as the user's chief of staff and
-  // decides its own capabilities, because it works through the other chats.
-  let isOrchestrator = false;
-  let workerChats: { id: string; title: string }[] = [];
-  if (data.threadId) {
-    try {
-      const { data: t } = await supabase
-        .from("chat_threads")
-        .select("is_orchestrator")
-        .eq("id", data.threadId)
-        .maybeSingle();
-      isOrchestrator = !!(t as any)?.is_orchestrator;
-      if (isOrchestrator) {
-        let q = supabase
-          .from("chat_threads")
-          .select("id, title, updated_at")
-          .eq("is_orchestrator", false)
-          .order("updated_at", { ascending: false })
-          .limit(40);
-        if (ownerId) q = q.eq("user_id", ownerId);
-        const { data: rows } = await q;
-        workerChats = ((rows ?? []) as any[]).map((r) => ({ id: r.id, title: r.title }));
-      }
-    } catch (e) {
-      console.warn("[chat orchestrator lookup] failed", e);
-    }
-  }
-
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const provider = createOpenAiProvider(apiKey);
@@ -378,22 +350,6 @@ export async function runChatTurn(
         "start a plan with the virtual_computer_task tool, one step per errand. If a site needs a password or a " +
         "texted code, the run pauses and asks the user right here, then carries on. Never buy anything, move money, " +
         "or post publicly unless the user explicitly asked for it.\n\n"
-      : "") +
-    (isOrchestrator
-      ? "YOU ARE THE ORCHESTRATOR CHAT. This is the user's one pinned chat, and you are their chief of staff. " +
-        "You do the big work THROUGH their other chats instead of doing it all yourself: you can create new chats, " +
-        "rename them, attach documents to them, write into them on the user's behalf, and hand them real work that " +
-        "they then plan and run by themselves in the background. Anything you write into another chat shows up there " +
-        "as a green message labelled Orchestrator, and the user can step in at any time.\n" +
-        "When the user describes a goal, ask only for what you genuinely need — one question at a time — then propose " +
-        "ONE master plan in Go To Format that sets up the workers and hands out the work. Once they approve it, " +
-        "everything inside it runs without asking again. Keep talking to the user here about progress and next steps.\n" +
-        (workerChats.length
-          ? `The user's existing worker chats (id — title, most recent first):\n${workerChats
-              .map((c) => `  ${c.id} — ${JSON.stringify(c.title ?? "")}`)
-              .join("\n")}\n`
-          : "The user has no worker chats yet — the first plan should create them.\n") +
-        "\n"
       : "") +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
@@ -454,7 +410,7 @@ export async function runChatTurn(
     recent,
     caps,
     memory.digest,
-    data.autoCapabilities === true || isOrchestrator,
+    data.autoCapabilities === true,
   );
   const route = decision.route;
 

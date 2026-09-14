@@ -17,7 +17,6 @@ import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/ap
 import { Route as ApiPublicTtsRouteImport } from './routes/api/public/tts'
 import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
 import { Route as ApiPublicPlanSchedulerTickRouteImport } from './routes/api/public/plan-scheduler-tick'
-import { Route as ApiPublicOrchestratorTickRouteImport } from './routes/api/public/orchestrator-tick'
 import { Route as ApiPublicMediaPollTickRouteImport } from './routes/api/public/media-poll-tick'
 import { Route as ApiPublicChatTurnTickRouteImport } from './routes/api/public/chat-turn-tick'
 import { Route as ApiPublicSbSplatRouteImport } from './routes/api/public/sb/$'
@@ -66,12 +65,6 @@ const ApiPublicPlanSchedulerTickRoute =
     path: '/api/public/plan-scheduler-tick',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicOrchestratorTickRoute =
-  ApiPublicOrchestratorTickRouteImport.update({
-    id: '/api/public/orchestrator-tick',
-    path: '/api/public/orchestrator-tick',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicMediaPollTickRoute = ApiPublicMediaPollTickRouteImport.update({
   id: '/api/public/media-poll-tick',
   path: '/api/public/media-poll-tick',
@@ -117,7 +110,6 @@ export interface FileRoutesByFullPath {
   '/media': typeof AuthenticatedMediaRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
-  '/api/public/orchestrator-tick': typeof ApiPublicOrchestratorTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
@@ -134,7 +126,6 @@ export interface FileRoutesByTo {
   '/media': typeof AuthenticatedMediaRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
-  '/api/public/orchestrator-tick': typeof ApiPublicOrchestratorTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
@@ -153,7 +144,6 @@ export interface FileRoutesById {
   '/_authenticated/media': typeof AuthenticatedMediaRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
-  '/api/public/orchestrator-tick': typeof ApiPublicOrchestratorTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
   '/api/public/plan-tick': typeof ApiPublicPlanTickRoute
   '/api/public/tts': typeof ApiPublicTtsRoute
@@ -172,7 +162,6 @@ export interface FileRouteTypes {
     | '/media'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
-    | '/api/public/orchestrator-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
@@ -189,7 +178,6 @@ export interface FileRouteTypes {
     | '/media'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
-    | '/api/public/orchestrator-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
@@ -207,7 +195,6 @@ export interface FileRouteTypes {
     | '/_authenticated/media'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
-    | '/api/public/orchestrator-tick'
     | '/api/public/plan-scheduler-tick'
     | '/api/public/plan-tick'
     | '/api/public/tts'
@@ -224,7 +211,6 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ApiPublicChatTurnTickRoute: typeof ApiPublicChatTurnTickRoute
   ApiPublicMediaPollTickRoute: typeof ApiPublicMediaPollTickRoute
-  ApiPublicOrchestratorTickRoute: typeof ApiPublicOrchestratorTickRoute
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
   ApiPublicPlanTickRoute: typeof ApiPublicPlanTickRoute
   ApiPublicTtsRoute: typeof ApiPublicTtsRoute
@@ -291,13 +277,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/plan-scheduler-tick'
       fullPath: '/api/public/plan-scheduler-tick'
       preLoaderRoute: typeof ApiPublicPlanSchedulerTickRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/orchestrator-tick': {
-      id: '/api/public/orchestrator-tick'
-      path: '/api/public/orchestrator-tick'
-      fullPath: '/api/public/orchestrator-tick'
-      preLoaderRoute: typeof ApiPublicOrchestratorTickRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/media-poll-tick': {
@@ -372,7 +351,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ApiPublicChatTurnTickRoute: ApiPublicChatTurnTickRoute,
   ApiPublicMediaPollTickRoute: ApiPublicMediaPollTickRoute,
-  ApiPublicOrchestratorTickRoute: ApiPublicOrchestratorTickRoute,
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
   ApiPublicPlanTickRoute: ApiPublicPlanTickRoute,
   ApiPublicTtsRoute: ApiPublicTtsRoute,

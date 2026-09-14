@@ -391,11 +391,9 @@ export const TOOL_CATALOG: ToolDef[] = [
   {
     name: "send_chat_message",
     description:
-      "Post a short status/check-in message from Orby into a chat. By default it goes into the chat thread that started this plan — use this to keep the user in the loop during long-running plans. Purely informational: the plan continues to the next step without waiting. Keep messages under ~2 sentences. " +
-      "ORCHESTRATOR USE: pass target_thread_id to write into ANOTHER chat on the user's behalf (a briefing, context, or instructions for that chat). Such a message appears as a green bubble labelled Orchestrator. It does NOT make that chat do anything — to make a chat actually work on something, use delegate_plan_to_chat.",
+      "Post a short status/check-in message from Orby into the chat thread that started this plan. Use this to keep the user in the loop during long-running plans — announce a milestone, share a finding, or explain what you're about to do next. Purely informational: the plan continues to the next step without waiting. Only available when the plan was started from a chat thread. Keep messages under ~2 sentences.",
     args: {
       text: { type: "string", description: "The status message to post in the chat", required: true },
-      target_thread_id: { type: "string", description: "Optional UUID of another chat thread to post into (from the CHAT CATALOG or a {{step_N.result.id}} template from create_chat / find_chat_by_title). Omit to post into the chat that started this plan.", required: false },
     },
   },
   {
@@ -405,46 +403,6 @@ export const TOOL_CATALOG: ToolDef[] = [
     args: {
       question: { type: "string", description: "The question to ask the user. Be specific about what you need them to decide.", required: true },
       context: { type: "string", description: "Optional short context (what you did so far, options to pick from). Shown alongside the question.", required: false },
-    },
-  },
-  {
-    name: "create_chat",
-    description:
-      "Create a NEW chat thread for the user (a worker chat the Orchestrator can brief and delegate to). Returns { id, title }. Give it a clear, human title naming its job (e.g. 'Business plan', 'Brand images'). " +
-      "Optionally attach documents so that chat always sees them, and optionally give it a role/personality with `instructions` — that text is posted into the new chat as the first Orchestrator message. Never create a chat just to link it to a sentence.",
-    args: {
-      title: { type: "string", description: "Title for the new chat", required: true },
-      instructions: { type: "string", description: "Optional role/personality briefing posted into the new chat as its first Orchestrator message", required: false },
-      attach_document_ids: { type: "string", description: "Optional JSON array of document UUIDs to attach to the new chat", required: false },
-    },
-  },
-  {
-    name: "rename_chat",
-    description: "Rename an existing chat thread. The thread_id must be a concrete id from the CHAT CATALOG in the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template from create_chat / find_chat_by_title.",
-    args: {
-      thread_id: { type: "string", description: "UUID of the chat thread", required: true },
-      new_title: { type: "string", description: "New title", required: true },
-    },
-  },
-  {
-    name: "attach_documents_to_chat",
-    description:
-      "Attach documents to a chat thread so every message in that chat sees their full text. document_ids is a JSON array of document UUIDs (concrete ids from the WORKSPACE SNAPSHOT or {{step_N.result.id}} templates from create_document). mode 'add' (default) keeps existing attachments, 'replace' swaps them.",
-    args: {
-      thread_id: { type: "string", description: "UUID of the chat thread", required: true },
-      document_ids: { type: "string", description: "JSON array of document UUIDs to attach", required: true },
-      mode: { type: "string", description: "'add' (default) or 'replace'", required: false },
-    },
-  },
-  {
-    name: "delegate_plan_to_chat",
-    description:
-      "Hand a piece of work to ANOTHER chat, as if the user had typed it there. The request is posted into that chat as a green Orchestrator bubble and that chat then answers or plans and runs the work itself, in the background, with its own history and attachments. " +
-      "Use one delegate_plan_to_chat step per worker chat and per errand. Write `request` exactly as a clear instruction to that chat: the goal, the specifics, and what to report back. " +
-      "The thread_id must be a concrete id from the CHAT CATALOG or a {{step_N.result.id}} template from create_chat. Do NOT delegate back into the Orchestrator chat itself. This step returns as soon as the work is handed over — the target chat reports its own results in its own chat.",
-    args: {
-      thread_id: { type: "string", description: "UUID of the chat thread that should do the work", required: true },
-      request: { type: "string", description: "The instruction for that chat, written as the user would write it", required: true },
     },
   },
   {
@@ -527,11 +485,6 @@ export const TOOL_GROUPS: Record<string, string> = {
   // chat_reporting — only available when the plan was started from a chat thread
   send_chat_message: "chat_reporting",
   ask_user: "chat_reporting",
-  // orchestration — only the pinned Orchestrator chat gets these
-  create_chat: "orchestration",
-  rename_chat: "orchestration",
-  attach_documents_to_chat: "orchestration",
-  delegate_plan_to_chat: "orchestration",
   // davinci_resolve — external creative app driven through the local MCP bridge
   resolve_command: "davinci_resolve",
   // virtual_computer — a temporary cloud browser Orby drives (never the user's own machine)

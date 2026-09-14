@@ -59,12 +59,6 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
 import { processChatTurn } from "@/lib/chat-turn.functions";
-import {
-  getOrchestrator,
-  setOrchestratorFocus,
-  approveProposal,
-  dismissProposal,
-} from "@/lib/orchestrator.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
@@ -131,8 +125,6 @@ type ChatRow = {
   created_at: string;
   kind: string;
   plan_id: string | null;
-  /** 'user' | 'assistant' | 'orchestrator' — orchestrator messages show green. */
-  author?: string | null;
 };
 
 type Thread = {
@@ -142,25 +134,14 @@ type Thread = {
   capabilities: ChatCapabilities;
   /** Sticky per chat: run plans made here without asking for approval. */
   auto_approve_plans: boolean;
-  /** The one pinned Orchestrator chat that works through the other chats. */
-  is_orchestrator: boolean;
   updated_at: string;
   last_assistant_at: string | null;
   last_read_at: string | null;
 };
 
-/** A drafted plan waiting for the user's approval in the Orchestrator chat. */
-type Proposal = {
-  id: string;
-  title: string | null;
-  plan_summary: string | null;
-  user_request: string;
-  created_at: string;
-};
-
 /** Columns every thread read needs — keeps the selects in sync. */
 const THREAD_COLS =
-  "id, title, attached_document_ids, capabilities, auto_approve_plans, is_orchestrator, updated_at, last_assistant_at, last_read_at";
+  "id, title, attached_document_ids, capabilities, auto_approve_plans, updated_at, last_assistant_at, last_read_at";
 
 /** A chat is unread when AI activity is newer than the last time it was read. */
 function isUnread(t: Thread): boolean {
@@ -169,10 +150,9 @@ function isUnread(t: Thread): boolean {
   return t.last_assistant_at > t.last_read_at;
 }
 
-/** Orchestrator always first, then unread chats, then most-recently-used. */
+/** Unread chats first (newest AI activity on top), then most-recently-used. */
 function sortThreads(list: Thread[]): Thread[] {
   return [...list].sort((a, b) => {
-    if (a.is_orchestrator !== b.is_orchestrator) return a.is_orchestrator ? -1 : 1;
     const ua = isUnread(a);
     const ub = isUnread(b);
     if (ua !== ub) return ua ? -1 : 1;
@@ -308,10 +288,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const listSchedulesFn = useServerFn(listSchedules);
   const deleteScheduleFn = useServerFn(deleteSchedule);
   const toggleScheduleFn = useServerFn(toggleSchedule);
-  const getOrchestratorFn = useServerFn(getOrchestrator);
-  const setFocusFn = useServerFn(setOrchestratorFocus);
-  const approveProposalFn = useServerFn(approveProposal);
-  const dismissProposalFn = useServerFn(dismissProposal);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -353,7 +329,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
   const [renameThread, setRenameThread] = useState<Thread | null>(null);
-  const [focusPickerOpen, setFocusPickerOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -514,44 +489,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           attached_document_ids: t.attached_document_ids ?? [],
           capabilities: normalizeCaps(t.capabilities),
           auto_approve_plans: !!t.auto_approve_plans,
-          is_orchestrator: !!t.is_orchestrator,
           updated_at: t.updated_at,
           last_assistant_at: t.last_assistant_at ?? null,
           last_read_at: t.last_read_at ?? null,
         })),
       );
-    },
-  });
-
-  // The pinned Orchestrator chat exists for every account — create it once.
-  const ensuredOrchestratorRef = useRef(false);
-  const { data: orchestrator, refetch: refetchOrchestrator } = useQuery({
-    queryKey: ["orchestrator", userId],
-    enabled: !!userId && open,
-    staleTime: 60_000,
-    queryFn: async () => await getOrchestratorFn({}),
-  });
-  useEffect(() => {
-    if (!open || !orchestrator?.threadId || ensuredOrchestratorRef.current) return;
-    ensuredOrchestratorRef.current = true;
-    void qc.invalidateQueries({ queryKey: ["chat_threads", userId] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, orchestrator?.threadId]);
-
-  // Plans the autopilot drafted while the user was away, waiting for approval.
-  const { data: proposals = [], refetch: refetchProposals } = useQuery({
-    queryKey: ["plan_proposals", userId],
-    enabled: !!userId && open,
-    refetchInterval: 30_000,
-    queryFn: async (): Promise<Proposal[]> => {
-      const { data, error } = await supabase
-        .from("plan_proposals")
-        .select("id, title, plan_summary, user_request, created_at")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      return (data ?? []) as Proposal[];
     },
   });
 
@@ -783,7 +725,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       attached_document_ids: data.attached_document_ids ?? [],
       capabilities: normalizeCaps(data.capabilities),
       auto_approve_plans: !!(data as any).auto_approve_plans,
-      is_orchestrator: !!(data as any).is_orchestrator,
       updated_at: data.updated_at,
       last_assistant_at: (data as any).last_assistant_at ?? null,
       last_read_at: (data as any).last_read_at ?? null,
@@ -885,7 +826,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     queryFn: async (): Promise<ChatRow[]> => {
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .eq("thread_id", activeThreadId as string)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -1053,7 +994,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     async (threadId: string) => {
       const { data } = await supabase
         .from("chat_messages")
-        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .eq("thread_id", threadId)
         .order("created_at", { ascending: true });
       const rows = ((data ?? []) as ChatRow[]).map((m) =>
@@ -1302,7 +1243,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data: insertedUser, error: userErr } = await supabase
         .from("chat_messages")
         .insert({ user_id: userId, thread_id: threadId, role: "user", content: text, kind: "text" })
-        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
+        .select("id, thread_id, role, content, created_at, kind, plan_id")
         .single();
       if (userErr) throw userErr;
 
@@ -1763,82 +1704,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           </DialogHeader>
 
 
-          {/* Orchestrator: focus documents + plans waiting for approval */}
-          {activeThread?.is_orchestrator && (
-            <div className="shrink-0 border-b border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                  Orchestrator
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 rounded-full px-3 text-[11px]"
-                  onClick={() => setFocusPickerOpen(true)}
-                >
-                  👀 Focus documents
-                  {orchestrator?.focusDocumentIds?.length
-                    ? ` (${orchestrator.focusDocumentIds.length})`
-                    : ""}
-                </Button>
-              </div>
-              {proposals.length === 0 ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {orchestrator?.focusDocumentIds?.length
-                    ? "Watching your focus documents. New plans to approve will appear here."
-                    : "Pick focus documents and Orby will keep drafting plans for you to approve."}
-                </p>
-              ) : (
-                <ul className="mt-2 flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
-                  {proposals.map((p) => (
-                    <li
-                      key={p.id}
-                      className="rounded-xl border border-emerald-500/40 bg-background/70 p-2.5"
-                    >
-                      <p className="text-sm font-semibold">🏆 {p.title || "New idea"}</p>
-                      {p.plan_summary && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">{p.plan_summary}</p>
-                      )}
-                      <p className="mt-1 whitespace-pre-wrap text-sm">{p.user_request}</p>
-                      <div className="mt-2 flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 rounded-full px-3 text-[11px]"
-                          onClick={async () => {
-                            try {
-                              await approveProposalFn({ data: { proposalId: p.id } });
-                              toast("✅");
-                              void refetchProposals();
-                            } catch (e: any) {
-                              toast.error(e?.message ?? "Couldn't approve that plan");
-                            }
-                          }}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 rounded-full px-3 text-[11px]"
-                          onClick={async () => {
-                            try {
-                              await dismissProposalFn({ data: { proposalId: p.id } });
-                              void refetchProposals();
-                            } catch (e: any) {
-                              toast.error(e?.message ?? "Couldn't dismiss that plan");
-                            }
-                          }}
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
             {messages.length === 0 && !isActiveBusy && !delegateAnalyzing ? (
@@ -1866,18 +1731,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       key={m.id}
                       className={m.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}
                     >
-                      {m.author === "orchestrator" && (
-                        <span className="mb-1 mr-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                          Orchestrator
-                        </span>
-                      )}
                       <div
                         className={
-                          m.author === "orchestrator"
-                            ? "max-w-[85%] rounded-2xl border border-emerald-500/40 bg-emerald-500/15 px-3.5 py-2 text-base text-foreground"
-                            : m.role === "user"
-                              ? "max-w-[85%] rounded-2xl bg-chat-user px-3.5 py-2 text-base text-chat-user-foreground"
-                              : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
+                          m.role === "user"
+                            ? "max-w-[85%] rounded-2xl bg-chat-user px-3.5 py-2 text-base text-chat-user-foreground"
+                            : "max-w-[90%] rounded-2xl bg-chat-assistant px-3.5 py-2 text-base text-chat-assistant-foreground"
                         }
                       >
                         <DocLinkText
@@ -2280,12 +2138,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     {filteredThreads.map((t) => (
                       <li
                         key={t.id}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg px-2",
-                          t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5",
-                          t.is_orchestrator &&
-                            "border border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_14px_rgba(16,185,129,0.35)]",
-                        )}
+                        className={`flex items-center gap-2 rounded-lg px-2 ${
+                          t.id === activeThreadId ? "bg-foreground/10" : "hover:bg-foreground/5"
+                        }`}
                       >
                         <button
                           type="button"
@@ -2294,11 +2149,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             bumpThread(t.id);
                             setDrawerOpen(false);
                           }}
-                          className={cn(
-                            "flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base",
-                            isUnread(t) && "font-semibold text-foreground",
-                            t.is_orchestrator && "font-semibold",
-                          )}
+                          className={`flex min-w-0 flex-1 items-center gap-2 px-1 py-3.5 text-left text-base ${
+                            isUnread(t) ? "font-semibold text-foreground" : ""
+                          }`}
                         >
                           {isUnread(t) && (
                             <span
@@ -2307,35 +2160,26 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             />
                           )}
                           <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
-                          {t.is_orchestrator && proposals.length > 0 && (
-                            <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                              {proposals.length} to approve
-                            </span>
-                          )}
                         </button>
-                        {!t.is_orchestrator && (
-                          <>
-                            <button
-                              type="button"
-                              aria-label="Rename"
-                              onClick={() => {
-                                setRenameThread(t);
-                                setRenameValue(t.title);
-                              }}
-                              className="shrink-0 rounded p-2 text-muted-foreground hover:text-foreground"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Delete thread"
-                              onClick={() => setDeleteThreadId(t.id)}
-                              className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
+                        <button
+                          type="button"
+                          aria-label="Rename"
+                          onClick={() => {
+                            setRenameThread(t);
+                            setRenameValue(t.title);
+                          }}
+                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Delete thread"
+                          onClick={() => setDeleteThreadId(t.id)}
+                          className="shrink-0 rounded p-2 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -2443,25 +2287,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onOpenChange={setDocPickerOpen}
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
-      />
-
-      {/* Documents the Orchestrator keeps an eye on between visits. */}
-      <DocumentPickerSheet
-        open={focusPickerOpen}
-        onOpenChange={setFocusPickerOpen}
-        initialSelectedIds={orchestrator?.focusDocumentIds ?? []}
-        heading="Focus documents"
-        onConfirm={(ids) => {
-          void (async () => {
-            try {
-              await setFocusFn({ data: { documentIds: ids } });
-              void refetchOrchestrator();
-              toast("👀");
-            } catch (e: any) {
-              toast.error(e?.message ?? "Couldn't save the focus documents");
-            }
-          })();
-        }}
       />
 
       {/* Types document titles into the composer; attaches nothing. */}
