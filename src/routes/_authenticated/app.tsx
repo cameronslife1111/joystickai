@@ -1791,20 +1791,31 @@ function AppPageInner() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [navigate, openNewIdea, deleteCurrent, currentSentence, openLinkedChat, openPinnedDocument]);
 
-  // Shift opens the chat: linked chat for the current sentence if one exists,
-  // otherwise the chat list. Uses the same reading-mode guards as the letter
-  // shortcuts, and ignores auto-repeat while Shift is held.
+  // A Shift tap on its own opens the chat: linked chat for the current sentence
+  // if one exists, otherwise the chat list. It fires on release and only when no
+  // other key was pressed during the hold, so combinations like Shift+/ ("?")
+  // stay available to the letter shortcuts.
   useEffect(() => {
-    const shiftHeldRef = { current: false };
+    const held = { current: false };
+    const combo = { current: false };
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        held.current = true;
+        return;
+      }
+      if (held.current) combo.current = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
       if (e.key !== "Shift") return;
+      const wasCombo = combo.current;
+      held.current = false;
+      combo.current = false;
+      if (wasCombo) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (busyRef.current) return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
-      if (shiftHeldRef.current) return;
-      shiftHeldRef.current = true;
       if (currentSentence?.linked_thread_id) {
         void openLinkedChat();
       } else {
@@ -1814,15 +1825,13 @@ function AppPageInner() {
       }
       e.preventDefault();
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") shiftHeldRef.current = false;
-    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      shiftHeldRef.current = false;
+      held.current = false;
+      combo.current = false;
     };
   }, [currentSentence, openLinkedChat]);
 
