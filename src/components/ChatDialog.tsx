@@ -2588,7 +2588,20 @@ function PlanProgressCard({
             <Square className="h-3 w-3" /> Stop
           </Button>
         )}
+        {composeStalled && plan.status === "composing" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2"
+            disabled={recomposing}
+            onClick={() => void retryPlanning()}
+          >
+            {recomposing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            Retry planning
+          </Button>
+        )}
       </div>
+
 
       {plan.plan_summary && (
         <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
