@@ -144,7 +144,8 @@ SELF-CHECK before emitting each step: restate the step's target in one phrase, c
 
 Return your output as JSON with this exact shape:
 {
-  "summary": "A one-or-two-sentence plain-language summary of what you'll do.",
+  "summary": "🏆 Let's <4-5 words naming the overall task>.",
+  "notes": ["optional plain-text special notes the user gave, one per entry"],
   "steps": [
     {
       "tool": "<tool_name from the catalog>",
@@ -158,7 +159,7 @@ Return your output as JSON with this exact shape:
         "capability": "<same tool_name>",
         "lookup": "what to look up first, or 'none'"
       },
-      "description": "A short plain-language sentence (naming the source and destination) that the user will see during approval."
+      "description": "Go to the X and Y."
     }
   ]
 }
@@ -176,7 +177,7 @@ Filled example of one step:
     "capability": "add_sentence — adds one sentence to a known document",
     "lookup": "none"
   },
-  "description": "Add the intro line to the new \"Trip Plan\" document."
+  "description": "Go to the Trip Plan document and add the intro line."
 }
 
 If the user's request is impossible, ambiguous, or would require deletion, respond with:
@@ -186,12 +187,87 @@ If the user's request is impossible, ambiguous, or would require deletion, respo
   "explanation": "<one short sentence explaining why>"
 }
 
-WORDING CONTRACT (the user reads this before approving):
-- "summary" must name the task you detected in one plain sentence (for a step inside a document, say whether it is a substep of a bigger task and what that parent task is).
-- "explanation" must list one short line per capability you will use, each in the form "Orby will use <capability> to <do Y> and put the output in <Z>".
-- Every step "description" must also read as "Orby will use <capability> to <do Y> and put the output in <Z>".
+GO TO FORMAT — this is exactly how the user reads a plan. No other wording is acceptable:
+- "summary" is always one line: "🏆 Let's " followed by 4-5 words describing the overall task, ending with a period. Nothing else on that line.
+- Every step "description" is exactly one sentence in the form "Go to the X and Y." where X is WHERE to go (the real destination: the document by its exact title, the Media Gallery, this chat, the timeline in DaVinci Resolve — include the location detail the user gave) and Y is WHAT to do there in FEWER THAN 7 words, ending with a period.
+- If an action needs more than 6 words in Y, split it into several baby steps, each its own "Go to the X and Y." sentence.
+- Use the USER'S OWN WORDING for X and Y. If they said "the funky blue button", write "the funky blue button" — never paraphrase, never fancy it up. Fix only obvious transcription slips.
+- Never write "Orby will…", never name a tool or capability in the description, never number or bullet the steps.
+- Special notes the user gave (things to remember, not actions) go in the "notes" array as plain sentences, in the order they belong. Never bend a note into "Go to…" shape.
+- Plain text only in every field: no markdown, no asterisks, no headings, no numbering.
 
 Plain text only. No markdown, no code fences. Return the JSON object directly.`;
+
+/** Strip markdown noise, numbering and bullets — plans are plain text only. */
+function plainLine(s: string): string {
+  return String(s ?? "")
+    .replace(/[*_`#>]/g, "")
+    .replace(/^\s*(?:\d+[.)]|[-•])\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function words(s: string): string[] {
+  return plainLine(s).split(" ").filter(Boolean);
+}
+
+const TRAILING_FILLER = new Set([
+  "of", "the", "a", "an", "and", "to", "in", "into", "for", "with", "by", "on",
+  "at", "from", "that", "this", "as", "so", "then", "or",
+]);
+
+/** First n words, without a dangling preposition/article at the end. */
+function clip(s: string, n: number): string {
+  const w = words(s).slice(0, n);
+  while (w.length > 1 && TRAILING_FILLER.has(w[w.length - 1].toLowerCase().replace(/[^a-z']/g, ""))) {
+    w.pop();
+  }
+  return w.join(" ").replace(/[.,;:!?]+$/, "");
+}
+
+/** Lower-case an ordinary sentence-start word, but leave proper nouns alone. */
+function softLower(s: string): string {
+  const [first, ...rest] = s.split(" ");
+  if (!first) return s;
+  const looksProper = /^[A-Z]{2,}$/.test(first) || (rest[0] && /^[A-Z]/.test(rest[0]));
+  return [looksProper ? first : first.charAt(0).toLowerCase() + first.slice(1), ...rest].join(" ");
+}
+
+/** Tidy a destination phrase so it reads naturally after "Go to the". */
+function wherePhrase(raw: string): string {
+  let w = plainLine(raw).replace(/^(?:the|this|that|a|an)\s+/i, "").replace(/[.,;:]+$/, "");
+  if (!w) return "chat";
+  if (/^chat\b/i.test(w)) w = "chat";
+  return clip(w, 8) || "chat";
+}
+
+/** "🏆 Let's <4-5 words>." — rebuilt from whatever the planner returned. */
+function goToSummary(raw: string, fallback: string): string {
+  let body = plainLine(raw).replace(/^🏆\s*/, "").replace(/^let'?s\s+/i, "");
+  if (!body) body = plainLine(fallback);
+  body = clip(body.replace(/[.!?]+$/, ""), 5);
+  if (!body) return "🏆 Let's do this task.";
+  return `🏆 Let's ${softLower(body)}.`;
+}
+
+/**
+ * Force one step's description into "Go to the X and Y." with Y under 7 words.
+ * A description that already complies is only tidied; anything else is rebuilt
+ * from the step's own io.destination + io.operation, so a vague line can never
+ * reach the review card.
+ */
+function goToStep(description: unknown, io: any): string {
+  const clean = plainLine(typeof description === "string" ? description : "");
+  const m = /^go to (.+?) and (.+?)[.!]?$/i.exec(clean);
+  if (m) {
+    const where = wherePhrase(m[1]);
+    const what = clip(m[2], 6);
+    if (where && what) return `Go to the ${where} and ${softLower(what)}.`;
+  }
+  const where = wherePhrase(String(io?.destination ?? ""));
+  const what = clip(String(io?.operation ?? "do this"), 6) || "do this";
+  return `Go to the ${where} and ${softLower(what)}.`;
+}
 
 
 
@@ -808,16 +884,24 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (typeof s.description !== "string" || !s.description.trim()) {
-        s.description = `${io.operation} → ${io.destination}`.slice(0, 240);
-      }
+      // GO TO FORMAT is enforced, not requested: every description the user
+      // sees reads "Go to the X and Y." with Y under 7 words.
+      s.description = goToStep(s.description, io);
       s.status = "pending";
       s.result = null;
       s.error = null;
     }
 
-    const summary = typeof parsed.summary === "string" ? parsed.summary : "";
-    const explanation = typeof parsed.explanation === "string" ? parsed.explanation : null;
+    const notes = Array.isArray(parsed.notes)
+      ? parsed.notes.map((n: unknown) => plainLine(String(n ?? ""))).filter(Boolean)
+      : [];
+    const explanation = typeof parsed.explanation === "string" ? plainLine(parsed.explanation) : null;
+    // Refusals keep their plain explanation; real plans get the trophy line.
+    const summary =
+      steps.length === 0
+        ? plainLine(typeof parsed.summary === "string" ? parsed.summary : "I can't do that as described.")
+        : goToSummary(String(parsed.summary ?? ""), String(plan.user_request ?? ""));
+
 
     // NOTHING the user started runs without their approval. Only two cases
     // skip the review card:
@@ -840,7 +924,9 @@ Deno.serve(async (req) => {
         status: isScheduled ? "approved" : "proposed",
         ...(isScheduled ? { approved_at: new Date().toISOString() } : {}),
         auto_approve_after_compose: false,
-        plan_summary: explanation ? `${summary}\n\n${explanation}` : summary,
+        plan_summary: [summary, ...(steps.length === 0 && explanation ? [explanation] : []), ...notes]
+          .filter(Boolean)
+          .join("\n"),
         steps,
         total_steps: steps.length,
       })

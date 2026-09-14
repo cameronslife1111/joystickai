@@ -272,7 +272,12 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /** A chat turn the server is still working on. */
-type PendingTurn = { id: string; thread_id: string | null; status: string };
+type PendingTurn = {
+  id: string;
+  thread_id: string | null;
+  status: string;
+  created_at?: string | null;
+};
 
 export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
   const qc = useQueryClient();
@@ -502,7 +507,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     queryFn: async (): Promise<PendingTurn[]> => {
       const { data, error } = await supabase
         .from("chat_turns")
-        .select("id, thread_id, status")
+        .select("id, thread_id, status, created_at")
         .in("status", ["pending", "running"]);
       if (error) throw error;
       return (data ?? []) as PendingTurn[];
@@ -515,6 +520,63 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     for (const t of pendingTurns) if (t.thread_id) set.add(t.thread_id);
     return set;
   }, [busyThreadIds, pendingTurns]);
+
+  /**
+   * Nothing may think forever. The server's queued-turn list is the truth: a
+   * locally-optimistic busy thread with no queued turn behind it is released,
+   * a turn sitting too long gets the finisher poked, and past a hard timeout
+   * the chat says so instead of spinning.
+   */
+  const turnsRef = useRef<PendingTurn[]>(pendingTurns);
+  turnsRef.current = pendingTurns;
+  const optimisticSinceRef = useRef<Map<string, number>>(new Map());
+  const lastNudgeRef = useRef(0);
+  const [stuckThreads, setStuckThreads] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open || !userId) return;
+    const check = () => {
+      const now = Date.now();
+      const live = new Set(
+        turnsRef.current.map((t) => t.thread_id).filter((id): id is string => !!id),
+      );
+      // Release optimistic "thinking" the server never confirmed.
+      for (const id of busyThreadIds) {
+        if (live.has(id)) {
+          optimisticSinceRef.current.delete(id);
+          continue;
+        }
+        const since = optimisticSinceRef.current.get(id);
+        if (!since) optimisticSinceRef.current.set(id, now);
+        else if (now - since > 20_000) {
+          optimisticSinceRef.current.delete(id);
+          markIdle(id);
+        }
+      }
+      // Poke the finisher for anything queued too long, then flag real stalls.
+      const stale = turnsRef.current.filter(
+        (t) => t.created_at && now - new Date(t.created_at).getTime() > 25_000,
+      );
+      if (stale.length && now - lastNudgeRef.current > 30_000) {
+        lastNudgeRef.current = now;
+        void fetch("/api/public/chat-turn-tick", { method: "POST" }).catch(() => {});
+        void refetchTurns();
+      }
+      const stuck = new Set(
+        turnsRef.current
+          .filter((t) => t.thread_id && t.created_at && now - new Date(t.created_at).getTime() > 180_000)
+          .map((t) => t.thread_id as string),
+      );
+      setStuckThreads((cur) =>
+        cur.size === stuck.size && [...stuck].every((id) => cur.has(id)) ? cur : stuck,
+      );
+    };
+    check();
+    const id = window.setInterval(check, 5_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userId, busyThreadIds]);
+
 
   const activeThread = useMemo(
     () => threads.find((t) => t.id === activeThreadId) ?? null,
@@ -1220,7 +1282,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       // Show "thinking" straight away, before the watcher's next poll.
       qc.setQueryData<PendingTurn[]>(["chat_turns", userId], (cur) => [
         ...(cur ?? []).filter((t) => t.id !== turnId),
-        { id: turnId, thread_id: threadId, status: "pending" },
+        { id: turnId, thread_id: threadId, status: "pending", created_at: new Date().toISOString() },
       ]);
 
       // Nudge the server to run it now. A dropped nudge is NOT an error: the
@@ -1731,7 +1793,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
-                    Thinking…
+                    {activeThreadId && stuckThreads.has(activeThreadId)
+                      ? "That message hasn't come back — stop it and try again."
+                      : "Thinking…"}
                     <Button
                       type="button"
                       variant="outline"
@@ -1743,6 +1807,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </Button>
                   </div>
                 )}
+
 
               </div>
             )}
@@ -2414,7 +2479,10 @@ type PlanRow = {
   proposed_capabilities?: Record<string, boolean> | null;
 };
 
-const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
+// Terminal states only. "proposed" is NOT terminal — it's the state Approve
+// and Cancel act on, so the card must keep polling while it waits for review;
+// stopping there is what used to leave the card spinning after Approve.
+const PLAN_DONE = new Set(["completed", "failed", "cancelled"]);
 
 function PlanProgressCard({
   planId,
@@ -2469,6 +2537,32 @@ function PlanProgressCard({
       cur ? { ...cur, status: "cancelled" } : cur,
     );
     toast.success("Plan stopped");
+  };
+
+  // A plan that has been "Planning…" for too long is stalled, not slow — offer
+  // a way out instead of an endless spinner.
+  const [composeStalled, setComposeStalled] = useState(false);
+  const [recomposing, setRecomposing] = useState(false);
+  useEffect(() => {
+    if (plan?.status !== "composing") {
+      setComposeStalled(false);
+      return;
+    }
+    const id = window.setTimeout(() => setComposeStalled(true), 90_000);
+    return () => window.clearTimeout(id);
+  }, [plan?.status]);
+
+  const retryPlanning = async () => {
+    setRecomposing(true);
+    try {
+      await supabase.functions.invoke("plan-compose", { body: { plan_id: planId } });
+      setComposeStalled(false);
+      void qc.invalidateQueries({ queryKey: ["chat_plan", planId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't retry planning");
+    } finally {
+      setRecomposing(false);
+    }
   };
 
 
@@ -2559,7 +2653,20 @@ function PlanProgressCard({
             <Square className="h-3 w-3" /> Stop
           </Button>
         )}
+        {composeStalled && plan.status === "composing" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2"
+            disabled={recomposing}
+            onClick={() => void retryPlanning()}
+          >
+            {recomposing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            Retry planning
+          </Button>
+        )}
       </div>
+
 
       {plan.plan_summary && (
         <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>

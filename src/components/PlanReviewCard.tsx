@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Loader2, Send, Square, StickyNote } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
@@ -41,9 +42,11 @@ export type ReviewPlan = {
  * note (which triggers a full replan), or cancels.
  */
 export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
+  const qc = useQueryClient();
   const [busy, setBusy] = useState<null | "approve" | "note" | "cancel">(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
+
 
   const caps = plan.proposed_capabilities ?? {};
   const capList = Object.keys(CAP_TEXT).filter((k) => caps[k]);
@@ -52,17 +55,27 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
 
   const approve = async () => {
     setBusy("approve");
-    const { error } = await supabase
-      .from("plans")
-      .update({ status: "approved", approved_at: new Date().toISOString() })
-      .eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from("plans")
+        .update({ status: "approved", approved_at: new Date().toISOString() })
+        .eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't start: ${error.message}`);
+        return;
+      }
+      // Move this card off "waiting for review" immediately — the poll that
+      // would otherwise notice is what used to leave it spinning forever.
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "approved" } : cur,
+      );
+      void qc.invalidateQueries({ queryKey: ["plans"] });
+      void qc.invalidateQueries({ queryKey: ["plans_pending_count"] });
+      void supabase.functions.invoke("plan-step", { body: { plan_id: plan.id } });
+      toast.success("Plan started — running in the background");
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't start: ${error.message}`);
-      return;
     }
-    void supabase.functions.invoke("plan-step", { body: { plan_id: plan.id } });
-    toast.success("Plan started — running in the background");
   };
 
   /**
@@ -73,38 +86,53 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
     const text = note.trim();
     if (!text) return;
     setBusy("note");
-    const { error } = await supabase
-      .from("plans")
-      .update({
-        status: "composing",
-        user_request: `${plan.user_request}\n\nNOTE FROM ME: ${text}`,
-        steps: null,
-        current_step: 0,
-        total_steps: 0,
-        auto_approve_after_compose: autoRun,
-      })
-      .eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from("plans")
+        .update({
+          status: "composing",
+          user_request: `${plan.user_request}\n\nNOTE FROM ME: ${text}`,
+          steps: null,
+          current_step: 0,
+          total_steps: 0,
+          auto_approve_after_compose: autoRun,
+        })
+        .eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't send that note: ${error.message}`);
+        return;
+      }
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "composing", steps: null, total_steps: 0 } : cur,
+      );
+      void supabase.functions.invoke("plan-compose", {
+        body: { plan_id: plan.id, allowed_tool_groups: allowedGroups.length ? allowedGroups : null },
+      });
+      setNote("");
+      setNoteOpen(false);
+      toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't send that note: ${error.message}`);
-      return;
     }
-    void supabase.functions.invoke("plan-compose", {
-      body: { plan_id: plan.id, allowed_tool_groups: allowedGroups.length ? allowedGroups : null },
-    });
-    setNote("");
-    setNoteOpen(false);
-    toast.success(autoRun ? "Rewriting your plan, then running it" : "Rewriting your plan");
   };
 
   const cancel = async () => {
     setBusy("cancel");
-    const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", plan.id);
-    if (error) {
+    try {
+      const { error } = await supabase.from("plans").update({ status: "cancelled" }).eq("id", plan.id);
+      if (error) {
+        toast.error(`Couldn't cancel: ${error.message}`);
+        return;
+      }
+      qc.setQueryData<any>(["chat_plan", plan.id], (cur: any) =>
+        cur ? { ...cur, status: "cancelled" } : cur,
+      );
+      void qc.invalidateQueries({ queryKey: ["plans"] });
+    } finally {
       setBusy(null);
-      toast.error(`Couldn't cancel: ${error.message}`);
     }
   };
+
 
   if (steps.length === 0) {
     return (
@@ -115,16 +143,46 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
         {plan.plan_summary && (
           <p className="whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
         )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-2 h-8 gap-1 text-muted-foreground"
+          disabled={busy !== null}
+          onClick={() => void cancel()}
+        >
+          <Square className="h-3 w-3" /> Dismiss
+        </Button>
       </div>
     );
   }
 
+  const summaryLines = (plan.plan_summary ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const trophy = summaryLines[0] ?? "";
+  const extraNotes = summaryLines.slice(1);
+
   return (
     <div className="w-full max-w-[95%] rounded-xl border border-primary/30 bg-card/60 p-3 text-sm">
-      <div className="mb-1.5 font-medium">Here&apos;s my plan — review it</div>
+      {trophy && <div className="mb-1.5 font-medium">{trophy}</div>}
 
-      {plan.plan_summary && (
-        <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
+      <div className="mb-2 flex flex-col gap-1.5">
+        {steps.map((s: any, i: number) => (
+          <p key={i} className="text-xs leading-snug">
+            {s?.description ?? "Go to the chat and continue."}
+          </p>
+        ))}
+      </div>
+
+      {extraNotes.length > 0 && (
+        <div className="mb-2 flex flex-col gap-1">
+          {extraNotes.map((n, i) => (
+            <p key={i} className="text-xs leading-snug text-muted-foreground">
+              {n}
+            </p>
+          ))}
+        </div>
       )}
 
       {capList.length > 0 && (
@@ -133,14 +191,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
         </p>
       )}
 
-      <ol className="mb-2 flex flex-col gap-1.5">
-        {steps.map((s: any, i: number) => (
-          <li key={i} className="text-xs leading-snug">
-            <span className="mr-1 opacity-60">{i + 1}.</span>
-            {s?.description ?? `Step ${i + 1}`}
-          </li>
-        ))}
-      </ol>
+
 
       {noteOpen && (
         <div className="mb-2 flex flex-col gap-1.5">
