@@ -211,14 +211,43 @@ function words(s: string): string[] {
   return plainLine(s).split(" ").filter(Boolean);
 }
 
+const TRAILING_FILLER = new Set([
+  "of", "the", "a", "an", "and", "to", "in", "into", "for", "with", "by", "on",
+  "at", "from", "that", "this", "as", "so", "then", "or",
+]);
+
+/** First n words, without a dangling preposition/article at the end. */
+function clip(s: string, n: number): string {
+  const w = words(s).slice(0, n);
+  while (w.length > 1 && TRAILING_FILLER.has(w[w.length - 1].toLowerCase().replace(/[^a-z']/g, ""))) {
+    w.pop();
+  }
+  return w.join(" ").replace(/[.,;:!?]+$/, "");
+}
+
+/** Lower-case an ordinary sentence-start word, but leave proper nouns alone. */
+function softLower(s: string): string {
+  const [first, ...rest] = s.split(" ");
+  if (!first) return s;
+  const looksProper = /^[A-Z]{2,}$/.test(first) || (rest[0] && /^[A-Z]/.test(rest[0]));
+  return [looksProper ? first : first.charAt(0).toLowerCase() + first.slice(1), ...rest].join(" ");
+}
+
+/** Tidy a destination phrase so it reads naturally after "Go to the". */
+function wherePhrase(raw: string): string {
+  let w = plainLine(raw).replace(/^(?:the|this|that|a|an)\s+/i, "").replace(/[.,;:]+$/, "");
+  if (!w) return "chat";
+  if (/^chat\b/i.test(w)) w = "chat";
+  return clip(w, 8) || "chat";
+}
+
 /** "🏆 Let's <4-5 words>." — rebuilt from whatever the planner returned. */
 function goToSummary(raw: string, fallback: string): string {
   let body = plainLine(raw).replace(/^🏆\s*/, "").replace(/^let'?s\s+/i, "");
   if (!body) body = plainLine(fallback);
-  body = body.replace(/[.!?]+$/, "");
-  const w = words(body).slice(0, 5);
-  if (!w.length) return "🏆 Let's do this task.";
-  return `🏆 Let's ${w.join(" ")}.`;
+  body = clip(body.replace(/[.!?]+$/, ""), 5);
+  if (!body) return "🏆 Let's do this task.";
+  return `🏆 Let's ${softLower(body)}.`;
 }
 
 /**
@@ -231,14 +260,15 @@ function goToStep(description: unknown, io: any): string {
   const clean = plainLine(typeof description === "string" ? description : "");
   const m = /^go to (.+?) and (.+?)[.!]?$/i.exec(clean);
   if (m) {
-    const where = plainLine(m[1]);
-    const what = words(m[2]).slice(0, 6).join(" ");
-    if (where && what) return `Go to the ${where.replace(/^the\s+/i, "")} and ${what}.`;
+    const where = wherePhrase(m[1]);
+    const what = clip(m[2], 6);
+    if (where && what) return `Go to the ${where} and ${softLower(what)}.`;
   }
-  const where = plainLine(String(io?.destination ?? "")).replace(/^the\s+/i, "") || "chat";
-  const what = words(String(io?.operation ?? "do this")).slice(0, 6).join(" ") || "do this";
-  return `Go to the ${where} and ${what}.`;
+  const where = wherePhrase(String(io?.destination ?? ""));
+  const what = clip(String(io?.operation ?? "do this"), 6) || "do this";
+  return `Go to the ${where} and ${softLower(what)}.`;
 }
+
 
 
 function buildLovablePrompt(plan: any, failedStep: any | null, errorMessage: string): string {
