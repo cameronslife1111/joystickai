@@ -353,6 +353,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
   const [renameThread, setRenameThread] = useState<Thread | null>(null);
+  const [focusPickerOpen, setFocusPickerOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -2442,6 +2443,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onOpenChange={setDocPickerOpen}
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
+      />
+
+      {/* Documents the Orchestrator keeps an eye on between visits. */}
+      <DocumentPickerSheet
+        open={focusPickerOpen}
+        onOpenChange={setFocusPickerOpen}
+        initialSelectedIds={orchestrator?.focusDocumentIds ?? []}
+        heading="Focus documents"
+        onConfirm={(ids) => {
+          void (async () => {
+            try {
+              await setFocusFn({ data: { documentIds: ids } });
+              void refetchOrchestrator();
+              toast("👀");
+            } catch (e: any) {
+              toast.error(e?.message ?? "Couldn't save the focus documents");
+            }
+          })();
+        }}
       />
 
       {/* Types document titles into the composer; attaches nothing. */}
