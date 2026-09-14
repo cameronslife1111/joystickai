@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       chat_messages: {
         Row: {
+          author: string | null
           content: string
           created_at: string
           id: string
@@ -26,6 +27,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          author?: string | null
           content: string
           created_at?: string
           id?: string
@@ -36,6 +38,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          author?: string | null
           content?: string
           created_at?: string
           id?: string
@@ -69,6 +72,7 @@ export type Database = {
           capabilities: Json
           created_at: string
           id: string
+          is_orchestrator: boolean
           last_assistant_at: string | null
           last_read_at: string | null
           title: string
@@ -81,6 +85,7 @@ export type Database = {
           capabilities?: Json
           created_at?: string
           id?: string
+          is_orchestrator?: boolean
           last_assistant_at?: string | null
           last_read_at?: string | null
           title?: string
@@ -93,6 +98,7 @@ export type Database = {
           capabilities?: Json
           created_at?: string
           id?: string
+          is_orchestrator?: boolean
           last_assistant_at?: string | null
           last_read_at?: string | null
           title?: string
@@ -454,6 +460,110 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      orchestrator_state: {
+        Row: {
+          autopilot_enabled: boolean
+          created_at: string
+          focus_document_ids: string[]
+          last_tick_at: string | null
+          thread_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          autopilot_enabled?: boolean
+          created_at?: string
+          focus_document_ids?: string[]
+          last_tick_at?: string | null
+          thread_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          autopilot_enabled?: boolean
+          created_at?: string
+          focus_document_ids?: string[]
+          last_tick_at?: string | null
+          thread_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_state_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_proposals: {
+        Row: {
+          approved_at: string | null
+          attached_document_ids: string[]
+          created_at: string
+          id: string
+          plan_id: string | null
+          plan_summary: string | null
+          proposed_capabilities: Json
+          source: string
+          status: string
+          thread_id: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+          user_request: string
+        }
+        Insert: {
+          approved_at?: string | null
+          attached_document_ids?: string[]
+          created_at?: string
+          id?: string
+          plan_id?: string | null
+          plan_summary?: string | null
+          proposed_capabilities?: Json
+          source?: string
+          status?: string
+          thread_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+          user_request: string
+        }
+        Update: {
+          approved_at?: string | null
+          attached_document_ids?: string[]
+          created_at?: string
+          id?: string
+          plan_id?: string | null
+          plan_summary?: string | null
+          proposed_capabilities?: Json
+          source?: string
+          status?: string
+          thread_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+          user_request?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_proposals_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_proposals_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       plan_schedules: {
         Row: {
