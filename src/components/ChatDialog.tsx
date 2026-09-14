@@ -1793,7 +1793,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 {isActiveBusy && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-foreground/40" />
-                    Thinking…
+                    {activeThreadId && stuckThreads.has(activeThreadId)
+                      ? "That message hasn't come back — stop it and try again."
+                      : "Thinking…"}
                     <Button
                       type="button"
                       variant="outline"
@@ -1805,6 +1807,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </Button>
                   </div>
                 )}
+
 
               </div>
             )}
