@@ -1733,13 +1733,18 @@ function AppPageInner() {
   // keys, so nothing fires while any text field, editor or dialog is active.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // "?" is typed with Shift, so it's the one shortcut allowed to hold Shift.
+      if (e.shiftKey && e.key !== "?") return;
       if (busyRef.current) return; // editor / dialog open
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
 
       switch (e.key.toLowerCase()) {
+        case "?":
+          setRecentOpen(true);
+          break;
         case "g":
           navigate({ to: "/media" });
           break;
