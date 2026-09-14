@@ -842,7 +842,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     queryFn: async (): Promise<ChatRow[]> => {
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, thread_id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
         .eq("thread_id", activeThreadId as string)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -1010,7 +1010,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     async (threadId: string) => {
       const { data } = await supabase
         .from("chat_messages")
-        .select("id, thread_id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
         .eq("thread_id", threadId)
         .order("created_at", { ascending: true });
       const rows = ((data ?? []) as ChatRow[]).map((m) =>
@@ -1259,7 +1259,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       const { data: insertedUser, error: userErr } = await supabase
         .from("chat_messages")
         .insert({ user_id: userId, thread_id: threadId, role: "user", content: text, kind: "text" })
-        .select("id, thread_id, role, content, created_at, kind, plan_id")
+        .select("id, thread_id, role, content, created_at, kind, plan_id, author")
         .single();
       if (userErr) throw userErr;
 
