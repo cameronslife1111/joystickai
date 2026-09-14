@@ -98,6 +98,8 @@ interface Props {
   startInThreadList?: boolean;
   /** Open an attached document in the reader (chat closes first). */
   onOpenDocument?: (documentId: string) => void;
+  /** The open chat was deleted from inside the chat window. */
+  onThreadDeleted?: () => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
    * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
@@ -279,7 +281,7 @@ type PendingTurn = {
   created_at?: string | null;
 };
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, delegate }: Props) {
   const qc = useQueryClient();
   const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
@@ -1133,9 +1135,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     toast.success("Chat cleared");
   };
 
-  const handleDeleteThread = async () => {
-    const id = deleteThreadId;
+  /**
+   * Deletes a thread. `returnToReader` is used by the in-chat delete: instead of
+   * hopping to another thread, the chat closes and the reader speaks again.
+   */
+  const handleDeleteThread = async (threadId?: string, returnToReader = false) => {
+    const id = threadId ?? deleteThreadId;
     if (!id || !userId) return;
+    // Nothing should keep reading a chat that no longer exists.
+    cancelSpeech();
+    setSpeakingId(null);
     const { error } = await supabase.from("chat_threads").delete().eq("id", id);
     if (error) {
       toast.error("Failed to delete thread");
@@ -1143,6 +1152,13 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
     qc.setQueryData<Thread[]>(["chat_threads", userId], (cur) => (cur ?? []).filter((t) => t.id !== id));
     setDeleteThreadId(null);
+    if (returnToReader && onThreadDeleted) {
+      setClearConfirmOpen(false);
+      if (activeThreadId === id) setActiveThreadId(null);
+      onThreadDeleted();
+      toast.success("Chat deleted");
+      return;
+    }
     if (activeThreadId === id) {
       const remaining = (qc.getQueryData<Thread[]>(["chat_threads", userId]) ?? []).filter((t) => t.id !== id);
       if (remaining.length > 0) setActiveThreadId(remaining[0].id);
@@ -2190,22 +2206,32 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear this chat?</AlertDialogTitle>
+            <AlertDialogTitle>Clear or delete this chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. All messages in this thread will be permanently deleted.
+              Clearing removes every message but keeps the chat. Deleting removes the whole chat and
+              takes you back to your document. Neither can be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
                 void handleClear();
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Clear
+              🧹 Clear this chat
             </AlertDialogAction>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (activeThreadId) void handleDeleteThread(activeThreadId, true);
+              }}
+              className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              🗑️ Delete this chat
+            </AlertDialogAction>
+            <AlertDialogCancel className="w-full">Cancel</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
