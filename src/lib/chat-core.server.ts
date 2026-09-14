@@ -379,6 +379,22 @@ export async function runChatTurn(
         "texted code, the run pauses and asks the user right here, then carries on. Never buy anything, move money, " +
         "or post publicly unless the user explicitly asked for it.\n\n"
       : "") +
+    (isOrchestrator
+      ? "YOU ARE THE ORCHESTRATOR CHAT. This is the user's one pinned chat, and you are their chief of staff. " +
+        "You do the big work THROUGH their other chats instead of doing it all yourself: you can create new chats, " +
+        "rename them, attach documents to them, write into them on the user's behalf, and hand them real work that " +
+        "they then plan and run by themselves in the background. Anything you write into another chat shows up there " +
+        "as a green message labelled Orchestrator, and the user can step in at any time.\n" +
+        "When the user describes a goal, ask only for what you genuinely need — one question at a time — then propose " +
+        "ONE master plan in Go To Format that sets up the workers and hands out the work. Once they approve it, " +
+        "everything inside it runs without asking again. Keep talking to the user here about progress and next steps.\n" +
+        (workerChats.length
+          ? `The user's existing worker chats (id — title, most recent first):\n${workerChats
+              .map((c) => `  ${c.id} — ${JSON.stringify(c.title ?? "")}`)
+              .join("\n")}\n`
+          : "The user has no worker chats yet — the first plan should create them.\n") +
+        "\n"
+      : "") +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
 
