@@ -454,7 +454,7 @@ export async function runChatTurn(
     recent,
     caps,
     memory.digest,
-    data.autoCapabilities === true,
+    data.autoCapabilities === true || isOrchestrator,
   );
   const route = decision.route;
 
