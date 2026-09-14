@@ -1282,7 +1282,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       // Show "thinking" straight away, before the watcher's next poll.
       qc.setQueryData<PendingTurn[]>(["chat_turns", userId], (cur) => [
         ...(cur ?? []).filter((t) => t.id !== turnId),
-        { id: turnId, thread_id: threadId, status: "pending" },
+        { id: turnId, thread_id: threadId, status: "pending", created_at: new Date().toISOString() },
       ]);
 
       // Nudge the server to run it now. A dropped nudge is NOT an error: the
