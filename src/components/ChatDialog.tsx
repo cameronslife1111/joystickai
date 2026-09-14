@@ -125,6 +125,8 @@ type ChatRow = {
   created_at: string;
   kind: string;
   plan_id: string | null;
+  /** 'user' | 'assistant' | 'orchestrator' — orchestrator messages show green. */
+  author?: string | null;
 };
 
 type Thread = {
@@ -134,14 +136,25 @@ type Thread = {
   capabilities: ChatCapabilities;
   /** Sticky per chat: run plans made here without asking for approval. */
   auto_approve_plans: boolean;
+  /** The one pinned Orchestrator chat that works through the other chats. */
+  is_orchestrator: boolean;
   updated_at: string;
   last_assistant_at: string | null;
   last_read_at: string | null;
 };
 
+/** A drafted plan waiting for the user's approval in the Orchestrator chat. */
+type Proposal = {
+  id: string;
+  title: string | null;
+  plan_summary: string | null;
+  user_request: string;
+  created_at: string;
+};
+
 /** Columns every thread read needs — keeps the selects in sync. */
 const THREAD_COLS =
-  "id, title, attached_document_ids, capabilities, auto_approve_plans, updated_at, last_assistant_at, last_read_at";
+  "id, title, attached_document_ids, capabilities, auto_approve_plans, is_orchestrator, updated_at, last_assistant_at, last_read_at";
 
 /** A chat is unread when AI activity is newer than the last time it was read. */
 function isUnread(t: Thread): boolean {
@@ -150,9 +163,10 @@ function isUnread(t: Thread): boolean {
   return t.last_assistant_at > t.last_read_at;
 }
 
-/** Unread chats first (newest AI activity on top), then most-recently-used. */
+/** Orchestrator always first, then unread chats, then most-recently-used. */
 function sortThreads(list: Thread[]): Thread[] {
   return [...list].sort((a, b) => {
+    if (a.is_orchestrator !== b.is_orchestrator) return a.is_orchestrator ? -1 : 1;
     const ua = isUnread(a);
     const ub = isUnread(b);
     if (ua !== ub) return ua ? -1 : 1;
