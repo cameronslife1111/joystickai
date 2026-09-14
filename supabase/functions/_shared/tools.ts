@@ -408,6 +408,46 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "create_chat",
+    description:
+      "Create a NEW chat thread for the user (a worker chat the Orchestrator can brief and delegate to). Returns { id, title }. Give it a clear, human title naming its job (e.g. 'Business plan', 'Brand images'). " +
+      "Optionally attach documents so that chat always sees them, and optionally give it a role/personality with `instructions` — that text is posted into the new chat as the first Orchestrator message. Never create a chat just to link it to a sentence.",
+    args: {
+      title: { type: "string", description: "Title for the new chat", required: true },
+      instructions: { type: "string", description: "Optional role/personality briefing posted into the new chat as its first Orchestrator message", required: false },
+      attach_document_ids: { type: "string", description: "Optional JSON array of document UUIDs to attach to the new chat", required: false },
+    },
+  },
+  {
+    name: "rename_chat",
+    description: "Rename an existing chat thread. The thread_id must be a concrete id from the CHAT CATALOG in the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template from create_chat / find_chat_by_title.",
+    args: {
+      thread_id: { type: "string", description: "UUID of the chat thread", required: true },
+      new_title: { type: "string", description: "New title", required: true },
+    },
+  },
+  {
+    name: "attach_documents_to_chat",
+    description:
+      "Attach documents to a chat thread so every message in that chat sees their full text. document_ids is a JSON array of document UUIDs (concrete ids from the WORKSPACE SNAPSHOT or {{step_N.result.id}} templates from create_document). mode 'add' (default) keeps existing attachments, 'replace' swaps them.",
+    args: {
+      thread_id: { type: "string", description: "UUID of the chat thread", required: true },
+      document_ids: { type: "string", description: "JSON array of document UUIDs to attach", required: true },
+      mode: { type: "string", description: "'add' (default) or 'replace'", required: false },
+    },
+  },
+  {
+    name: "delegate_plan_to_chat",
+    description:
+      "Hand a piece of work to ANOTHER chat, as if the user had typed it there. The request is posted into that chat as a green Orchestrator bubble and that chat then answers or plans and runs the work itself, in the background, with its own history and attachments. " +
+      "Use one delegate_plan_to_chat step per worker chat and per errand. Write `request` exactly as a clear instruction to that chat: the goal, the specifics, and what to report back. " +
+      "The thread_id must be a concrete id from the CHAT CATALOG or a {{step_N.result.id}} template from create_chat. Do NOT delegate back into the Orchestrator chat itself. This step returns as soon as the work is handed over — the target chat reports its own results in its own chat.",
+    args: {
+      thread_id: { type: "string", description: "UUID of the chat thread that should do the work", required: true },
+      request: { type: "string", description: "The instruction for that chat, written as the user would write it", required: true },
+    },
+  },
+  {
     name: "virtual_computer_task",
     description:
       "Hand ONE web task to a temporary cloud computer (a virtual browser Orby drives itself) and wait for the outcome. Use this for anything that needs a real browser session on a website: signing in to an account the user already has, filling in a form, checking an order or a balance, reading a page behind a login, booking or scheduling on a site, copying details out of a web app. This never touches the user's own computer or their personal browser. " +
