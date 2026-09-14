@@ -601,6 +601,18 @@ Deno.serve(async (req) => {
     if (mediaCatalog.length) {
       userContext += `\n\nMEDIA CATALOG (id — kind — title — parsed emoji/code — src) — a LOOKUP TABLE ONLY for resolving images/videos/audio the request explicitly names or describes${totalMedia > mediaCatalog.length ? ` (showing ${mediaCatalog.length} of ${totalMedia} most-recent assets; if the item you need isn't here, call find_media_by_title / find_all_media_by_title)` : ""}. Match LOOSELY: never require an exact title — pick the closest id by keywords, emoji, or words from its src prompt. Do NOT act on an asset just because it appears here; if the request doesn't reference it, ignore it (this list is mostly leftover output from unrelated past plans):\n${mediaCatalog.join("\n")}`;
     }
+    // CHAT CATALOG — the user's existing chat threads, so "link this sentence to
+    // my Delegate chat" resolves to a real thread id without an extra lookup
+    // step. Lookup table only, exactly like MEDIA CATALOG.
+    const { data: allThreads } = await admin
+      .from("chat_threads").select("id, title, updated_at")
+      .eq("user_id", user.id).order("updated_at", { ascending: false }).limit(40);
+    const chatCatalog = (allThreads ?? []).map(
+      (t: any) => `  ${t.id} — ${JSON.stringify(t.title ?? "Chat")}`,
+    );
+    if (chatCatalog.length) {
+      userContext += `\n\nCHAT CATALOG (id — title, most recent first) — a LOOKUP TABLE ONLY for resolving chat threads the request explicitly names or describes (e.g. link_sentence_to_chat). Match LOOSELY: never require an exact title. Do NOT act on a chat just because it appears here; if the request doesn't reference it, ignore it. If the chat you need isn't listed, call find_chat_by_title:\n${chatCatalog.join("\n")}`;
+    }
     if (mediaList.length) {
       userContext += `\n\nSTRONGLY-MATCHED MEDIA (assets this request appears to operate on directly — prefer these ids when the request references existing media${mediaTruncated ? `; showing ${mediaList.length} of ${relevantMedia.length} matches — if the item you need isn't here, call find_media_by_title` : ""}):\n${mediaList.map((m: any) => `  ${m.id} — ${m.kind} — ${JSON.stringify(m.title ?? "")}${m.source_text ? ` — src=${JSON.stringify(String(m.source_text).slice(0, 200))}` : ""}`).join("\n")}`;
     }
