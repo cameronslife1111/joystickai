@@ -445,6 +445,7 @@ export const TOOL_GROUPS: Record<string, string> = {
   find_documents_by_title: "base",
   read_document: "base",
   find_sentence_by_content: "base",
+  find_chat_by_title: "base",
   find_media_by_title: "base",
   find_all_media_by_title: "base",
   expand_plan: "base",
