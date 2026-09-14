@@ -132,6 +132,8 @@ async function transcribeChunk(
 ): Promise<string> {
   const ext = extensionFor(mimeType);
   let lastError: Error | null = null;
+  // Attempts 1-2 use the main model; the last attempt falls back to the cheaper
+  // one in case the main model is unavailable for this account.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const model = attempt === MAX_ATTEMPTS ? FALLBACK_MODEL : PRIMARY_MODEL;
     const form = new FormData();
@@ -149,15 +151,17 @@ async function transcribeChunk(
         return (json.text ?? "").trim();
       }
       const raw = await res.text().catch(() => "");
-      const message = transcriptionErrorMessage(res.status, raw);
-      if (!RETRYABLE(res.status) && attempt < MAX_ATTEMPTS - 1) throw new Error(message);
-      lastError = new Error(message);
-      if (!RETRYABLE(res.status) && attempt >= MAX_ATTEMPTS - 1 && res.status < 500 && res.status !== 429) {
-        // Non-retryable: try the fallback model once, then give up.
-        if (attempt === MAX_ATTEMPTS) throw lastError;
+      lastError = new Error(transcriptionErrorMessage(res.status, raw));
+      // Key/credit problems never fix themselves — surface them straight away.
+      if (res.status === 401 || res.status === 403 || res.status === 402) throw lastError;
+      // Other non-retryable statuses: skip ahead to the fallback model.
+      if (!RETRYABLE(res.status) && attempt < MAX_ATTEMPTS) {
+        attempt = MAX_ATTEMPTS - 1;
       }
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error("Transcription failed");
+      const error = err instanceof Error ? err : new Error("Transcription failed");
+      if (error === lastError) throw error;
+      lastError = error;
     }
     if (attempt < MAX_ATTEMPTS) await sleep(400 * attempt);
   }
