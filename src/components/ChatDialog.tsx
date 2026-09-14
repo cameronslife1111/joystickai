@@ -2078,6 +2078,19 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   </ul>
                 )}
               </div>
+              <div
+                className="shrink-0 border-t border-foreground/10 p-3"
+                style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  aria-label="Close chat"
+                  className="flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 transition hover:bg-card hover:text-foreground"
+                >
+                  <span className="text-lg">←</span>
+                </button>
+              </div>
             </div>
           )}
         </DialogContent>
