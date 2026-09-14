@@ -894,7 +894,9 @@ Deno.serve(async (req) => {
         status: isScheduled ? "approved" : "proposed",
         ...(isScheduled ? { approved_at: new Date().toISOString() } : {}),
         auto_approve_after_compose: false,
-        plan_summary: explanation ? `${summary}\n\n${explanation}` : summary,
+        plan_summary: [summary, ...(steps.length === 0 && explanation ? [explanation] : []), ...notes]
+          .filter(Boolean)
+          .join("\n"),
         steps,
         total_steps: steps.length,
       })
