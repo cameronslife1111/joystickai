@@ -353,6 +353,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [deleteThreadId, setDeleteThreadId] = useState<string | null>(null);
   const [renameThread, setRenameThread] = useState<Thread | null>(null);
+  const [focusPickerOpen, setFocusPickerOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1762,6 +1763,82 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           </DialogHeader>
 
 
+          {/* Orchestrator: focus documents + plans waiting for approval */}
+          {activeThread?.is_orchestrator && (
+            <div className="shrink-0 border-b border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  Orchestrator
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 rounded-full px-3 text-[11px]"
+                  onClick={() => setFocusPickerOpen(true)}
+                >
+                  👀 Focus documents
+                  {orchestrator?.focusDocumentIds?.length
+                    ? ` (${orchestrator.focusDocumentIds.length})`
+                    : ""}
+                </Button>
+              </div>
+              {proposals.length === 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {orchestrator?.focusDocumentIds?.length
+                    ? "Watching your focus documents. New plans to approve will appear here."
+                    : "Pick focus documents and Orby will keep drafting plans for you to approve."}
+                </p>
+              ) : (
+                <ul className="mt-2 flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
+                  {proposals.map((p) => (
+                    <li
+                      key={p.id}
+                      className="rounded-xl border border-emerald-500/40 bg-background/70 p-2.5"
+                    >
+                      <p className="text-sm font-semibold">🏆 {p.title || "New idea"}</p>
+                      {p.plan_summary && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{p.plan_summary}</p>
+                      )}
+                      <p className="mt-1 whitespace-pre-wrap text-sm">{p.user_request}</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 rounded-full px-3 text-[11px]"
+                          onClick={async () => {
+                            try {
+                              await approveProposalFn({ data: { proposalId: p.id } });
+                              toast("✅");
+                              void refetchProposals();
+                            } catch (e: any) {
+                              toast.error(e?.message ?? "Couldn't approve that plan");
+                            }
+                          }}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 rounded-full px-3 text-[11px]"
+                          onClick={async () => {
+                            try {
+                              await dismissProposalFn({ data: { proposalId: p.id } });
+                              void refetchProposals();
+                            } catch (e: any) {
+                              toast.error(e?.message ?? "Couldn't dismiss that plan");
+                            }
+                          }}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
             {messages.length === 0 && !isActiveBusy && !delegateAnalyzing ? (
@@ -2366,6 +2443,25 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onOpenChange={setDocPickerOpen}
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
+      />
+
+      {/* Documents the Orchestrator keeps an eye on between visits. */}
+      <DocumentPickerSheet
+        open={focusPickerOpen}
+        onOpenChange={setFocusPickerOpen}
+        initialSelectedIds={orchestrator?.focusDocumentIds ?? []}
+        heading="Focus documents"
+        onConfirm={(ids) => {
+          void (async () => {
+            try {
+              await setFocusFn({ data: { documentIds: ids } });
+              void refetchOrchestrator();
+              toast("👀");
+            } catch (e: any) {
+              toast.error(e?.message ?? "Couldn't save the focus documents");
+            }
+          })();
+        }}
       />
 
       {/* Types document titles into the composer; attaches nothing. */}
