@@ -2414,7 +2414,10 @@ type PlanRow = {
   proposed_capabilities?: Record<string, boolean> | null;
 };
 
-const PLAN_DONE = new Set(["completed", "failed", "cancelled", "proposed"]);
+// Terminal states only. "proposed" is NOT terminal — it's the state Approve
+// and Cancel act on, so the card must keep polling while it waits for review;
+// stopping there is what used to leave the card spinning after Approve.
+const PLAN_DONE = new Set(["completed", "failed", "cancelled"]);
 
 function PlanProgressCard({
   planId,
