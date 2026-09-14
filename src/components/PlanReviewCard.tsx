@@ -143,16 +143,46 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
         {plan.plan_summary && (
           <p className="whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
         )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-2 h-8 gap-1 text-muted-foreground"
+          disabled={busy !== null}
+          onClick={() => void cancel()}
+        >
+          <Square className="h-3 w-3" /> Dismiss
+        </Button>
       </div>
     );
   }
 
+  const summaryLines = (plan.plan_summary ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const trophy = summaryLines[0] ?? "";
+  const extraNotes = summaryLines.slice(1);
+
   return (
     <div className="w-full max-w-[95%] rounded-xl border border-primary/30 bg-card/60 p-3 text-sm">
-      <div className="mb-1.5 font-medium">Here&apos;s my plan — review it</div>
+      {trophy && <div className="mb-1.5 font-medium">{trophy}</div>}
 
-      {plan.plan_summary && (
-        <p className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
+      <div className="mb-2 flex flex-col gap-1.5">
+        {steps.map((s: any, i: number) => (
+          <p key={i} className="text-xs leading-snug">
+            {s?.description ?? "Go to the chat and continue."}
+          </p>
+        ))}
+      </div>
+
+      {extraNotes.length > 0 && (
+        <div className="mb-2 flex flex-col gap-1">
+          {extraNotes.map((n, i) => (
+            <p key={i} className="text-xs leading-snug text-muted-foreground">
+              {n}
+            </p>
+          ))}
+        </div>
       )}
 
       {capList.length > 0 && (
@@ -161,14 +191,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
         </p>
       )}
 
-      <ol className="mb-2 flex flex-col gap-1.5">
-        {steps.map((s: any, i: number) => (
-          <li key={i} className="text-xs leading-snug">
-            <span className="mr-1 opacity-60">{i + 1}.</span>
-            {s?.description ?? `Step ${i + 1}`}
-          </li>
-        ))}
-      </ol>
+
 
       {noteOpen && (
         <div className="mb-2 flex flex-col gap-1.5">
