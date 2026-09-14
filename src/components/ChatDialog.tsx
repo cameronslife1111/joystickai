@@ -272,7 +272,12 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /** A chat turn the server is still working on. */
-type PendingTurn = { id: string; thread_id: string | null; status: string };
+type PendingTurn = {
+  id: string;
+  thread_id: string | null;
+  status: string;
+  created_at?: string | null;
+};
 
 export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, delegate }: Props) {
   const qc = useQueryClient();
