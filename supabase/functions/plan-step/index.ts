@@ -132,6 +132,10 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     delete_schedule: ["schedule_id"],
     toggle_schedule: ["schedule_id", "enabled"],
     resolve_command: ["tool"],
+    create_chat: ["title"],
+    rename_chat: ["thread_id", "new_title"],
+    attach_documents_to_chat: ["thread_id", "document_ids"],
+    delegate_plan_to_chat: ["thread_id", "request"],
 
   };
   const has = (v: unknown) =>
@@ -1564,6 +1568,26 @@ const TOOL_HANDLERS: Record<string, any> = {
   async send_chat_message(args, { user_id, admin, thread_id, plan_id }) {
     const text = String(args.text ?? "").trim();
     if (!text) throw new Error("send_chat_message requires text");
+    const target = String(args.target_thread_id ?? "").trim();
+    // Writing into ANOTHER chat (orchestrator briefing): green bubble on the
+    // right, exactly where the user's own messages sit.
+    if (target && target !== thread_id) {
+      const { data: t } = await admin
+        .from("chat_threads").select("id").eq("id", target).eq("user_id", user_id).maybeSingle();
+      if (!t) throw new Error("send_chat_message: that chat doesn't exist");
+      const { error } = await admin.from("chat_messages").insert({
+        user_id,
+        thread_id: target,
+        role: "user",
+        author: "orchestrator",
+        content: text,
+        kind: "text",
+      });
+      if (error) throw new Error(error.message);
+      const stamp = new Date().toISOString();
+      await admin.from("chat_threads").update({ updated_at: stamp, last_assistant_at: stamp }).eq("id", target);
+      return { posted: true, thread_id: target };
+    }
     // Scheduled plans run with no chat thread (the app may be closed). Posting
     // a chat update is optional there — skip instead of failing the plan.
     if (!thread_id) return { posted: false, skipped: "no chat thread" };
@@ -1571,6 +1595,7 @@ const TOOL_HANDLERS: Record<string, any> = {
       user_id,
       thread_id,
       role: "assistant",
+      author: "assistant",
       content: text,
       kind: "text",
       plan_id: plan_id ?? null,
@@ -1578,6 +1603,152 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (error) throw new Error(error.message);
     await admin.from("chat_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
     return { posted: true };
+  },
+
+  // ── Orchestrator: work through the user's other chats ────────────────────
+  async create_chat(args, { user_id, admin }) {
+    const title = String(args.title ?? "").trim() || "New chat";
+    let docIds: string[] = [];
+    const raw = args.attach_document_ids;
+    const parsed = typeof raw === "string" ? parseJsonArray(raw) : Array.isArray(raw) ? raw : null;
+    if (parsed) docIds = parsed.map((d: any) => String(d)).filter((d) => UUID_RE.test(d));
+    const { data, error } = await admin
+      .from("chat_threads")
+      .insert({
+        user_id,
+        title,
+        capabilities: {
+          web_search: true,
+          image_analysis: true,
+          planning: true,
+          image_generation: true,
+          video_generation: true,
+          document_editing: true,
+          scheduling: true,
+          davinci_resolve: false,
+          virtual_computer: false,
+        },
+        attached_document_ids: docIds,
+      })
+      .select("id, title")
+      .single();
+    if (error) throw new Error(error.message);
+    const instructions = String(args.instructions ?? "").trim();
+    if (instructions) {
+      await admin.from("chat_messages").insert({
+        user_id,
+        thread_id: data.id,
+        role: "user",
+        author: "orchestrator",
+        content: instructions,
+        kind: "text",
+      });
+    }
+    return data;
+  },
+  async rename_chat(args, { user_id, admin }) {
+    const { data, error } = await admin
+      .from("chat_threads")
+      .update({ title: String(args.new_title ?? "").trim() || "New chat" })
+      .eq("id", args.thread_id)
+      .eq("user_id", user_id)
+      .select("id, title")
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async attach_documents_to_chat(args, { user_id, admin }) {
+    const threadId = String(args.thread_id ?? "").trim();
+    const raw = args.document_ids;
+    const parsed = typeof raw === "string" ? parseJsonArray(raw) : Array.isArray(raw) ? raw : null;
+    const ids = (parsed ?? []).map((d: any) => String(d)).filter((d) => UUID_RE.test(d));
+    if (!ids.length) throw new Error("attach_documents_to_chat requires document_ids");
+    const { data: thread } = await admin
+      .from("chat_threads").select("id, attached_document_ids")
+      .eq("id", threadId).eq("user_id", user_id).maybeSingle();
+    if (!thread) throw new Error("attach_documents_to_chat: that chat doesn't exist");
+    const { data: owned } = await admin
+      .from("documents").select("id").eq("user_id", user_id).in("id", ids);
+    const ownedIds = (owned ?? []).map((d: any) => d.id as string);
+    if (!ownedIds.length) throw new Error("attach_documents_to_chat: none of those documents exist");
+    const mode = String(args.mode ?? "add").toLowerCase();
+    const next =
+      mode === "replace"
+        ? ownedIds
+        : Array.from(new Set([...(thread.attached_document_ids ?? []), ...ownedIds]));
+    const { error } = await admin
+      .from("chat_threads").update({ attached_document_ids: next }).eq("id", threadId);
+    if (error) throw new Error(error.message);
+    return { id: threadId, attached_document_ids: next };
+  },
+  /**
+   * Hand work to another chat: post the request as a green Orchestrator bubble
+   * and queue a chat turn for that thread, so it plans and runs the work itself
+   * through the normal pipeline.
+   */
+  async delegate_plan_to_chat(args, { user_id, admin, thread_id }) {
+    const targetId = String(args.thread_id ?? "").trim();
+    const request = String(args.request ?? "").trim();
+    if (!targetId || !UUID_RE.test(targetId)) throw new Error("delegate_plan_to_chat requires a real thread_id");
+    if (!request) throw new Error("delegate_plan_to_chat requires a request");
+    if (thread_id && targetId === thread_id) {
+      throw new Error("delegate_plan_to_chat cannot delegate into the chat that started this plan");
+    }
+    const { data: thread } = await admin
+      .from("chat_threads")
+      .select("id, title, capabilities, attached_document_ids, auto_approve_plans")
+      .eq("id", targetId)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!thread) throw new Error("delegate_plan_to_chat: that chat doesn't exist");
+
+    const { data: prior } = await admin
+      .from("chat_messages")
+      .select("role, content, kind")
+      .eq("thread_id", targetId)
+      .order("created_at", { ascending: true })
+      .limit(60);
+
+    await admin.from("chat_messages").insert({
+      user_id,
+      thread_id: targetId,
+      role: "user",
+      author: "orchestrator",
+      content: request,
+      kind: "text",
+    });
+
+    const history = [...(prior ?? []), { role: "user", content: request, kind: "text" }]
+      .map((m: any) =>
+        m.kind === "plan"
+          ? { role: "assistant", content: "[A plan was kicked off here and ran in the background.]" }
+          : { role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "") },
+      )
+      .filter((m: any) => m.content.trim().length > 0);
+
+    const { data: turn, error: turnErr } = await admin
+      .from("chat_turns")
+      .insert({
+        user_id,
+        thread_id: targetId,
+        status: "pending",
+        payload: {
+          userText: request,
+          messages: history,
+          contextDocumentIds: thread.attached_document_ids ?? [],
+          imageUrls: [],
+          capabilities: thread.capabilities ?? {},
+          autoCapabilities: true,
+          // The user already approved the master plan that delegated this.
+          autoApprove: true,
+        },
+      })
+      .select("id")
+      .single();
+    if (turnErr) throw new Error(turnErr.message);
+    const stamp = new Date().toISOString();
+    await admin.from("chat_threads").update({ updated_at: stamp, last_assistant_at: stamp }).eq("id", targetId);
+    return { delegated: true, thread_id: targetId, title: thread.title, turn_id: turn?.id ?? null };
   },
   async ask_user(args, { thread_id }) {
     const question = String(args.question ?? "").trim();
