@@ -854,16 +854,24 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (typeof s.description !== "string" || !s.description.trim()) {
-        s.description = `${io.operation} → ${io.destination}`.slice(0, 240);
-      }
+      // GO TO FORMAT is enforced, not requested: every description the user
+      // sees reads "Go to the X and Y." with Y under 7 words.
+      s.description = goToStep(s.description, io);
       s.status = "pending";
       s.result = null;
       s.error = null;
     }
 
-    const summary = typeof parsed.summary === "string" ? parsed.summary : "";
-    const explanation = typeof parsed.explanation === "string" ? parsed.explanation : null;
+    const notes = Array.isArray(parsed.notes)
+      ? parsed.notes.map((n: unknown) => plainLine(String(n ?? ""))).filter(Boolean)
+      : [];
+    const explanation = typeof parsed.explanation === "string" ? plainLine(parsed.explanation) : null;
+    // Refusals keep their plain explanation; real plans get the trophy line.
+    const summary =
+      steps.length === 0
+        ? plainLine(typeof parsed.summary === "string" ? parsed.summary : "I can't do that as described.")
+        : goToSummary(String(parsed.summary ?? ""), String(plan.user_request ?? ""));
+
 
     // NOTHING the user started runs without their approval. Only two cases
     // skip the review card:
