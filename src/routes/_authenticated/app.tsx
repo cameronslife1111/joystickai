@@ -10,8 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences } from "@/lib/speech";
-import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
+import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -504,26 +503,21 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; tts_voice: TtsVoice; tts_prefetch: number; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, tts_voice, tts_prefetch, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
-      const savedVoice = data?.tts_voice;
-      const savedPrefetch = Number((data as any)?.tts_prefetch);
       const savedTap = (data as any)?.tap_mode;
-      return { favorites, muted: !!(data as any)?.muted, tts_voice: isTtsVoice(savedVoice) ? savedVoice : DEFAULT_TTS_VOICE, tts_prefetch: Number.isFinite(savedPrefetch) ? Math.max(0, Math.min(2, savedPrefetch)) : 2, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat };
 
     },
   });
   const favorites = prefs?.favorites ?? [];
   const muted = prefs?.muted ?? false;
-  const ttsVoice = prefs?.tts_voice ?? DEFAULT_TTS_VOICE;
-  // Prefetch depth is fixed: whenever sound is on we always warm 2 ahead.
-  const ttsPrefetch = 2;
   const lockFavorites = prefs?.lock_favorites ?? false;
   const pinnedDocId = prefs?.pinned_document_id ?? null;
   const lockedDocId = prefs?.locked_document_id ?? null;
@@ -557,9 +551,6 @@ function AppPageInner() {
 
 
 
-  useEffect(() => {
-    setSpeechVoice(ttsVoice);
-  }, [ttsVoice]);
 
   useEffect(() => {
     const showSpeechError = (event: Event) => {
@@ -638,17 +629,6 @@ function AppPageInner() {
     );
   }, [qc, favorites]);
 
-  const saveTtsVoice = useCallback(async (next: TtsVoice) => {
-    setSpeechVoice(next);
-    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_voice: next }));
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const { error } = await supabase.from("user_preferences").upsert(
-      { user_id: u.user.id, tts_voice: next, favorites: favorites as any },
-      { onConflict: "user_id" },
-    );
-    if (error) toast.error(error.message);
-  }, [qc, favorites]);
 
 
 
@@ -818,73 +798,11 @@ function AppPageInner() {
   // Keep mutedRef in sync with persisted preference.
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  // Keep the speech engine's master switch in sync: Sound off means
-  // speakText never reaches the network, so muted users are never charged.
+  // Keep the speech engine's master switch in sync: Sound off means total
+  // silence. Sentences are read by the device's own voice, so there is nothing
+  // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
-  // ---- Speech prewarm -----------------------------------------------------
-  // Generate the audio for every sentence one of the four most-used orbs can
-  // land on, so the press plays from cache with no network wait:
-  //   blue/purple → the previous and next sentence of this document
-  //   green       → the landing sentence of the next document in the cycle
-  //   orange      → the landing sentence of the pinned document
-  // Direction only decides queue order (likely direction first) and any extra
-  // lookahead. Clips are persisted, so a sentence is generated once per voice.
-  const lastWarmIdxRef = useRef<number>(0);
-  const warmDirectionRef = useRef<1 | -1>(1);
-
-  /** Resolve the sentence another document will open on, from cache only. */
-  const cachedLandingSentence = useCallback((docId: string | null): string | null => {
-    if (!docId || docId === activeDocId) return null;
-    const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
-    if (!list || list.length === 0) return null;
-    const serverIdx = docs?.find((d) => d.id === docId)?.current_sentence_index ?? 0;
-    const idx = Math.max(0, Math.min(savedIndexFor(docId, serverIdx), list.length - 1));
-    return list[idx]?.content ?? null;
-  }, [activeDocId, docs, qc, savedIndexFor]);
-
-  useEffect(() => {
-    if (currentIdx !== lastWarmIdxRef.current) {
-      warmDirectionRef.current = currentIdx > lastWarmIdxRef.current ? 1 : -1;
-      lastWarmIdxRef.current = currentIdx;
-    }
-    if (muted || ttsPrefetch <= 0) return;
-    const direction = warmDirectionRef.current;
-    const targets: string[] = [];
-    const push = (text?: string | null) => {
-      if (text && !targets.includes(text)) targets.push(text);
-    };
-
-    if (sentences && sentences.length > 1) {
-      // Both neighbours are always warmed; the likely direction goes first.
-      push(sentences[currentIdx + direction]?.content);
-      push(sentences[currentIdx - direction]?.content);
-    }
-    // Cross-document landing sentences (green orb, then orange orb).
-    push(cachedLandingSentence(nextDocTargetId));
-    push(cachedLandingSentence(pinnedDocId));
-    // Extra lookahead in the travelling direction.
-    if (sentences) {
-      for (let step = 2; step <= ttsPrefetch; step += 1) {
-        push(sentences[currentIdx + direction * step]?.content);
-      }
-    }
-    if (targets.length === 0) return;
-    // Let the sentence the user is actually waiting on grab the bandwidth
-    // first; a newer press cancels this before it ever runs.
-    const id = setTimeout(() => prewarmSentences(targets), 400);
-    return () => clearTimeout(id);
-  }, [
-    sentences,
-    currentIdx,
-    muted,
-    ttsPrefetch,
-    ttsVoice,
-    nextDocTargetId,
-    pinnedDocId,
-    cachedLandingSentence,
-    warmTick,
-  ]);
 
 
 
@@ -3507,14 +3425,7 @@ function AppPageInner() {
         open={soundSettingsOpen}
         onOpenChange={setSoundSettingsOpen}
         enabled={!muted}
-        voice={ttsVoice}
         onEnabledChange={(enabled) => void saveMuted(!enabled)}
-        onVoiceChange={(voice) => void saveTtsVoice(voice)}
-
-        onPreview={(voice) => {
-          setSpeechVoice(voice);
-          speakText("This is Orby speaking with your selected voice.");
-        }}
       />
 
       {/* Appearance + sentence-press settings */}

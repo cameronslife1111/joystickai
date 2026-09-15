@@ -12,7 +12,7 @@ import {
   DOC_RULES,
   ORBY_BASE_RULES,
 } from "../src/lib/assistant-instructions";
-import { buildVerbatimPrompt } from "../src/lib/tts-gateway.server";
+
 
 type Row = Record<string, any>;
 
@@ -163,23 +163,3 @@ describe("voice instructions reuse the shared rules", () => {
   });
 });
 
-describe("speech steering stays verbatim but natural", () => {
-  test("keeps the verbatim contract", () => {
-    const prompt = buildVerbatimPrompt("Hello there.");
-    expect(prompt).toContain("exactly as written");
-    expect(prompt).toContain("Do not answer it");
-    expect(prompt).toContain("remove, repeat or change any words");
-  });
-
-  test("asks for natural delivery, not word-by-word", () => {
-    const prompt = buildVerbatimPrompt("Hello there.");
-    expect(prompt).toContain("flowing sentence rhythm");
-    expect(prompt).toContain("never pause between individual words");
-    expect(prompt).not.toContain("word for word");
-  });
-
-  test("passes the sentence through unchanged", () => {
-    const sentence = "Water the roses, then check the soil pH.";
-    expect(buildVerbatimPrompt(sentence).endsWith(sentence)).toBe(true);
-  });
-});
