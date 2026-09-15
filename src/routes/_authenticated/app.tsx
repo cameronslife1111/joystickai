@@ -551,9 +551,6 @@ function AppPageInner() {
 
 
 
-  useEffect(() => {
-    setSpeechVoice(ttsVoice);
-  }, [ttsVoice]);
 
   useEffect(() => {
     const showSpeechError = (event: Event) => {
@@ -632,17 +629,6 @@ function AppPageInner() {
     );
   }, [qc, favorites]);
 
-  const saveTtsVoice = useCallback(async (next: TtsVoice) => {
-    setSpeechVoice(next);
-    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), tts_voice: next }));
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const { error } = await supabase.from("user_preferences").upsert(
-      { user_id: u.user.id, tts_voice: next, favorites: favorites as any },
-      { onConflict: "user_id" },
-    );
-    if (error) toast.error(error.message);
-  }, [qc, favorites]);
 
 
 
@@ -812,73 +798,11 @@ function AppPageInner() {
   // Keep mutedRef in sync with persisted preference.
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  // Keep the speech engine's master switch in sync: Sound off means
-  // speakText never reaches the network, so muted users are never charged.
+  // Keep the speech engine's master switch in sync: Sound off means total
+  // silence. Sentences are read by the device's own voice, so there is nothing
+  // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
 
-  // ---- Speech prewarm -----------------------------------------------------
-  // Generate the audio for every sentence one of the four most-used orbs can
-  // land on, so the press plays from cache with no network wait:
-  //   blue/purple → the previous and next sentence of this document
-  //   green       → the landing sentence of the next document in the cycle
-  //   orange      → the landing sentence of the pinned document
-  // Direction only decides queue order (likely direction first) and any extra
-  // lookahead. Clips are persisted, so a sentence is generated once per voice.
-  const lastWarmIdxRef = useRef<number>(0);
-  const warmDirectionRef = useRef<1 | -1>(1);
-
-  /** Resolve the sentence another document will open on, from cache only. */
-  const cachedLandingSentence = useCallback((docId: string | null): string | null => {
-    if (!docId || docId === activeDocId) return null;
-    const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
-    if (!list || list.length === 0) return null;
-    const serverIdx = docs?.find((d) => d.id === docId)?.current_sentence_index ?? 0;
-    const idx = Math.max(0, Math.min(savedIndexFor(docId, serverIdx), list.length - 1));
-    return list[idx]?.content ?? null;
-  }, [activeDocId, docs, qc, savedIndexFor]);
-
-  useEffect(() => {
-    if (currentIdx !== lastWarmIdxRef.current) {
-      warmDirectionRef.current = currentIdx > lastWarmIdxRef.current ? 1 : -1;
-      lastWarmIdxRef.current = currentIdx;
-    }
-    if (muted || ttsPrefetch <= 0) return;
-    const direction = warmDirectionRef.current;
-    const targets: string[] = [];
-    const push = (text?: string | null) => {
-      if (text && !targets.includes(text)) targets.push(text);
-    };
-
-    if (sentences && sentences.length > 1) {
-      // Both neighbours are always warmed; the likely direction goes first.
-      push(sentences[currentIdx + direction]?.content);
-      push(sentences[currentIdx - direction]?.content);
-    }
-    // Cross-document landing sentences (green orb, then orange orb).
-    push(cachedLandingSentence(nextDocTargetId));
-    push(cachedLandingSentence(pinnedDocId));
-    // Extra lookahead in the travelling direction.
-    if (sentences) {
-      for (let step = 2; step <= ttsPrefetch; step += 1) {
-        push(sentences[currentIdx + direction * step]?.content);
-      }
-    }
-    if (targets.length === 0) return;
-    // Let the sentence the user is actually waiting on grab the bandwidth
-    // first; a newer press cancels this before it ever runs.
-    const id = setTimeout(() => prewarmSentences(targets), 400);
-    return () => clearTimeout(id);
-  }, [
-    sentences,
-    currentIdx,
-    muted,
-    ttsPrefetch,
-    ttsVoice,
-    nextDocTargetId,
-    pinnedDocId,
-    cachedLandingSentence,
-    warmTick,
-  ]);
 
 
 
@@ -3501,14 +3425,7 @@ function AppPageInner() {
         open={soundSettingsOpen}
         onOpenChange={setSoundSettingsOpen}
         enabled={!muted}
-        voice={ttsVoice}
         onEnabledChange={(enabled) => void saveMuted(!enabled)}
-        onVoiceChange={(voice) => void saveTtsVoice(voice)}
-
-        onPreview={(voice) => {
-          setSpeechVoice(voice);
-          speakText("This is Orby speaking with your selected voice.");
-        }}
       />
 
       {/* Appearance + sentence-press settings */}
