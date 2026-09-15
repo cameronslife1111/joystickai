@@ -38,6 +38,7 @@ const NO_CALLOUT_STYLE: React.CSSProperties = {
 };
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
+import { useFeatureLock } from "@/lib/use-feature-lock";
 
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
@@ -122,6 +123,7 @@ async function probeAudio(file: File): Promise<{ duration: number }> {
 }
 
 function MediaPage() {
+  const featureLocked = useFeatureLock();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const appBg = useAppBackground();
