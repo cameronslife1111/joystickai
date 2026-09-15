@@ -32,6 +32,7 @@ export function DocumentPickerSheet({
   onConfirm,
   heading = "Attach documents",
   onConfirmDocs,
+  topSlot,
 }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
   const [query, setQuery] = useState("");
