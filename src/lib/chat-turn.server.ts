@@ -8,6 +8,7 @@
 // the turn is finished here, and a watchdog tick finishes anything left behind.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { normalizeCapabilities, type ChatCapabilities } from "@/lib/chat-types";
+import { applyFeatureLock } from "@/lib/feature-lock";
 import { runChatTurn } from "@/lib/chat-core.server";
 
 /** Capability keys that map to plan tool groups (mirrors the chat client). */
@@ -177,7 +178,11 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
   const payload = (turn.payload ?? {}) as ChatTurnPayload;
   const userId = turn.user_id;
   const threadId = turn.thread_id;
-  const capsUsed = normalizeCapabilities(payload.capabilities);
+  // Tester lock: accounts created after the cutoff never get video generation
+  // or the virtual computer, whatever the queued payload asked for.
+  const { isUserFeatureLocked } = await import("@/lib/feature-lock.server");
+  const locked = await isUserFeatureLocked(userId);
+  const capsUsed = applyFeatureLock(normalizeCapabilities(payload.capabilities), locked);
 
   try {
     // This runner uses the service-role client, so nothing in the queued row is
@@ -229,8 +234,9 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
 
     if (result.route === "plan") {
       const decided = (result.capabilities ?? capsUsed) as ChatCapabilities;
-      const mergedCaps = { ...decided } as ChatCapabilities;
+      let mergedCaps = { ...decided } as ChatCapabilities;
       for (const g of ACTION_TOOL_GROUPS) if (capsUsed[g]) mergedCaps[g] = true;
+      mergedCaps = applyFeatureLock(mergedCaps, locked);
       // "Planning" alone still needs somewhere to put the work.
       if (!ACTION_TOOL_GROUPS.some((g) => mergedCaps[g])) mergedCaps.document_editing = true;
       const allowedGroups = ACTION_TOOL_GROUPS.filter((g) => mergedCaps[g]) as string[];
