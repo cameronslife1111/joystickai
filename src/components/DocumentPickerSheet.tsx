@@ -91,6 +91,7 @@ export function DocumentPickerSheet({
         <SheetHeader>
           <SheetTitle>{heading}</SheetTitle>
         </SheetHeader>
+        {topSlot}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {EMOJI_FILTERS.map((emoji) => (
             <button
