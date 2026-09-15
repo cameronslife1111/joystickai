@@ -73,10 +73,10 @@ describe("hosted sentence speech", () => {
     expect(speakText("hello world")).toBe(true);
   });
 
-  test("exposes the expanded US voice library with a valid default", () => {
-    expect(TTS_VOICES.length).toBeGreaterThanOrEqual(20);
-    expect(TTS_VOICES.filter((v) => v.gender === "female").length).toBeGreaterThanOrEqual(10);
-    expect(TTS_VOICES.filter((v) => v.gender === "male").length).toBeGreaterThanOrEqual(10);
+  test("exposes OpenAI's supported voice library with a valid default", () => {
+    expect(TTS_VOICES.length).toBe(13);
+    expect(TTS_VOICES.some((voice) => voice.id === "coral")).toBe(true);
+    expect(TTS_VOICES.some((voice) => voice.id === "cedar")).toBe(true);
     expect(isTtsVoice(DEFAULT_TTS_VOICE)).toBe(true);
     expect(isTtsVoice("not-a-voice")).toBe(false);
   });
@@ -252,7 +252,7 @@ describe("speech prewarm", () => {
     }
   });
 
-  test("cross-document landing sentences queue and supersede silently", async () => {
+  test("queued sentence preparation can be superseded silently", async () => {
     setSpeechEnabled(true);
     resetSpeechCaches();
     const originalFetch = globalThis.fetch;
