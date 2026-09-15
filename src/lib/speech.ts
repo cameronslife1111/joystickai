@@ -153,10 +153,49 @@ function attachPrimer() {
 
 let recoveryListenersAttached = false;
 let wasHidden = false;
+/** Set whenever the app was backgrounded: the engine may be wedged. */
+let engineStale = false;
+let resetTimers: ReturnType<typeof setTimeout>[] = [];
+
+function clearResetTimers() {
+  for (const timer of resetTimers) clearTimeout(timer);
+  resetTimers = [];
+}
+
+/**
+ * Force WebKit's queue back to idle. After an app switch, a phone call or a
+ * screen lock, `speechSynthesis` can keep reporting `speaking` forever while
+ * producing no sound, and a single cancel() often isn't enough — resume first
+ * (a suspended queue ignores cancel), then cancel, repeatedly over ~1s.
+ */
+function hardResetEngine() {
+  const engine = synth();
+  if (!engine) return;
+  const kick = () => {
+    try {
+      if (engine.paused) engine.resume();
+    } catch {}
+    try {
+      engine.cancel();
+    } catch {}
+  };
+  kick();
+  clearResetTimers();
+  for (const delay of [50, 200, 600]) {
+    const timer = setTimeout(() => {
+      if (audibleSpeaking) return; // real speech started meanwhile
+      kick();
+    }, delay);
+    (timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
+    resetTimers.push(timer);
+  }
+}
 
 export function handleAppForeground() {
   cancelSpeech();
+  engineStale = true;
   primed = false;
+  hardResetEngine();
   primeSpeech();
   requestIosMixableSession();
 }
@@ -173,6 +212,8 @@ function attachForegroundRecovery() {
   const onMaybeForeground = () => {
     if (!pageIsVisible()) {
       wasHidden = true;
+      cancelSpeech();
+      engineStale = true;
       return;
     }
     if (!wasHidden) return;
@@ -183,13 +224,23 @@ function attachForegroundRecovery() {
     if ((event as PageTransitionEvent).persisted) wasHidden = true;
     onMaybeForeground();
   });
+  window.addEventListener("focus", onMaybeForeground);
   window.addEventListener("pagehide", () => {
     wasHidden = true;
+    engineStale = true;
     cancelSpeech();
   });
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener("visibilitychange", onMaybeForeground);
   }
+}
+
+// Attach lifecycle recovery as soon as the module loads in a browser, so a
+// background/foreground round-trip is caught even before the first sentence.
+if (typeof window !== "undefined") {
+  try {
+    attachForegroundRecovery();
+  } catch {}
 }
 
 export function cancelSpeech() {
@@ -198,6 +249,7 @@ export function cancelSpeech() {
   activeUtterance = null;
   if (startWatchdog) clearTimeout(startWatchdog);
   startWatchdog = null;
+  clearResetTimers();
   const engine = synth();
   if (!engine) return;
   try {
@@ -244,7 +296,19 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Replace whatever is being read: single cancel, then speak, in the same
   // user-gesture turn so WebKit allows the new utterance to start.
   cancelSpeech();
+  if (engineStale) {
+    // First press after coming back from another app: the queue can still be
+    // suspended or holding a phantom utterance. Resume + cancel before speaking.
+    engineStale = false;
+    try {
+      if (engine.paused) engine.resume();
+    } catch {}
+    try {
+      engine.cancel();
+    } catch {}
+  }
   const sequence = requestSequence;
+  let recoveryAttempts = 0;
 
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
     const utterance = new SpeechSynthesisUtterance(clean);
@@ -291,35 +355,32 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     };
 
     activeUtterance = utterance;
-    // Watchdog: nothing started, and no error either (a silently swallowed
-    // WebKit utterance). Retry once with an explicit voice, then give up.
+    // Watchdog: nothing started, and no error either (a silently swallowed or
+    // phantom WebKit utterance). Recover by forcing the queue idle and
+    // resubmitting, then by pinning an explicit voice, then give up.
     if (startWatchdog) clearTimeout(startWatchdog);
     startWatchdog = setTimeout(() => {
       if (sequence !== requestSequence || audibleSpeaking) return;
       startWatchdog = null;
-      const stillQueued = (() => {
+      if (recoveryAttempts < 2) {
+        // Never trust engine.speaking here: after an app switch iOS reports an
+        // active queue while playing nothing. Force it idle and try again.
+        recoveryAttempts += 1;
+        const voice = isRetry ? null : fallbackVoice(engine);
         try {
-          return engine.speaking || engine.pending;
-        } catch {
-          return false;
-        }
-      })();
-      if (stillQueued) return; // engine is working on it — let it run
-      if (!isRetry) {
-        const retryVoice = fallbackVoice(engine);
-        if (retryVoice) {
-          try {
-            engine.cancel();
-          } catch {}
-          speak(retryVoice, true);
-          return;
-        }
+          if (engine.paused) engine.resume();
+        } catch {}
+        try {
+          engine.cancel();
+        } catch {}
+        speak(voice, isRetry || voice !== null);
+        return;
       }
       audibleSpeaking = false;
       activeUtterance = null;
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
-    }, 1_500);
+    }, 900);
 
     try {
       if (engine.paused) engine.resume();
