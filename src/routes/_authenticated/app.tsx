@@ -457,16 +457,27 @@ function AppPageInner() {
 
 
 
-  // Bootstrap: create first doc if none
+  // Bootstrap: a brand-new account starts with the welcome & help document.
+  const bootstrappedRef = useRef(false);
   useEffect(() => {
     if (!docs) return;
-    if (docs.length === 0) {
+    if (docs.length === 0 && !bootstrappedRef.current) {
+      bootstrappedRef.current = true;
       (async () => {
         const { data: u } = await supabase.auth.getUser();
         if (!u.user) return;
-        await supabase.from("documents").insert({
-          user_id: u.user.id, title: "My first list", position: 0,
-        });
+        const { data: created } = await supabase
+          .from("documents")
+          .insert({ user_id: u.user.id, title: WELCOME_DOC_TITLE, position: 0 })
+          .select("id")
+          .maybeSingle();
+        if (created?.id) {
+          await supabase.rpc("insert_sentences_at", {
+            p_document_id: created.id,
+            p_contents: WELCOME_DOC_SENTENCES,
+            p_insert_at: 0,
+          });
+        }
         await supabase.from("user_preferences").upsert({
           user_id: u.user.id, theme: "light", grid_layout: [],
         }, { onConflict: "user_id" });
