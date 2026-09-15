@@ -355,35 +355,32 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     };
 
     activeUtterance = utterance;
-    // Watchdog: nothing started, and no error either (a silently swallowed
-    // WebKit utterance). Retry once with an explicit voice, then give up.
+    // Watchdog: nothing started, and no error either (a silently swallowed or
+    // phantom WebKit utterance). Recover by forcing the queue idle and
+    // resubmitting, then by pinning an explicit voice, then give up.
     if (startWatchdog) clearTimeout(startWatchdog);
     startWatchdog = setTimeout(() => {
       if (sequence !== requestSequence || audibleSpeaking) return;
       startWatchdog = null;
-      const stillQueued = (() => {
+      if (recoveryAttempts < 2) {
+        // Never trust engine.speaking here: after an app switch iOS reports an
+        // active queue while playing nothing. Force it idle and try again.
+        recoveryAttempts += 1;
+        const voice = isRetry ? null : fallbackVoice(engine);
         try {
-          return engine.speaking || engine.pending;
-        } catch {
-          return false;
-        }
-      })();
-      if (stillQueued) return; // engine is working on it — let it run
-      if (!isRetry) {
-        const retryVoice = fallbackVoice(engine);
-        if (retryVoice) {
-          try {
-            engine.cancel();
-          } catch {}
-          speak(retryVoice, true);
-          return;
-        }
+          if (engine.paused) engine.resume();
+        } catch {}
+        try {
+          engine.cancel();
+        } catch {}
+        speak(voice, isRetry || voice !== null);
+        return;
       }
       audibleSpeaking = false;
       activeUtterance = null;
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
-    }, 1_500);
+    }, 900);
 
     try {
       if (engine.paused) engine.resume();
