@@ -17,7 +17,7 @@ const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
  * Slightly-brisker-than-normal pace applied to the device voice. 1.0 is the
  * system default; this stops sentences dragging without sounding rushed.
  */
-export const SPEECH_RATE = 1.15;
+export const SPEECH_RATE = 1;
 
 export function cleanForSpeech(s: string): string {
   return s.replace(EMOJI_RE, "").replace(/\s+/g, " ").trim();
