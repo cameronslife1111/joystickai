@@ -33,6 +33,7 @@ import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
+import { WELCOME_DOC_TITLE, WELCOME_DOC_SENTENCES } from "@/lib/welcome-document";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
