@@ -715,8 +715,10 @@ function AppPageInner() {
     if (lastDocExists) {
       setActiveDocId(lastDocId);
       favIdxRef.current = lastSlot!;
-    } else {
-      setActiveDocId(docs[0].id);
+    } else if (docs.length > 0) {
+      // A brand-new account has no documents yet; the bootstrap effect makes
+      // the welcome document and this runs again once it exists.
+      setActiveDocId(docs[0]!.id);
     }
   }, [docs, prefs, activeDocId]);
 
