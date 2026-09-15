@@ -1470,58 +1470,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               >
                 <Menu className="h-5 w-5" />
               </Button>
-              <Button
-                size="sm"
-                variant={voice.state === "idle" ? "outline" : "destructive"}
-                aria-label={voice.live ? "Stop hands-free mode" : "Start hands-free mode"}
-                disabled={voice.connecting || !activeThreadId}
-                onClick={() => (voice.state === "idle" ? void voice.start() : voice.stop())}
-                className="gap-1.5"
-              >
-                {voice.connecting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : voice.live ? (
-                  <PhoneOff className="h-4 w-4" />
-                ) : (
-                  <Phone className="h-4 w-4" />
-                )}
-                <span className="text-xs">
-                  {voice.connecting ? "Connecting" : voice.live ? "End call" : "Hands-free"}
-                </span>
-              </Button>
             </div>
-
-            <div className="mr-8 flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Rename chat"
-                disabled={!activeThread}
-                onClick={() => {
-                  if (!activeThread) return;
-                  setRenameThread(activeThread);
-                  setRenameValue(activeThread.title);
-                }}
-              >
-                <Pencil className="h-5 w-5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Clear chat"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setClearConfirmOpen(true)}
-              >
-                <Trash2 className="h-5 w-5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Chat settings"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <SettingsIcon className="h-5 w-5" />
-              </Button>
+            <div className="mr-8">
               <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
                 <DialogContent className="flex max-h-[92svh] w-[calc(100%-1rem)] flex-col gap-0 p-0 sm:max-w-2xl">
                   <DialogHeader className="border-b border-foreground/10 px-4 py-3 text-left">
@@ -1635,40 +1585,10 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                           size="sm"
                           onClick={() => {
                             setSettingsOpen(false);
-                            setTitlePickerOpen(true);
-                          }}
-                        >
-                          <Type className="mr-2 h-4 w-4" /> Image titles
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSettingsOpen(false);
-                            setDocTitlePickerOpen(true);
-                          }}
-                        >
-                          <Type className="mr-2 h-4 w-4" /> Document titles
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSettingsOpen(false);
                             setImagePickerOpen(true);
                           }}
                         >
                           <ImageIcon className="mr-2 h-4 w-4" /> Image to analyze
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSettingsOpen(false);
-                            setDocPickerOpen(true);
-                          }}
-                        >
-                          <Paperclip className="mr-2 h-4 w-4" /> Documents
                         </Button>
                       </div>
                     </div>
@@ -1831,16 +1751,118 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
           {/* Composer */}
           <div className="border-t border-foreground/10 p-3">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="mb-2 flex w-full items-center justify-between gap-1" role="toolbar" aria-label="Chat actions">
               <Button
+                size="icon"
+                variant="ghost"
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDocPickerOpen(true)}
+                aria-label="Chat settings"
+                title="Chat settings"
+                onClick={() => setSettingsOpen(true)}
+                className="h-9 w-9 shrink-0"
               >
-                <Paperclip className="mr-1.5 h-3.5 w-3.5" />
-                {contextDocIds.length > 0 ? `${contextDocIds.length} attached` : "Attach documents"}
+                <SettingsIcon className="h-4 w-4" />
               </Button>
+              <Button
+                size="icon"
+                variant={voice.state === "idle" ? "ghost" : "destructive"}
+                type="button"
+                aria-label={voice.live ? "Stop hands-free mode" : "Start hands-free mode"}
+                title={voice.connecting ? "Connecting hands-free" : voice.live ? "End hands-free call" : "Start hands-free call"}
+                disabled={voice.connecting || !activeThreadId}
+                onClick={() => (voice.state === "idle" ? void voice.start() : voice.stop())}
+                className="h-9 w-9 shrink-0"
+              >
+                {voice.connecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : voice.live ? (
+                  <PhoneOff className="h-4 w-4" />
+                ) : (
+                  <Phone className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label="Clear or delete chat"
+                title="Clear or delete chat"
+                disabled={!activeThreadId}
+                className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
+                onClick={() => setClearConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label="Rename chat"
+                title="Rename chat"
+                disabled={!activeThread}
+                className="h-9 w-9 shrink-0"
+                onClick={() => {
+                  if (!activeThread) return;
+                  setRenameThread(activeThread);
+                  setRenameValue(activeThread.title);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label={contextDocIds.length > 0 ? `Attached documents: ${contextDocIds.length}` : "Attach documents"}
+                title={contextDocIds.length > 0 ? `${contextDocIds.length} attached documents` : "Attach documents"}
+                disabled={!activeThreadId}
+                onClick={() => setDocPickerOpen(true)}
+                className="relative h-9 w-9 shrink-0"
+              >
+                <Paperclip className="h-4 w-4" />
+                {contextDocIds.length > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
+                    {contextDocIds.length}
+                  </span>
+                )}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label="Insert document titles"
+                title="Insert document titles"
+                disabled={!activeThreadId}
+                onClick={() => setDocTitlePickerOpen(true)}
+                className="h-9 w-9 shrink-0"
+              >
+                <StickyNote className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label="Insert image titles"
+                title="Insert image titles"
+                disabled={!activeThreadId}
+                onClick={() => setTitlePickerOpen(true)}
+                className="h-9 w-9 shrink-0"
+              >
+                <Type className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <SettingsIcon className="h-3 w-3" />
+              {enabledCapCount === 0
+                ? "Text reply"
+                : CAP_LABELS.filter(({ key }) => caps[key])
+                    .map(({ label }) => label)
+                    .join(" · ")}
+            </div>
+
+            {(contextDocIds.length > 0 || pickedImages.length > 0) && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               {contextDocIds.map((id) => {
                 const d = documents.find((x) => x.id === id);
                 return (
@@ -1898,6 +1920,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 </button>
               )}
             </div>
+            )}
 
             {threadSchedules.length > 0 && (
               <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
@@ -1960,16 +1983,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             )}
 
             {caps.virtual_computer && <VirtualComputerCard threadId={activeThreadId ?? null} />}
-
-            <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <SettingsIcon className="h-3 w-3" />
-              {enabledCapCount === 0
-                ? "Text reply"
-                : CAP_LABELS.filter(({ key }) => caps[key])
-                    .map(({ label }) => label)
-                    .join(" · ")}
-            </div>
-
 
             <div className="flex items-stretch gap-2">
               <Textarea
