@@ -26,6 +26,7 @@ import {
   PhoneOff,
   Clock,
   StickyNote,
+  Quote,
   Pause,
   RotateCcw,
 } from "lucide-react";
@@ -62,7 +63,7 @@ import { processChatTurn } from "@/lib/chat-turn.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
-import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+import { useVoiceDictation } from "@/lib/use-voice-dictation";
 import { useHandsFree } from "@/lib/hands-free";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
