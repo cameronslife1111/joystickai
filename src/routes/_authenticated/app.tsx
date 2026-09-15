@@ -33,6 +33,7 @@ import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
+import { WELCOME_DOC_TITLE, WELCOME_DOC_SENTENCES } from "@/lib/welcome-document";
 
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({ meta: [{ title: "Orby" }] }),
@@ -457,16 +458,27 @@ function AppPageInner() {
 
 
 
-  // Bootstrap: create first doc if none
+  // Bootstrap: a brand-new account starts with the welcome & help document.
+  const bootstrappedRef = useRef(false);
   useEffect(() => {
     if (!docs) return;
-    if (docs.length === 0) {
+    if (docs.length === 0 && !bootstrappedRef.current) {
+      bootstrappedRef.current = true;
       (async () => {
         const { data: u } = await supabase.auth.getUser();
         if (!u.user) return;
-        await supabase.from("documents").insert({
-          user_id: u.user.id, title: "My first list", position: 0,
-        });
+        const { data: created } = await supabase
+          .from("documents")
+          .insert({ user_id: u.user.id, title: WELCOME_DOC_TITLE, position: 0 })
+          .select("id")
+          .maybeSingle();
+        if (created?.id) {
+          await supabase.rpc("insert_sentences_at", {
+            p_document_id: created.id,
+            p_contents: WELCOME_DOC_SENTENCES,
+            p_insert_at: 0,
+          });
+        }
         await supabase.from("user_preferences").upsert({
           user_id: u.user.id, theme: "light", grid_layout: [],
         }, { onConflict: "user_id" });
@@ -703,8 +715,10 @@ function AppPageInner() {
     if (lastDocExists) {
       setActiveDocId(lastDocId);
       favIdxRef.current = lastSlot!;
-    } else {
-      setActiveDocId(docs[0].id);
+    } else if (docs.length > 0) {
+      // A brand-new account has no documents yet; the bootstrap effect makes
+      // the welcome document and this runs again once it exists.
+      setActiveDocId(docs[0]!.id);
     }
   }, [docs, prefs, activeDocId]);
 

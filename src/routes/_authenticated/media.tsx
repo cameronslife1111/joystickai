@@ -38,6 +38,7 @@ const NO_CALLOUT_STYLE: React.CSSProperties = {
 };
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
+import { useFeatureLock } from "@/lib/use-feature-lock";
 
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
@@ -122,6 +123,7 @@ async function probeAudio(file: File): Promise<{ duration: number }> {
 }
 
 function MediaPage() {
+  const featureLocked = useFeatureLock();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const appBg = useAppBackground();
@@ -1158,7 +1160,7 @@ function MediaPage() {
                   onClick={() => { const a = sheetAsset; setSheetAsset(null); setShrinkAsset(a); }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Film className="h-4 w-4" />} label="Image to Video"
                   onClick={() => {
                     const a = sheetAsset;
@@ -1168,7 +1170,7 @@ function MediaPage() {
                   }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Video className="h-4 w-4" />} label="Video to Video"
                   onClick={() => {
                     const a = sheetAsset;
@@ -1178,7 +1180,7 @@ function MediaPage() {
                   }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Mic2 className="h-4 w-4" />} label="Audio + Image to Video"
                   onClick={() => {
                     const a = sheetAsset;

@@ -6,6 +6,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { nextRunAt, type ScheduleSpec, type Cadence } from "@/lib/recurrence";
 import { normalizeCapabilities, type ChatCapabilities } from "@/lib/chat-types";
+import { applyFeatureLock } from "@/lib/feature-lock";
 import { runChatTurn } from "@/lib/chat-core.server";
 
 const SPACING_MINUTES = 30;
@@ -145,7 +146,12 @@ async function fireChatSchedule(
     return { id: schedule.id, outcome: "thread_missing" };
   }
 
-  const caps = normalizeCapabilities(schedule.capabilities);
+  // Tester lock: locked accounts don't get video generation / virtual computer.
+  const { isUserFeatureLocked } = await import("@/lib/feature-lock.server");
+  const caps = applyFeatureLock(
+    normalizeCapabilities(schedule.capabilities),
+    await isUserFeatureLocked(userId),
+  );
   const { filterOwnedDocumentIds } = await import("@/lib/assistant-context.server");
   // Only this user's own documents are ever read into a scheduled message.
   const docIds: string[] = await filterOwnedDocumentIds(

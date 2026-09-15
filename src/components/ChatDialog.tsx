@@ -86,6 +86,8 @@ import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedu
 import { McpConnectionPanel, McpStatusPill } from "./mcp/McpConnectionPanel";
 import { VirtualComputerCard } from "./VirtualComputerCard";
 import { forgetVirtualComputerLogins } from "@/lib/vc.functions";
+import { useFeatureLock } from "@/lib/use-feature-lock";
+import { applyFeatureLock, LOCKED_CAPABILITY_KEYS } from "@/lib/feature-lock";
 
 
 interface Props {
@@ -587,7 +589,22 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (!q) return threads;
     return threads.filter((t) => normalizeSearch(t.title || "Untitled").includes(q));
   }, [threads, threadSearch]);
-  const caps = pendingCaps;
+  // Tester lock: newer accounts can't turn on video generation or the virtual
+  // computer, and an older chat that has them on is treated as off.
+  const featureLocked = useFeatureLock();
+  const caps = useMemo(
+    () => applyFeatureLock(pendingCaps, featureLocked),
+    [pendingCaps, featureLocked],
+  );
+  const capLabels = useMemo(
+    () =>
+      featureLocked
+        ? CAP_LABELS.filter(
+            ({ key }) => !(LOCKED_CAPABILITY_KEYS as readonly string[]).includes(key),
+          )
+        : CAP_LABELS,
+    [featureLocked],
+  );
   const contextDocIds = activeThread?.attached_document_ids ?? [];
 
   // Scheduled messages waiting to be sent in this chat.
@@ -1521,7 +1538,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         Stays checked until you uncheck it. Nothing checked = plain text reply.
                       </p>
                       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {CAP_LABELS.map(({ key, label, hint }) => (
+                        {capLabels.map(({ key, label, hint }) => (
                           <button
                             key={key}
                             type="button"
