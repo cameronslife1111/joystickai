@@ -26,6 +26,7 @@ import {
   PhoneOff,
   Clock,
   StickyNote,
+  Quote,
   Pause,
   RotateCcw,
 } from "lucide-react";
@@ -62,7 +63,7 @@ import { processChatTurn } from "@/lib/chat-turn.functions";
 import { splitIntoSentences } from "@/lib/sentences";
 import { speakText, cancelSpeech, isSpeechEnabled } from "@/lib/speech";
 
-import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
+import { useVoiceDictation } from "@/lib/use-voice-dictation";
 import { useHandsFree } from "@/lib/hands-free";
 
 import { DocumentPickerSheet } from "./DocumentPickerSheet";
@@ -357,14 +358,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
 
 
-  // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
-  const dictation = useVoiceDictation(
-    useCallback((text: string) => {
-      setInput((prev) => appendTranscript(prev, text));
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    }, []),
-  );
-
   /** Splice arbitrary text into the composer at the saved cursor position. */
   const spliceAtCursor = useCallback((insert: string) => {
     if (!insert) return;
@@ -387,6 +380,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       return next;
     });
   }, []);
+
+  // 🔴 / ⬛️ voice dictation — inserts the transcript at the last cursor spot.
+  const dictation = useVoiceDictation(
+    useCallback((text: string) => spliceAtCursor(text), [spliceAtCursor]),
+  );
 
   /** Type quoted titles into the composer at the cursor. */
   const insertQuotedTitles = useCallback(
@@ -1836,7 +1834,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setDocTitlePickerOpen(true)}
                 className="h-9 w-9 shrink-0"
               >
-                <StickyNote className="h-4 w-4" />
+                <Quote className="h-4 w-4" />
               </Button>
               <Button
                 size="icon"
@@ -1861,39 +1859,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     .join(" · ")}
             </div>
 
-            {(contextDocIds.length > 0 || pickedImages.length > 0) && (
+            {pickedImages.length > 0 && (
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              {contextDocIds.map((id) => {
-                const d = documents.find((x) => x.id === id);
-                return (
-                  <span
-                    key={id}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
-                  >
-                    <button
-                      type="button"
-                      aria-label={`Open "${d?.title ?? "Document"}"`}
-                      onClick={() => {
-                        onOpenChange(false);
-                        onOpenDocument?.(id);
-                      }}
-                      className="max-w-[140px] truncate hover:underline"
-                    >
-                      {d?.title ?? "Document"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setContextDocIds(contextDocIds.filter((x) => x !== id));
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                );
-              })}
               {pickedImages.map((img) => (
                 <span
                   key={img.id}
@@ -2300,6 +2267,45 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
         onOpenChange={setDocPickerOpen}
         initialSelectedIds={contextDocIds}
         onConfirm={setContextDocIds}
+        topSlot={
+          contextDocIds.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {contextDocIds.map((id) => {
+                const d = documents.find((x) => x.id === id);
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                  >
+                    <button
+                      type="button"
+                      aria-label={`Open "${d?.title ?? "Document"}"`}
+                      onClick={() => {
+                        setDocPickerOpen(false);
+                        onOpenChange(false);
+                        onOpenDocument?.(id);
+                      }}
+                      className="max-w-[140px] truncate hover:underline"
+                    >
+                      {d?.title ?? "Document"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Remove attachment"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContextDocIds(contextDocIds.filter((x) => x !== id));
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          ) : null
+        }
       />
 
       {/* Types document titles into the composer; attaches nothing. */}

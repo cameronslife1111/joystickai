@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,8 @@ interface Props {
   heading?: string;
   /** Also receives the full selected document rows (id + title). */
   onConfirmDocs?: (docs: { id: string; title: string }[]) => void;
+  /** Rendered directly under the title, above the filters (e.g. attached chips). */
+  topSlot?: ReactNode;
 }
 
 type Doc = { id: string; title: string; sentence_count: number };
@@ -30,6 +32,7 @@ export function DocumentPickerSheet({
   onConfirm,
   heading = "Attach documents",
   onConfirmDocs,
+  topSlot,
 }: Props) {
   const [selected, setSelected] = useState<string[]>(initialSelectedIds);
   const [query, setQuery] = useState("");
@@ -88,6 +91,7 @@ export function DocumentPickerSheet({
         <SheetHeader>
           <SheetTitle>{heading}</SheetTitle>
         </SheetHeader>
+        {topSlot}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {EMOJI_FILTERS.map((emoji) => (
             <button
