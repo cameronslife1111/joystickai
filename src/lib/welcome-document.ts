@@ -1,0 +1,45 @@
+// The one document Orby creates for a brand-new account: a plain-language
+// walkthrough the person can keep, edit or delete. One idea per sentence, so it
+// reads well in the sentence-at-a-time view.
+
+export const WELCOME_DOC_TITLE = "🏆 Welcome to Orby";
+
+export const WELCOME_DOC_SENTENCES: string[] = [
+  "Welcome to Orby. Press the purple down arrow button.",
+  "Everything you write here is split into single sentences, and you move through them one at a time.",
+  "This is your help document, so take your time and press the purple button after each sentence.",
+  "A document is just a list of sentences, and you can have as many documents as you like.",
+  "Purple button: press it to go to the next sentence.",
+  "Purple button held down: hands this sentence to Orby in a new chat, already linked to it.",
+  "Blue button: press it to go back to the sentence before this one.",
+  "Blue button held down: locks Orby to this one list so it stops cycling into your other documents.",
+  "Red button: press it to search all of your documents by name.",
+  "Red button held down: shows the documents you opened most recently.",
+  "Yellow button: press it to open the main menu with all of your options.",
+  "Yellow button held down: opens a blank box so you can add a new idea right away.",
+  "Pink button: press it to move this sentence somewhere else, even into another document.",
+  "Pink button held down: jumps you straight to any sentence number in this document.",
+  "Green button: press it to open your next document.",
+  "Green button held down: links this sentence to another document or a chat, so one press takes you there.",
+  "Orange button: press it to jump to the document you pinned.",
+  "Orange button held down: lets you choose which document is pinned.",
+  "Grey button: press it to open your gallery of pictures and videos.",
+  "Grey button held down: opens Orby chat, and if this sentence has a linked chat it opens that one.",
+  "Tap the sentence itself to edit the words, then tap away to save.",
+  "Hold the sentence down to talk instead of typing, and your words are written for you.",
+  "Orby chat is where you ask for things in plain language, like talking to a helpful assistant.",
+  "For anything with real work in it, Orby writes a short step-by-step plan and waits for you to approve it.",
+  "You can watch the plan run, add a note while it works, or stop it at any time.",
+  "In chat settings you can switch each of Orby's abilities on or off, and only the ones switched on are used.",
+  "Planning: lets Orby combine several steps to finish a bigger job in one go.",
+  "Document editing: lets Orby create documents and write, rewrite or tidy your sentences.",
+  "Image generation: makes new pictures, or remixes ones you already have, straight into your gallery.",
+  "Video generation: turns pictures into short videos in your gallery, and it is switched off for now.",
+  "Scheduling: sets a job to happen later or to repeat, like a weekly summary.",
+  "Web search: lets Orby look things up online so answers are current.",
+  "Image analysis: lets Orby look at a picture you attach and describe or use what is in it.",
+  "DaVinci Resolve mode: lets Orby help with edits inside DaVinci Resolve on your own Mac.",
+  "Virtual computer: lets Orby use a temporary cloud browser to run errands online, and it is switched off for now.",
+  "You can attach documents to a chat so Orby knows exactly what you are talking about.",
+  "Keep this document around, and open it any time you need a reminder of how Orby works.",
+];
