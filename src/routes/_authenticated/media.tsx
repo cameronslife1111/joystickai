@@ -1158,7 +1158,7 @@ function MediaPage() {
                   onClick={() => { const a = sheetAsset; setSheetAsset(null); setShrinkAsset(a); }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Film className="h-4 w-4" />} label="Image to Video"
                   onClick={() => {
                     const a = sheetAsset;
@@ -1168,7 +1168,7 @@ function MediaPage() {
                   }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Video className="h-4 w-4" />} label="Video to Video"
                   onClick={() => {
                     const a = sheetAsset;
@@ -1178,7 +1178,7 @@ function MediaPage() {
                   }}
                 />
               )}
-              {sheetAsset.kind === "image" && (
+              {sheetAsset.kind === "image" && !featureLocked && (
                 <SheetButton icon={<Mic2 className="h-4 w-4" />} label="Audio + Image to Video"
                   onClick={() => {
                     const a = sheetAsset;
