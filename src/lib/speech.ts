@@ -296,7 +296,19 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Replace whatever is being read: single cancel, then speak, in the same
   // user-gesture turn so WebKit allows the new utterance to start.
   cancelSpeech();
+  if (engineStale) {
+    // First press after coming back from another app: the queue can still be
+    // suspended or holding a phantom utterance. Resume + cancel before speaking.
+    engineStale = false;
+    try {
+      if (engine.paused) engine.resume();
+    } catch {}
+    try {
+      engine.cancel();
+    } catch {}
+  }
   const sequence = requestSequence;
+  let recoveryAttempts = 0;
 
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
     const utterance = new SpeechSynthesisUtterance(clean);
