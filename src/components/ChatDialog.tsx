@@ -380,6 +380,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     });
   }, []);
 
+  // 🔴 / ⬛️ voice dictation — inserts the transcript at the last cursor spot.
+  const dictation = useVoiceDictation(
+    useCallback((text: string) => spliceAtCursor(text), [spliceAtCursor]),
+  );
+
   /** Type quoted titles into the composer at the cursor. */
   const insertQuotedTitles = useCallback(
     (rawTitles: string[]) => {
