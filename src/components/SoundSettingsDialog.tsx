@@ -30,13 +30,13 @@ export function SoundSettingsDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Sound</DialogTitle>
-          <DialogDescription>Choose the OpenAI voice that reads your sentences.</DialogDescription>
+          <DialogDescription>Choose the Google voice that reads your sentences.</DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-3">
           <div>
             <div className="font-medium">Read sentences aloud</div>
-            <div className="text-xs text-muted-foreground">AI-generated voice · billed to your OpenAI account</div>
+            <div className="text-xs text-muted-foreground">Use hosted Google speech</div>
           </div>
           <Switch checked={enabled} onCheckedChange={onEnabledChange} aria-label="Read sentences aloud" />
         </div>
@@ -44,7 +44,14 @@ export function SoundSettingsDialog({
 
 
         <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-          {TTS_VOICES.map((option) => {
+          {(["female", "male"] as const).flatMap((group) => [
+            <div
+              key={`h-${group}`}
+              className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              {group === "female" ? "US female voices" : "US male voices"}
+            </div>,
+            ...TTS_VOICES.filter((o) => o.gender === group).map((option) => {
             const selected = option.id === voice;
             return (
               <div
@@ -80,7 +87,8 @@ export function SoundSettingsDialog({
                 </Button>
               </div>
               );
-            })}
+            }),
+          ])}
         </div>
       </DialogContent>
     </Dialog>

@@ -92,13 +92,6 @@
       "when": 1789385785096,
       "tag": "0012_chat_turn_tick_cron",
       "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1789478963157,
-      "tag": "0013_allow_openai_tts_voices",
-      "breakpoints": true
     }
   ]
 }

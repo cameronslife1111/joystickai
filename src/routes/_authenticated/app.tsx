@@ -757,6 +757,64 @@ function AppPageInner() {
    * exact same favorites-cycle / all-docs-cycle rules as the press handler.
    */
   // Bumped when a neighbouring document's sentence list lands in cache, so the
+  // speech prewarm effect can resolve its landing sentence.
+  const [warmTick, setWarmTick] = useState(0);
+
+  const nextDocTargetId = useMemo(() => {
+    if (!docs || docs.length === 0) return null;
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (order.length > 0) {
+      const cur = favIdxRef.current;
+      const pos = order.findIndex((s) => s.i > cur);
+      return (pos === -1 ? order[0] : order[pos]).id;
+    }
+    if (docs.length < 2 || !activeDocId) return null;
+    const idx = docs.findIndex((d) => d.id === activeDocId);
+    return idx >= 0 ? docs[(idx + 1) % docs.length].id : null;
+  }, [docs, favorites, activeDocId]);
+
+  // Warm the sentence lists of the documents the green orb (and the orange
+  // pinned-doc orb) can land on, so those jumps resolve from cache and paint +
+  // speak instantly instead of waiting on a round-trip.
+  useEffect(() => {
+    if (!docs || docs.length === 0 || !activeDocId) return;
+    const targets: string[] = [];
+    const order = favorites
+      .map((id, i) => ({ id, i }))
+      .filter((s): s is { id: string; i: number } => !!s.id && docs.some((d) => d.id === s.id));
+    if (nextDocTargetId) targets.push(nextDocTargetId);
+    if (order.length > 0) {
+      const cur = favIdxRef.current;
+      const prevList = order.filter((s) => s.i < cur);
+      const prev = prevList.length > 0 ? prevList[prevList.length - 1] : order[order.length - 1];
+      if (prev) targets.push(prev.id);
+    } else if (docs.length > 1) {
+      const idx = docs.findIndex((d) => d.id === activeDocId);
+      if (idx >= 0) targets.push(docs[(idx - 1 + docs.length) % docs.length].id);
+    }
+    if (pinnedDocId && docs.some((d) => d.id === pinnedDocId)) targets.push(pinnedDocId);
+    for (const id of targets) {
+      if (!id || id === activeDocId) continue;
+      void qc.prefetchQuery({
+        queryKey: ["sentences", id],
+        queryFn: async (): Promise<Sentence[]> => {
+          const { data, error } = await supabase
+            .from("sentences").select("*")
+            .eq("document_id", id)
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return data ?? [];
+        },
+        staleTime: 30_000,
+      }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
+    }
+  }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
+
+
+
   // Keep mutedRef in sync with persisted preference.
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
@@ -775,6 +833,16 @@ function AppPageInner() {
   const lastWarmIdxRef = useRef<number>(0);
   const warmDirectionRef = useRef<1 | -1>(1);
 
+  /** Resolve the sentence another document will open on, from cache only. */
+  const cachedLandingSentence = useCallback((docId: string | null): string | null => {
+    if (!docId || docId === activeDocId) return null;
+    const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
+    if (!list || list.length === 0) return null;
+    const serverIdx = docs?.find((d) => d.id === docId)?.current_sentence_index ?? 0;
+    const idx = Math.max(0, Math.min(savedIndexFor(docId, serverIdx), list.length - 1));
+    return list[idx]?.content ?? null;
+  }, [activeDocId, docs, qc, savedIndexFor]);
+
   useEffect(() => {
     if (currentIdx !== lastWarmIdxRef.current) {
       warmDirectionRef.current = currentIdx > lastWarmIdxRef.current ? 1 : -1;
@@ -787,11 +855,17 @@ function AppPageInner() {
       if (text && !targets.includes(text)) targets.push(text);
     };
 
-    // Only prepare likely next sentences in the user's travel direction.
-    // Cross-document and opposite-direction preparation generated too much
-    // paid audio that was never heard.
+    if (sentences && sentences.length > 1) {
+      // Both neighbours are always warmed; the likely direction goes first.
+      push(sentences[currentIdx + direction]?.content);
+      push(sentences[currentIdx - direction]?.content);
+    }
+    // Cross-document landing sentences (green orb, then orange orb).
+    push(cachedLandingSentence(nextDocTargetId));
+    push(cachedLandingSentence(pinnedDocId));
+    // Extra lookahead in the travelling direction.
     if (sentences) {
-      for (let step = 1; step <= ttsPrefetch; step += 1) {
+      for (let step = 2; step <= ttsPrefetch; step += 1) {
         push(sentences[currentIdx + direction * step]?.content);
       }
     }
@@ -806,6 +880,10 @@ function AppPageInner() {
     muted,
     ttsPrefetch,
     ttsVoice,
+    nextDocTargetId,
+    pinnedDocId,
+    cachedLandingSentence,
+    warmTick,
   ]);
 
 

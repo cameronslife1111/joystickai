@@ -18,7 +18,6 @@ const EMOJI_RE = /[\p{Extended_Pictographic}\p{Emoji_Presentation}️‍]/gu;
 const SPEAKABLE_RE = /[\p{L}\p{N}]/u;
 
 const PLAYBACK_SAMPLE_RATE = 24_000;
-const SPEECH_CACHE_VERSION = "openai-gpt-4o-mini-tts-v1";
 
 /**
  * Slightly-brisker-than-normal playback pace applied to every voice.
@@ -138,7 +137,7 @@ const REPLAY_CACHE_LIMIT = 80;
 const replayCache = new Map<string, Float32Array<ArrayBuffer>>();
 
 function replayKey(text: string, voice: string) {
-  return `${SPEECH_CACHE_VERSION}:${voice}@${SPEECH_RATE}::${text}`;
+  return `${voice}@${SPEECH_RATE}::${text}`;
 }
 
 function rememberClip(key: string, samples: Float32Array<ArrayBuffer>, persist = true) {
@@ -451,7 +450,7 @@ type ClipStream = {
 };
 
 /**
- * Request one sentence from hosted OpenAI speech and decode its PCM.
+ * Request one sentence from hosted Google speech and decode its PCM.
  * Shared by the live speak path (which plays chunks as they arrive) and the
  * prewarm path (which only fills the cache). Returns null when the caller
  * went stale mid-flight; throws with a user-facing message on failure.
@@ -544,7 +543,7 @@ async function generateClip(
   if (buffer.trim()) processEvent(buffer);
   if (stale()) return null;
   if (!completed || captured.length === 0) {
-    throw new Error("OpenAI speech returned no playable audio.");
+    throw new Error("Google speech returned no playable audio.");
   }
 
   const total = captured.reduce((n, chunk) => n + chunk.length, 0);
@@ -557,7 +556,7 @@ async function generateClip(
   return merged;
 }
 
-/** Stream one sentence from hosted OpenAI speech and play its PCM chunks immediately. */
+/** Stream one sentence from hosted Google speech and play its PCM chunks immediately. */
 export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Sound is off — return before touching tokens, network, or audio so the
   // user is never billed for speech while muted.

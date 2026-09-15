@@ -2,12 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
-import { streamOpenAiSpeech } from "@/lib/tts-gateway.server";
+import { streamGoogleSpeech } from "@/lib/tts-gateway.server";
 import { TTS_VOICES } from "@/lib/tts-voices";
 
 const voiceIds = TTS_VOICES.map((voice) => voice.id) as [string, ...string[]];
 const requestSchema = z.object({
-  text: z.string().trim().min(1).max(4_096),
+  text: z.string().trim().min(1).max(12_000),
   voice: z.enum(voiceIds),
 });
 
@@ -76,7 +76,7 @@ export const Route = createFileRoute("/api/public/tts")({
         if (!parsed.success) {
           return Response.json({ message: "Choose a valid voice and text to read." }, { status: 400 });
         }
-        return streamOpenAiSpeech(request, parsed.data);
+        return streamGoogleSpeech(request, parsed.data);
       },
     },
   },
