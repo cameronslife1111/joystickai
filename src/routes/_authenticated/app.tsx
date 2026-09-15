@@ -10,8 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechVoice, setSpeechEnabled, prewarmSentences } from "@/lib/speech";
-import { DEFAULT_TTS_VOICE, isTtsVoice, type TtsVoice } from "@/lib/tts-voices";
+import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
