@@ -109,7 +109,7 @@ describe("device sentence speech", () => {
     }
   });
 
-  test("speaks exactly one utterance with the brisk rate and the device default voice", () => {
+  test("speaks exactly one utterance with the normal device-default rate and the device default voice", () => {
     const synth = installFakeSynth();
     setSpeechEnabled(true);
     let fetched = false;
