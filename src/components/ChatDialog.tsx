@@ -357,14 +357,6 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
 
 
-  // 🔴 / ⬛️ voice dictation — appends the transcript to the message box.
-  const dictation = useVoiceDictation(
-    useCallback((text: string) => {
-      setInput((prev) => appendTranscript(prev, text));
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    }, []),
-  );
-
   /** Splice arbitrary text into the composer at the saved cursor position. */
   const spliceAtCursor = useCallback((insert: string) => {
     if (!insert) return;
