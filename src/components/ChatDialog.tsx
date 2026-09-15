@@ -86,6 +86,8 @@ import { listSchedules, deleteSchedule, toggleSchedule } from "@/lib/plan-schedu
 import { McpConnectionPanel, McpStatusPill } from "./mcp/McpConnectionPanel";
 import { VirtualComputerCard } from "./VirtualComputerCard";
 import { forgetVirtualComputerLogins } from "@/lib/vc.functions";
+import { useFeatureLock } from "@/lib/use-feature-lock";
+import { applyFeatureLock, LOCKED_CAPABILITY_KEYS } from "@/lib/feature-lock";
 
 
 interface Props {
