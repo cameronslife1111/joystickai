@@ -17,6 +17,8 @@ interface Props {
   heading?: string;
   /** Also receives the full selected document rows (id + title). */
   onConfirmDocs?: (docs: { id: string; title: string }[]) => void;
+  /** Rendered directly under the title, above the filters (e.g. attached chips). */
+  topSlot?: ReactNode;
 }
 
 type Doc = { id: string; title: string; sentence_count: number };
