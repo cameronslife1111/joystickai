@@ -1,66 +1,38 @@
-const RUN_ID_HEADER = "X-Lovable-AIG-Run-ID";
+export const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
 
-/**
- * Steering wrapper for Gemini-TTS. It must do two things at once: read ONLY the
- * given text (the model otherwise answers or comments on it), and read it with
- * natural sentence rhythm (an over-strict "word for word" instruction made it
- * clip every word as if each had a period after it).
- */
-export function buildVerbatimPrompt(text: string): string {
-  return (
-    "You are a narrator. Perform the text after the marker out loud exactly as written, in a natural " +
-    "American accent. Speak it with normal, flowing sentence rhythm and expressive human intonation, " +
-    "the way a person reads aloud to someone: phrase words together, pause only at the punctuation " +
-    "that is actually written, and never pause between individual words or pronounce them one at a " +
-    "time. Do not answer it, reply to it, comment on it, translate it, summarize it, and do not add, " +
-    "remove, repeat or change any words. Speak nothing except the text itself: not these instructions " +
-    "and not the marker.\n\nTEXT TO PERFORM:\n" +
-    text
-  );
+export function buildOpenAiSpeechBody(input: { text: string; voice: string }) {
+  return {
+    model: OPENAI_TTS_MODEL,
+    input: input.text,
+    voice: input.voice,
+    instructions: "Read exactly the supplied text in a natural American accent with clear, flowing sentence rhythm. Do not add or change words.",
+    stream_format: "sse",
+    response_format: "pcm",
+  };
 }
 
-
-export async function streamGoogleSpeech(
+export async function streamOpenAiSpeech(
   request: Request,
   input: { text: string; voice: string },
 ): Promise<Response> {
-  const apiKey = process.env["LOVABLE_API_KEY"];
+  const apiKey = process.env["OPENAI_API_KEY"];
   if (!apiKey) {
     return Response.json(
-      { message: "Speech is not configured. The app owner needs to enable Lovable AI." },
+      { message: "Speech is not configured. Add your OpenAI API key." },
       { status: 401 },
     );
   }
 
-  const incomingRunId = request.headers.get(RUN_ID_HEADER)?.trim();
   const headers = new Headers({
     "Content-Type": "application/json",
-    "Lovable-API-Key": apiKey,
-    "X-Lovable-AIG-SDK": "fetch",
+    Authorization: `Bearer ${apiKey}`,
   });
-  if (incomingRunId) headers.set(RUN_ID_HEADER, incomingRunId);
 
   try {
-    const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
+    const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-tts",
-        stream_format: "sse",
-        // Gemini-TTS is a generative model: handed bare text it sometimes
-        // *answers* the sentence instead of reading it. Steering has to live in
-        // the text itself, and it has to ask for natural delivery too.
-        contents: [
-          { role: "user", parts: [{ text: buildVerbatimPrompt(input.text) }] },
-        ],
-
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: input.voice } },
-          },
-        },
-      }),
+      body: JSON.stringify(buildOpenAiSpeechBody(input)),
       signal: request.signal,
     });
 
@@ -68,16 +40,8 @@ export async function streamGoogleSpeech(
       "Content-Type": upstream.headers.get("content-type") ?? "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
     });
-    upstream.headers.forEach((value, name) => {
-      if (name.toLowerCase().startsWith("x-lovable-aig-")) {
-        responseHeaders.set(name, value);
-      }
-    });
-    // Pass Retry-After through so the client's bounded 429 retry waits the
-    // right amount of time.
     const retryAfter = upstream.headers.get("retry-after");
     if (retryAfter) responseHeaders.set("Retry-After", retryAfter);
-    responseHeaders.set("Access-Control-Expose-Headers", RUN_ID_HEADER);
 
     if (!upstream.ok) {
       const raw = await upstream.text().catch(() => "");
