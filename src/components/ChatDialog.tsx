@@ -1836,7 +1836,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setDocTitlePickerOpen(true)}
                 className="h-9 w-9 shrink-0"
               >
-                <StickyNote className="h-4 w-4" />
+                <Quote className="h-4 w-4" />
               </Button>
               <Button
                 size="icon"
