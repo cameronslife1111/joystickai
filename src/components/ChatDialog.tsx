@@ -546,6 +546,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   }, [busyThreadIds, pendingTurns]);
 
   /**
+   * List-dot status for a thread. Local optimism wins so a chat you just
+   * messaged shows yellow immediately, before the status call catches up.
+   */
+  const threadDotStatus = (threadId: string): "approval" | "working" | "empty" | "done" => {
+    if (busyThreads.has(threadId)) return "working";
+    const s = threadStatuses[threadId];
+    if (s === "approval" || s === "working" || s === "done") return s;
+    return "empty";
+  };
+  const THREAD_DOT: Record<string, { cls: string; label: string }> = {
+    approval: { cls: "bg-purple-500", label: "Plan needs approval" },
+    working: { cls: "bg-yellow-400", label: "Orby is working in this chat" },
+    done: { cls: "bg-green-500", label: "Chat has replies" },
+    empty: { cls: "bg-muted-foreground/35", label: "Empty chat" },
+  };
+
+  /**
    * Nothing may think forever. The server's queued-turn list is the truth: a
    * locally-optimistic busy thread with no queued turn behind it is released,
    * a turn sitting too long gets the finisher poked, and past a hard timeout
