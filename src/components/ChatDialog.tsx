@@ -986,6 +986,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     }
     // Thread picker is covering the chat — don't read until a chat is open.
     if (!autoSpeak || !activeThreadId || drawerOpen || voice.live) return;
+    // Reopening the chat keeps the previous thread selected for one render.
+    // Never read that leftover thread: wait until bootstrap has settled and,
+    // when a specific chat was requested, until that exact chat is on screen.
+    if (!bootstrappedRef.current) return;
+    if (openThreadId && activeThreadId !== openThreadId) return;
     if (autoSpokeThreadRef.current === activeThreadId) return;
     // Only ever read rows that provably belong to the chat on screen — stale
     // cache entries from another thread must never be spoken.
@@ -995,7 +1000,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const last = [...own].reverse().find((m) => m.role === "assistant" && m.content?.trim());
     if (last) speakMessage(last.id, last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, autoSpeak, activeThreadId, drawerOpen, messages]);
+  }, [open, autoSpeak, activeThreadId, openThreadId, drawerOpen, messages]);
 
   /**
    * Pull in replies the server finished. A turn leaving the pending list means
