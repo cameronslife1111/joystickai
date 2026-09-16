@@ -4512,6 +4512,7 @@ function AppPageInner() {
         startInThreadList={chatStartInList}
         delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
+        onNextLinkedChat={() => void goToNextLinkedChat()}
         onThreadDeleted={() => {
           setChatOpen(false);
           setPendingChatThreadId(null);
