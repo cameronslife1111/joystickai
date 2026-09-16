@@ -16,6 +16,33 @@ import {
   type ChatTurnInput,
 } from "./chat-types";
 
+/**
+ * Advance a plan immediately (same call the cron tick makes). Used right after a
+ * paused plan gets its answer so the user sees it continue without waiting for
+ * the next tick — and so it continues even with the app closed.
+ */
+async function kickPlan(planId: string, userId: string): Promise<void> {
+  const SUPABASE_URL = process.env["SUPABASE_URL"];
+  const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const PLAN_TICK_SECRET = process.env["PLAN_TICK_SECRET"];
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !PLAN_TICK_SECRET || !userId) return;
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/plan-step`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({ plan_id: planId, user_id: userId, internal_secret: PLAN_TICK_SECRET }),
+      signal: AbortSignal.timeout(25_000),
+    });
+  } catch (err) {
+    // The cron tick will pick the plan up shortly; never fail the chat turn here.
+    console.warn("[chat resume] plan kick failed", err);
+  }
+}
+
 async function buildContext(
   supabase: any,
   contextDocumentIds: string[],
@@ -160,11 +187,18 @@ async function classifyTurn(
     "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
     "Decide how to handle the user's latest message, and decide which of your capabilities the work would need.\n\n" +
     "Return STRICT JSON only:\n" +
-    '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search"],"rationale":"one plain-text sentence"}\n\n' +
+    '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search","chat_control"],"rationale":"one plain-text sentence"}\n\n' +
     "Routes:\n" +
     "- chat: conversation, questions, explanations, opinions, brainstorming, and anything that only needs a text answer — including reading, summarizing, or analyzing attached documents.\n" +
     "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
     "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
+    (caps.chat_control
+      ? "CHAT CONTROL IS SWITCHED ON. Managing the user's CHATS is real work you can do through a plan: create new chats, " +
+        "rename existing chats (named loosely, e.g. \"the DaVinci one\"), attach or remove documents on a chat, and send a " +
+        "message into another chat and bring its answer back. Any message asking for that (\"make five chats\", \"rename that " +
+        "chat\", \"ask my research chat what it found\", \"attach this doc to the other chat\") is a \"plan\" with " +
+        "\"chat_control\" in capabilities. Never say you cannot manage chats while this is on.\n\n"
+      : "") +
     "CRITICAL RULES:\n" +
     (auto
       ? "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n"
@@ -194,6 +228,7 @@ async function classifyTurn(
     "video_generation",
     "scheduling",
     "web_search",
+    "chat_control",
   ] as const;
 
   try {
@@ -231,6 +266,7 @@ async function classifyTurn(
           image_generation: caps.image_generation || wanted.has("image_generation"),
           video_generation: caps.video_generation || wanted.has("video_generation"),
           scheduling: caps.scheduling || wanted.has("scheduling"),
+          chat_control: caps.chat_control || wanted.has("chat_control"),
         }
       : { ...caps };
 
@@ -321,7 +357,7 @@ export async function runChatTurn(
   if (data.threadId) {
     let pendingQuery = supabase
       .from("plans")
-      .select("id, steps, current_step")
+      .select("id, user_id, steps, current_step")
       .eq("thread_id", data.threadId)
       .eq("status", "awaiting_user");
     if (ownerId) pendingQuery = pendingQuery.eq("user_id", ownerId);
@@ -331,19 +367,41 @@ export async function runChatTurn(
       .maybeSingle();
     if (pending?.id) {
       const steps: any[] = Array.isArray(pending.steps) ? pending.steps : [];
-      const idx: number = pending.current_step ?? 0;
-      const step = steps[idx];
-      if (step && step.status === "awaiting_user") {
+      // Normally current_step points at the paused step, but never rely on it:
+      // if it drifted, fall back to the first step still waiting on an answer.
+      let idx: number = pending.current_step ?? 0;
+      if (!(steps[idx] && steps[idx].status === "awaiting_user")) {
+        idx = steps.findIndex((s: any) => s && s.status === "awaiting_user");
+      }
+      const step = idx >= 0 ? steps[idx] : null;
+      if (step) {
         step.status = "completed";
         step.result = { ...(step.result ?? {}), answer: latestText };
         step.error = null;
         const nextIdx = idx + 1;
-        const updates: any = { steps, current_step: nextIdx, status: "running", step_claim_at: null };
+        const updates: any = {
+          steps,
+          current_step: nextIdx,
+          status: "running",
+          step_claim_at: null,
+          awaiting_since: null,
+          // The pause burned wall-clock time and (in some paths) ticks. Give the
+          // plan a fresh budget so answering a question can't trip the watchdog,
+          // the tick ceiling, or the no-progress stall guard.
+          watchdog_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          tick_count: 0,
+          consecutive_no_progress: 0,
+        };
         if (nextIdx >= steps.length) {
           updates.status = "completed";
           updates.completed_at = new Date().toISOString();
         }
         await supabase.from("plans").update(updates).eq("id", pending.id);
+        // Kick the plan right now instead of waiting for the next tick, so the
+        // answer visibly continues the plan even if the app is in the background.
+        if (updates.status === "running") {
+          await kickPlan(pending.id, (pending as any).user_id ?? ownerId ?? "");
+        }
         return { route: "resumed" };
       }
     }
