@@ -505,6 +505,211 @@ const TOOL_HANDLERS: Record<string, any> = {
     });
     return scored.slice(0, 5).map(({ t }) => ({ id: t.id, title: t.title }));
   },
+
+  // ---------- chat_control: manage the user's other chats and talk to them ----------
+  /** Resolve a chat from either a concrete thread_id or a loose `chat` description. */
+  async _resolve_thread(args: any, ctx: any, label: string) {
+    const admin = ctx.admin;
+    const user_id = ctx.user_id;
+    const rawId = typeof args.thread_id === "string" ? args.thread_id.trim() : "";
+    if (rawId && /^[0-9a-f-]{36}$/i.test(rawId)) {
+      const { data } = await admin
+        .from("chat_threads")
+        .select("id, title, capabilities, attached_document_ids")
+        .eq("id", rawId)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (!data) throw new Error(`${label}: no chat found with that id`);
+      return data;
+    }
+    const query = String(args.chat ?? args.thread_id ?? "").trim();
+    if (!query) throw new Error(`${label} needs a thread_id or a chat name`);
+    const matches = await TOOL_HANDLERS.find_chat_by_title({ query }, ctx);
+    if (!matches.length) throw new Error(`${label}: no chat matched "${query}"`);
+    const { data } = await admin
+      .from("chat_threads")
+      .select("id, title, capabilities, attached_document_ids")
+      .eq("id", matches[0].id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+    if (!data) throw new Error(`${label}: no chat matched "${query}"`);
+    return data;
+  },
+  async _chat_attachments(admin: any, user_id: string, thread: any) {
+    const ids: string[] = Array.isArray(thread.attached_document_ids) ? thread.attached_document_ids : [];
+    if (!ids.length) return { thread_id: thread.id, title: thread.title, documents: [] };
+    const { data } = await admin
+      .from("documents")
+      .select("id, title")
+      .eq("user_id", user_id)
+      .in("id", ids);
+    return { thread_id: thread.id, title: thread.title, documents: data ?? [] };
+  },
+  async create_chat(args, { user_id, admin }) {
+    const title = String(args.title ?? "").trim() || "New chat";
+    const { data, error } = await admin
+      .from("chat_threads")
+      .insert({ user_id, title })
+      .select("id, title")
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async rename_chat(args, ctx) {
+    const newTitle = String(args.new_title ?? "").trim();
+    if (!newTitle) throw new Error("rename_chat requires new_title");
+    const thread = await TOOL_HANDLERS._resolve_thread(args, ctx, "rename_chat");
+    const { data, error } = await ctx.admin
+      .from("chat_threads")
+      .update({ title: newTitle })
+      .eq("id", thread.id)
+      .eq("user_id", ctx.user_id)
+      .select("id, title")
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async list_chat_attachments(args, ctx) {
+    const thread = await TOOL_HANDLERS._resolve_thread(args, ctx, "list_chat_attachments");
+    return await TOOL_HANDLERS._chat_attachments(ctx.admin, ctx.user_id, thread);
+  },
+  async attach_documents_to_chat(args, ctx) {
+    const thread = await TOOL_HANDLERS._resolve_thread(args, ctx, "attach_documents_to_chat");
+    const ids = parseIdList(args.document_ids);
+    if (!ids.length) throw new Error("attach_documents_to_chat requires document_ids");
+    const { data: owned } = await ctx.admin
+      .from("documents")
+      .select("id")
+      .eq("user_id", ctx.user_id)
+      .in("id", ids);
+    const ownedIds = (owned ?? []).map((d: any) => d.id);
+    if (!ownedIds.length) throw new Error("attach_documents_to_chat: none of those documents were found");
+    const current: string[] = Array.isArray(thread.attached_document_ids) ? thread.attached_document_ids : [];
+    const next = Array.from(new Set([...current, ...ownedIds]));
+    const { error } = await ctx.admin
+      .from("chat_threads")
+      .update({ attached_document_ids: next })
+      .eq("id", thread.id)
+      .eq("user_id", ctx.user_id);
+    if (error) throw new Error(error.message);
+    return await TOOL_HANDLERS._chat_attachments(ctx.admin, ctx.user_id, {
+      ...thread,
+      attached_document_ids: next,
+    });
+  },
+  async remove_documents_from_chat(args, ctx) {
+    const thread = await TOOL_HANDLERS._resolve_thread(args, ctx, "remove_documents_from_chat");
+    const ids = parseIdList(args.document_ids);
+    if (!ids.length) throw new Error("remove_documents_from_chat requires document_ids");
+    const current: string[] = Array.isArray(thread.attached_document_ids) ? thread.attached_document_ids : [];
+    const next = current.filter((id) => !ids.includes(id));
+    const { error } = await ctx.admin
+      .from("chat_threads")
+      .update({ attached_document_ids: next })
+      .eq("id", thread.id)
+      .eq("user_id", ctx.user_id);
+    if (error) throw new Error(error.message);
+    return await TOOL_HANDLERS._chat_attachments(ctx.admin, ctx.user_id, {
+      ...thread,
+      attached_document_ids: next,
+    });
+  },
+  async ask_chat(args, ctx) {
+    const message = String(args.message ?? "").trim();
+    if (!message) throw new Error("ask_chat requires a message");
+    const thread = await TOOL_HANDLERS._resolve_thread(args, ctx, "ask_chat");
+    if (ctx.thread_id && thread.id === ctx.thread_id) {
+      throw new Error(
+        "ask_chat cannot target the chat this plan is running in — use send_chat_message for an update here.",
+      );
+    }
+    const admin = ctx.admin;
+    const user_id = ctx.user_id;
+
+    // Prior history of the target chat, oldest first, so it answers in context.
+    const { data: historyRows } = await admin
+      .from("chat_messages")
+      .select("role, content, created_at")
+      .eq("thread_id", thread.id)
+      .eq("user_id", user_id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    const history = (historyRows ?? [])
+      .slice()
+      .reverse()
+      .filter((m: any) => (m.role === "user" || m.role === "assistant") && String(m.content ?? "").trim())
+      .map((m: any) => ({ role: m.role, content: String(m.content) }));
+
+    // Deliver the message exactly as if the user had typed it there.
+    const { error: msgErr } = await admin.from("chat_messages").insert({
+      user_id,
+      thread_id: thread.id,
+      role: "user",
+      content: message,
+      kind: "text",
+    });
+    if (msgErr) throw new Error(msgErr.message);
+    await admin
+      .from("chat_threads")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", thread.id);
+
+    const caps =
+      thread.capabilities && typeof thread.capabilities === "object" ? thread.capabilities : {};
+    const { data: turn, error: turnErr } = await admin
+      .from("chat_turns")
+      .insert({
+        user_id,
+        thread_id: thread.id,
+        status: "pending",
+        payload: {
+          userText: message,
+          messages: [...history, { role: "user", content: message }],
+          contextDocumentIds: Array.isArray(thread.attached_document_ids)
+            ? thread.attached_document_ids.slice(0, 20)
+            : [],
+          imageUrls: [],
+          capabilities: caps,
+          autoCapabilities: false,
+          autoApprove: true,
+        },
+      })
+      .select("id")
+      .single();
+    if (turnErr) throw new Error(turnErr.message);
+
+    // Wait for that chat's own reply. The app and the scheduler watchdog run the
+    // queued turn; we just poll for the assistant message it produces.
+    const started = Date.now();
+    const deadline = started + 175_000;
+    const since = new Date(started - 1000).toISOString();
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 4_000));
+      const { data: replies } = await admin
+        .from("chat_messages")
+        .select("content, created_at")
+        .eq("thread_id", thread.id)
+        .eq("user_id", user_id)
+        .eq("role", "assistant")
+        .gt("created_at", since)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const reply = (replies ?? [])[0];
+      if (reply?.content) {
+        return { thread_id: thread.id, title: thread.title, reply: String(reply.content), timed_out: false };
+      }
+      const { data: turnRow } = await admin
+        .from("chat_turns")
+        .select("status, error")
+        .eq("id", (turn as any).id)
+        .maybeSingle();
+      const status = (turnRow as any)?.status;
+      if (status === "failed" || status === "canceled") {
+        throw new Error(`ask_chat: the other chat couldn't answer${(turnRow as any)?.error ? ` (${(turnRow as any).error})` : ""}`);
+      }
+    }
+    return { thread_id: thread.id, title: thread.title, reply: null, timed_out: true };
+  },
   async find_documents_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
     const rawLimit = Number(args.limit);
