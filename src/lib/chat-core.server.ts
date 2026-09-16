@@ -187,11 +187,18 @@ async function classifyTurn(
     "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
     "Decide how to handle the user's latest message, and decide which of your capabilities the work would need.\n\n" +
     "Return STRICT JSON only:\n" +
-    '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search"],"rationale":"one plain-text sentence"}\n\n' +
+    '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search","chat_control"],"rationale":"one plain-text sentence"}\n\n' +
     "Routes:\n" +
     "- chat: conversation, questions, explanations, opinions, brainstorming, and anything that only needs a text answer — including reading, summarizing, or analyzing attached documents.\n" +
     "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
     "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
+    (caps.chat_control
+      ? "CHAT CONTROL IS SWITCHED ON. Managing the user's CHATS is real work you can do through a plan: create new chats, " +
+        "rename existing chats (named loosely, e.g. \"the DaVinci one\"), attach or remove documents on a chat, and send a " +
+        "message into another chat and bring its answer back. Any message asking for that (\"make five chats\", \"rename that " +
+        "chat\", \"ask my research chat what it found\", \"attach this doc to the other chat\") is a \"plan\" with " +
+        "\"chat_control\" in capabilities. Never say you cannot manage chats while this is on.\n\n"
+      : "") +
     "CRITICAL RULES:\n" +
     (auto
       ? "1. You decide on your own. Do NOT require the user to have enabled anything — if the message asks for work, choose \"plan\".\n"
@@ -221,6 +228,7 @@ async function classifyTurn(
     "video_generation",
     "scheduling",
     "web_search",
+    "chat_control",
   ] as const;
 
   try {
