@@ -15,6 +15,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "web_search",
   "davinci_resolve",
   "virtual_computer",
+  "chat_control",
 ];
 
 export const CHAT_DEFAULT_CAPS: ChatCapabilities = {
@@ -27,6 +28,7 @@ export const CHAT_DEFAULT_CAPS: ChatCapabilities = {
   scheduling: true,
   davinci_resolve: false,
   virtual_computer: false,
+  chat_control: false,
 };
 
 

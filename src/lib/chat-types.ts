@@ -17,6 +17,8 @@ export const capabilitiesSchema = z.object({
   davinci_resolve: z.boolean().default(false),
   /** Virtual Computer — a temporary cloud browser Orby drives; never the user's own machine. */
   virtual_computer: z.boolean().default(false),
+  /** 💬 Chat control — the planner can create/rename chats, change their attachments, and message other chats. */
+  chat_control: z.boolean().default(false),
 });
 
 export const ALL_CAPS_ON = {
@@ -29,6 +31,7 @@ export const ALL_CAPS_ON = {
   scheduling: true,
   davinci_resolve: false,
   virtual_computer: false,
+  chat_control: false,
 } as const;
 
 
@@ -60,6 +63,7 @@ export const ACTION_GROUPS = [
   "scheduling",
   "davinci_resolve",
   "virtual_computer",
+  "chat_control",
 ] as const;
 
 /** Normalize a possibly-partial capabilities object from the database. */
@@ -83,6 +87,7 @@ export function normalizeCapabilities(
     scheduling: pick("scheduling"),
     davinci_resolve: pick("davinci_resolve"),
     virtual_computer: pick("virtual_computer"),
+    chat_control: pick("chat_control"),
   };
 }
 
