@@ -513,7 +513,6 @@ export const TOOL_CATALOG: ToolDef[] = [
  * in the caller's allowed set.
  */
 export const TOOL_GROUPS: Record<string, string> = {
-  insert_text_after_sentence: "document_editing",
   // base — always available (read/discovery/expansion/text)
   find_document_by_title: "base",
   find_documents_by_title: "base",
@@ -528,6 +527,7 @@ export const TOOL_GROUPS: Record<string, string> = {
   create_document: "document_editing",
   rename_document: "document_editing",
   add_sentence: "document_editing",
+  insert_text_after_sentence: "document_editing",
   update_sentence_content: "document_editing",
   move_sentence: "document_editing",
   link_sentence_to_document: "document_editing",
