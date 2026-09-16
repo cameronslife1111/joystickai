@@ -2727,8 +2727,10 @@ function AppPageInner() {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
       fn: () => {
-        setMenuOpen(false);
-        setSoundSettingsOpen(true);
+        // One press mutes/unmutes right from the menu; the icon flips in place.
+        const next = !muted;
+        void saveMuted(next);
+        toast.success(next ? "Sound off" : "Sound on");
       },
     },
     { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
@@ -3435,12 +3437,7 @@ function AppPageInner() {
 
 
       {/* Grid menu overlay */}
-      <SoundSettingsDialog
-        open={soundSettingsOpen}
-        onOpenChange={setSoundSettingsOpen}
-        enabled={!muted}
-        onEnabledChange={(enabled) => void saveMuted(!enabled)}
-      />
+
 
       {/* Appearance + sentence-press settings */}
       {themeSheetOpen && (
