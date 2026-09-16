@@ -351,6 +351,12 @@ export async function runChatTurn(
         "texted code, the run pauses and asks the user right here, then carries on. Never buy anything, move money, " +
         "or post publicly unless the user explicitly asked for it.\n\n"
       : "") +
+    (caps.chat_control
+      ? "CHAT CONTROL IS ON. Through a plan you can also manage the user's other chats: create a new chat, rename an " +
+        "existing one, attach or remove documents on a chat, and send a message into another chat as the user and bring " +
+        "its reply back here (ask_chat). The user names the other chat loosely and the plan resolves it. When they ask " +
+        "for any of that, say yes and start a plan.\n\n"
+      : "") +
     (contextText ? `${DOC_RULES} Their full content is appended to the end of the user's latest message.\n\n` : "") +
     (memory.block ? `${memory.block}\n\n` : "");
 
