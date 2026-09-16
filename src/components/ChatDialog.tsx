@@ -294,7 +294,7 @@ type PendingTurn = {
   created_at?: string | null;
 };
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, delegate }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, delegate }: Props) {
   const qc = useQueryClient();
   const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
