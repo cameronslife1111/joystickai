@@ -321,7 +321,7 @@ export async function runChatTurn(
   if (data.threadId) {
     let pendingQuery = supabase
       .from("plans")
-      .select("id, steps, current_step")
+      .select("id, user_id, steps, current_step")
       .eq("thread_id", data.threadId)
       .eq("status", "awaiting_user");
     if (ownerId) pendingQuery = pendingQuery.eq("user_id", ownerId);
@@ -331,19 +331,41 @@ export async function runChatTurn(
       .maybeSingle();
     if (pending?.id) {
       const steps: any[] = Array.isArray(pending.steps) ? pending.steps : [];
-      const idx: number = pending.current_step ?? 0;
-      const step = steps[idx];
-      if (step && step.status === "awaiting_user") {
+      // Normally current_step points at the paused step, but never rely on it:
+      // if it drifted, fall back to the first step still waiting on an answer.
+      let idx: number = pending.current_step ?? 0;
+      if (!(steps[idx] && steps[idx].status === "awaiting_user")) {
+        idx = steps.findIndex((s: any) => s && s.status === "awaiting_user");
+      }
+      const step = idx >= 0 ? steps[idx] : null;
+      if (step) {
         step.status = "completed";
         step.result = { ...(step.result ?? {}), answer: latestText };
         step.error = null;
         const nextIdx = idx + 1;
-        const updates: any = { steps, current_step: nextIdx, status: "running", step_claim_at: null };
+        const updates: any = {
+          steps,
+          current_step: nextIdx,
+          status: "running",
+          step_claim_at: null,
+          awaiting_since: null,
+          // The pause burned wall-clock time and (in some paths) ticks. Give the
+          // plan a fresh budget so answering a question can't trip the watchdog,
+          // the tick ceiling, or the no-progress stall guard.
+          watchdog_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          tick_count: 0,
+          consecutive_no_progress: 0,
+        };
         if (nextIdx >= steps.length) {
           updates.status = "completed";
           updates.completed_at = new Date().toISOString();
         }
         await supabase.from("plans").update(updates).eq("id", pending.id);
+        // Kick the plan right now instead of waiting for the next tick, so the
+        // answer visibly continues the plan even if the app is in the background.
+        if (updates.status === "running") {
+          await kickPlan(pending.id, (pending as any).user_id ?? ownerId ?? "");
+        }
         return { route: "resumed" };
       }
     }
