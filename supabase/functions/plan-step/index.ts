@@ -432,6 +432,23 @@ async function applySentenceLink(
   return { ...first, sentences_updated: rows.length };
 }
 
+/** Accept a JSON array, a single id, or a comma-separated list of UUIDs. */
+function parseIdList(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((v) => String(v).trim()).filter(Boolean);
+  const text = String(raw ?? "").trim();
+  if (!text) return [];
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v).trim()).filter(Boolean);
+    } catch {
+      /* fall through to comma splitting */
+    }
+  }
+  return text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+
 const TOOL_HANDLERS: Record<string, any> = {
   async find_document_by_title(args, { user_id, admin }) {
     const query = String(args.query ?? "").trim();
