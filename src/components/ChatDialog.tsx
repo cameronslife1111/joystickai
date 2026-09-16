@@ -2368,7 +2368,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 return (
                   <span
                     key={id}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/5 px-2.5 py-1 text-xs"
                   >
                     <button
                       type="button"
@@ -2378,7 +2378,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                         onOpenChange(false);
                         onOpenDocument?.(id);
                       }}
-                      className="max-w-[140px] truncate hover:underline"
+                      className="min-w-0 break-words text-left leading-snug hover:underline"
                     >
                       {d?.title ?? "Document"}
                     </button>
