@@ -49,6 +49,45 @@ type FakeSynth = {
   addEventListener: () => void;
 };
 
+type FakeAudioSession = {
+  type: string;
+  state: string;
+  requestedTypes: string[];
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+  interrupt: () => void;
+};
+
+function installFakeAudioSession(): FakeAudioSession {
+  const listeners = new Set<() => void>();
+  let currentType = "ambient";
+  const session: FakeAudioSession = {
+    state: "active",
+    requestedTypes: [],
+    get type() { return currentType; },
+    set type(value: string) {
+      session.requestedTypes.push(value);
+      currentType = value;
+    },
+    addEventListener(_type, listener) { listeners.add(listener); },
+    removeEventListener(_type, listener) { listeners.delete(listener); },
+    interrupt() {
+      session.state = "interrupted";
+      listeners.forEach((listener) => listener());
+    },
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X)",
+      maxTouchPoints: 5,
+      language: "en-US",
+      audioSession: session,
+    },
+  });
+  return session;
+}
+
 function installFakeSynth(voices: unknown[] = []): FakeSynth {
   const synth: FakeSynth = {
     spoken: [],
@@ -132,6 +171,22 @@ describe("device sentence speech", () => {
     }
   });
 
+  test("requests transient speech then restores ambient without an exclusive category", () => {
+    const synth = installFakeSynth();
+    const session = installFakeAudioSession();
+    setSpeechEnabled(true);
+
+    expect(speakText("Mix this over music.")).toBe(true);
+    expect(session.requestedTypes).toContain("transient");
+    expect(session.requestedTypes).not.toContain("playback");
+    expect(session.requestedTypes).not.toContain("transient-solo");
+    expect(session.requestedTypes).not.toContain("auto");
+
+    synth.spoken[0]!.onstart?.();
+    synth.spoken[0]!.onend?.();
+    expect(session.type).toBe("ambient");
+  });
+
   test("a new sentence cancels the old one, then speaks the newest", () => {
     const synth = installFakeSynth();
     setSpeechEnabled(true);
@@ -197,6 +252,22 @@ describe("device sentence speech", () => {
     speakText("before backgrounding");
     expect(() => handleAppForeground()).not.toThrow();
     expect(isSpeaking()).toBe(false);
+  });
+
+  test("re-arms transient speech after an iOS audio interruption", () => {
+    const synth = installFakeSynth();
+    const session = installFakeAudioSession();
+    setSpeechEnabled(true);
+    speakText("before interruption");
+    synth.spoken[0]!.onstart?.();
+
+    session.interrupt();
+    session.state = "active";
+    session.requestedTypes.length = 0;
+    expect(speakText("after interruption")).toBe(true);
+    expect(session.requestedTypes).toContain("transient");
+    expect(synth.spoken.at(-1)?.text).toBe("after interruption");
+    cancelSpeech();
   });
 
   test("bails cleanly on a device with no speech support", () => {
