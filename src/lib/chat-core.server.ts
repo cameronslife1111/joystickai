@@ -259,8 +259,37 @@ async function classifyTurn(
     return { route, capabilities: merged, rationale };
   } catch (e) {
     console.warn("[chat classifyTurn] failed", e);
+    // Router unavailable: with planning on, an actionable ask still becomes a plan.
+    if (!auto && caps.planning && looksActionable(latestText)) {
+      return { route: "plan", capabilities: caps, rationale: "" };
+    }
     return { route: "chat", capabilities: caps, rationale: "" };
   }
+}
+
+/**
+ * Cheap check for "this message asks Orby to DO something", used only as a
+ * backstop when multi-step planning is switched on.
+ */
+const ACTION_WORDS = [
+  "make", "create", "add", "write", "rewrite", "draft", "build", "generate",
+  "rename", "retitle", "label", "change", "update", "edit", "fix", "replace",
+  "move", "reorder", "organize", "sort", "delete", "remove", "clear", "clean up",
+  "attach", "link", "unlink", "insert", "append", "split", "merge", "copy",
+  "schedule", "remind", "set up", "put", "save", "upload", "download",
+  "image", "picture", "photo", "video", "render", "upscale", "shrink",
+  "document", "sentence", "chat", "plan", "do it", "go ahead", "start",
+  "keep going", "continue", "handle", "take care of", "send",
+];
+
+function looksActionable(text: string): boolean {
+  const t = (text ?? "").toLowerCase().trim();
+  if (!t) return false;
+  // Pure questions asking for information stay conversational.
+  const isQuestion = t.endsWith("?") || /^(what|why|who|when|where|which|how|is|are|was|were|does|do|did|can you tell|explain|tell me about)\b/.test(t);
+  const hasAction = ACTION_WORDS.some((w) => t.includes(w));
+  if (isQuestion && !/^(can|could|will|would|please)\b/.test(t)) return false;
+  return hasAction;
 }
 
 /**
