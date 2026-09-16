@@ -1,4 +1,9 @@
-import { requestIosMixableSession } from "@/lib/audio-session";
+import {
+  assertMixableSessionWithRetries,
+  onIosAudioSessionInterrupted,
+  requestIosMixableSession,
+  requestIosSpeechSession,
+} from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
@@ -156,6 +161,7 @@ let wasHidden = false;
 /** Set whenever the app was backgrounded: the engine may be wedged. */
 let engineStale = false;
 let resetTimers: ReturnType<typeof setTimeout>[] = [];
+let removeAudioSessionListener: (() => void) | null = null;
 
 function clearResetTimers() {
   for (const timer of resetTimers) clearTimeout(timer);
@@ -197,7 +203,7 @@ export function handleAppForeground() {
   primed = false;
   hardResetEngine();
   primeSpeech();
-  requestIosMixableSession();
+  assertMixableSessionWithRetries();
 }
 
 function pageIsVisible(): boolean {
@@ -233,6 +239,12 @@ function attachForegroundRecovery() {
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener("visibilitychange", onMaybeForeground);
   }
+  removeAudioSessionListener?.();
+  removeAudioSessionListener = onIosAudioSessionInterrupted(() => {
+    engineStale = true;
+    wasHidden = true;
+    cancelSpeech();
+  });
 }
 
 // Attach lifecycle recovery as soon as the module loads in a browser, so a
@@ -255,6 +267,7 @@ export function cancelSpeech() {
   try {
     engine.cancel();
   } catch {}
+  requestIosMixableSession();
 }
 
 export function isSpeaking(): boolean {
@@ -291,7 +304,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Take the audio route back from any held microphone and keep the iOS
   // category mixable so speech layers over the user's music.
   stopMicForPlayback();
-  requestIosMixableSession();
+  requestIosSpeechSession();
 
   // Replace whatever is being read: single cancel, then speak, in the same
   // user-gesture turn so WebKit allows the new utterance to start.
@@ -311,6 +324,9 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   let recoveryAttempts = 0;
 
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
+    // Reassert for every submission: a watchdog retry can happen after iOS has
+    // changed the category during an interruption or microphone hand-back.
+    requestIosSpeechSession();
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.rate = opts.rate ?? SPEECH_RATE;
     if (opts.pitch !== undefined) utterance.pitch = opts.pitch;
@@ -325,6 +341,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       startWatchdog = null;
       audibleSpeaking = false;
       activeUtterance = null;
+      requestIosMixableSession();
       return true;
     };
 
@@ -378,6 +395,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       }
       audibleSpeaking = false;
       activeUtterance = null;
+      requestIosMixableSession();
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
     }, 900);

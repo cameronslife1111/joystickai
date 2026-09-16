@@ -1,6 +1,8 @@
 type AudioSessionLike = {
   type: string;
   state?: string;
+  addEventListener?: (type: "statechange", listener: () => void) => void;
+  removeEventListener?: (type: "statechange", listener: () => void) => void;
 };
 
 let mixableGeneration = 0;
@@ -69,7 +71,25 @@ export function requestIosMixableSession(): boolean {
   if (activeRecordingTokens.size > 0) return false;
   const session = iosAudioSession();
   if (!session) return false;
-  for (const type of ["ambient", "auto"]) {
+  try {
+    session.type = "ambient";
+    return session.type === "ambient";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sentence speech is a short foreground prompt. "transient" asks iOS to layer
+ * it over other audio and, when supported, duck that audio rather than stop it.
+ * Older WebKit builds may reject the type, so ambient is the safe mixable
+ * fallback. Never fall through to auto: WebKit may resolve auto to playback.
+ */
+export function requestIosSpeechSession(): boolean {
+  if (activeRecordingTokens.size > 0) return false;
+  const session = iosAudioSession();
+  if (!session) return false;
+  for (const type of ["transient", "ambient"]) {
     try {
       session.type = type;
       if (session.type === type) return true;
@@ -98,4 +118,15 @@ export function assertMixableSessionWithRetries(): boolean {
 export function iosAudioSessionState() {
   const session = iosAudioSession();
   return session ? { type: session.type, state: session.state ?? "unknown" } : null;
+}
+
+/** Listen for iOS-level interruptions when the experimental event is exposed. */
+export function onIosAudioSessionInterrupted(listener: () => void): () => void {
+  const session = iosAudioSession();
+  if (!session?.addEventListener) return () => {};
+  const onStateChange = () => {
+    if (session.state === "interrupted") listener();
+  };
+  session.addEventListener("statechange", onStateChange);
+  return () => session.removeEventListener?.("statechange", onStateChange);
 }
