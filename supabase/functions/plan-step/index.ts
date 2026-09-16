@@ -957,6 +957,110 @@ const TOOL_HANDLERS: Record<string, any> = {
     if (selErr) throw new Error(selErr.message);
     return ins ? { ...ins, sentences_added: pieces.length } : { sentences_added: pieces.length };
   },
+  async insert_text_after_sentence(args, { user_id, admin }) {
+    const norm = (s: string) =>
+      String(s ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    const stripDecor = (s: string) =>
+      norm(s).replace(/[^\p{Letter}\p{Number} ]/gu, "").replace(/\s+/g, " ").trim();
+
+    const before = String(args.position ?? "after").toLowerCase() === "before";
+    const anchor = String(args.anchor_text ?? "");
+    if (!anchor.trim()) throw new Error("anchor_text is required");
+    const pieces = splitIntoSentences(String(args.text_to_insert ?? ""));
+    if (pieces.length === 0) throw new Error("No text to insert");
+
+    const { data: docRow } = await admin
+      .from("documents")
+      .select("id, title, updated_at")
+      .eq("id", args.document_id)
+      .eq("user_id", user_id)
+      .single();
+    if (!docRow) throw new Error("Document not found");
+
+    const { data: rows, error: rowsErr } = await admin
+      .from("sentences")
+      .select("id, content, order_index")
+      .eq("document_id", args.document_id)
+      .eq("user_id", user_id)
+      .order("order_index", { ascending: true });
+    if (rowsErr) throw new Error(rowsErr.message);
+    const sentences = rows ?? [];
+
+    // Exact match first, then whitespace/case-insensitive, then emoji/punctuation-insensitive.
+    let matches = sentences.filter((s) => String(s.content) === anchor);
+    if (matches.length === 0) matches = sentences.filter((s) => norm(s.content) === norm(anchor));
+    if (matches.length === 0 && stripDecor(anchor))
+      matches = sentences.filter((s) => stripDecor(s.content) === stripDecor(anchor));
+    if (matches.length === 0)
+      throw new Error(
+        `Anchor sentence not found in "${docRow.title}" — nothing was changed. Looked for: ${anchor}`,
+      );
+
+    const occ = Number(args.occurrence ?? 0);
+    let target = matches[0];
+    if (matches.length > 1) {
+      if (!occ)
+        throw new Error(
+          `That sentence appears ${matches.length} times in "${docRow.title}". Nothing was changed — re-run with occurrence (1-${matches.length}) to say which one.`,
+        );
+      if (occ < 1 || occ > matches.length)
+        throw new Error(`occurrence must be between 1 and ${matches.length}`);
+      target = matches[occ - 1];
+    }
+
+    const insertAt = before ? (target.order_index ?? 0) : (target.order_index ?? 0) + 1;
+
+    // Idempotency: if the same text already sits at the destination, do nothing.
+    const existingAt = sentences.filter(
+      (s) => (s.order_index ?? 0) >= insertAt && (s.order_index ?? 0) < insertAt + pieces.length,
+    );
+    const already =
+      existingAt.length === pieces.length &&
+      existingAt.every((s, i) => norm(s.content) === norm(pieces[i]));
+    if (already) {
+      return {
+        document_id: docRow.id,
+        title: docRow.title,
+        anchor_sentence_id: target.id,
+        inserted_text: pieces.join(" "),
+        sentences_added: 0,
+        already_inserted: true,
+      };
+    }
+
+    // Version-conflict guard: bail if the document changed while we were reading it.
+    const { data: fresh } = await admin
+      .from("documents")
+      .select("updated_at")
+      .eq("id", args.document_id)
+      .eq("user_id", user_id)
+      .single();
+    if (fresh && docRow.updated_at && fresh.updated_at !== docRow.updated_at)
+      throw new Error("The document changed while this step was running — nothing was inserted. Retry the step.");
+
+    const { error: rpcErr } = await admin.rpc("insert_sentences_at_as", {
+      p_user_id: user_id,
+      p_document_id: args.document_id,
+      p_contents: pieces,
+      p_insert_at: insertAt,
+    });
+    if (rpcErr) throw new Error(rpcErr.message);
+
+    return {
+      document_id: docRow.id,
+      title: docRow.title,
+      anchor_sentence_id: target.id,
+      anchor_text: target.content,
+      position: before ? "before" : "after",
+      inserted_text: pieces.join(" "),
+      insert_at: insertAt,
+      sentences_added: pieces.length,
+      already_inserted: false,
+    };
+  },
   async update_sentence_content(args, { user_id, admin }) {
     const pieces = splitIntoSentences(String(args.new_content ?? ""));
     if (pieces.length === 0) throw new Error("No content to write");
