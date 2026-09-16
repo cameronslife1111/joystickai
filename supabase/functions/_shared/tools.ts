@@ -418,6 +418,65 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "create_chat",
+    description:
+      "Create a NEW chat thread for the user (same as pressing New chat). Returns { id, title }. The new chat starts with the standard capabilities. Use this only when the user wants a separate chat; never create a chat just to link a sentence to one.",
+    args: {
+      title: { type: "string", description: "Title for the new chat", required: true },
+    },
+  },
+  {
+    name: "rename_chat",
+    description:
+      "Rename an existing chat thread. Identify the chat with EITHER a concrete thread_id (from the CHAT CATALOG in the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template) OR a loose `chat` description which is fuzzy-matched against the user's chat titles. Returns { id, title }.",
+    args: {
+      new_title: { type: "string", description: "New chat title", required: true },
+      thread_id: { type: "string", description: "UUID of the chat thread (preferred when known)", required: false },
+      chat: { type: "string", description: "Loose chat name/description to fuzzy-match instead of thread_id", required: false },
+    },
+  },
+  {
+    name: "list_chat_attachments",
+    description:
+      "List the documents attached to a chat thread. Returns { thread_id, title, documents: [{ id, title }] }. Identify the chat with thread_id or a loose `chat` description.",
+    args: {
+      thread_id: { type: "string", description: "UUID of the chat thread", required: false },
+      chat: { type: "string", description: "Loose chat name/description to fuzzy-match instead of thread_id", required: false },
+    },
+  },
+  {
+    name: "attach_documents_to_chat",
+    description:
+      "Attach one or more documents to a chat thread (the same list the paperclip shows). Existing attachments are kept and duplicates ignored. Returns the resulting attachment list. Identify the chat with thread_id or a loose `chat` description, and pass document ids as a JSON array of UUIDs (from the WORKSPACE SNAPSHOT or {{step_N.result.id}} templates).",
+    args: {
+      document_ids: { type: "string", description: "JSON array of document UUIDs to attach", required: true },
+      thread_id: { type: "string", description: "UUID of the chat thread", required: false },
+      chat: { type: "string", description: "Loose chat name/description to fuzzy-match instead of thread_id", required: false },
+    },
+  },
+  {
+    name: "remove_documents_from_chat",
+    description:
+      "Remove one or more attached documents from a chat thread. The documents themselves are untouched. Returns the resulting attachment list. Identify the chat with thread_id or a loose `chat` description.",
+    args: {
+      document_ids: { type: "string", description: "JSON array of document UUIDs to detach", required: true },
+      thread_id: { type: "string", description: "UUID of the chat thread", required: false },
+      chat: { type: "string", description: "Loose chat name/description to fuzzy-match instead of thread_id", required: false },
+    },
+  },
+  {
+    name: "ask_chat",
+    description:
+      "Send a message into ANOTHER of the user's chats exactly as if the user had typed it there, wait for that chat's reply, and bring the reply back into this plan. The target chat answers with ITS OWN capabilities and its own attached documents, so use this to hand a job to a chat already set up for it. " +
+      "Identify the target with thread_id or a loose `chat` description (fuzzy-matched on chat titles). NEVER target the chat this plan was started from — for an update in the current chat use send_chat_message instead. " +
+      "Returns { thread_id, title, reply, timed_out }. Pipe the answer into later steps with {{step_N.result.reply}}. If the other chat is slow, the step returns timed_out: true with reply null after about 3 minutes; the message is still delivered and the reply lands in that chat.",
+    args: {
+      message: { type: "string", description: "What to say to the other chat, written as the user would type it", required: true },
+      thread_id: { type: "string", description: "UUID of the target chat thread", required: false },
+      chat: { type: "string", description: "Loose chat name/description to fuzzy-match instead of thread_id", required: false },
+    },
+  },
+  {
     name: "resolve_command",
     description:
       "Run ONE command in the user's local DaVinci Resolve through the Orby bridge (MCP). Use one step per Resolve action and sequence them: inspect first (get_project_info / get_timeline_info / list_tracks / list_timeline_clips / list_media_pool_clips), then build (create_timeline, set_timeline_aspect, import_media, append_clip_to_timeline), then treat (add_fusion_effect for a delta keyer / green-screen removal, grade_clip, apply_lut, the set_clip_* properties, track enable/disable/lock/mute), then export (render_timeline, then get_render_status). " +
@@ -489,6 +548,13 @@ export const TOOL_GROUPS: Record<string, string> = {
   resolve_command: "davinci_resolve",
   // virtual_computer — a temporary cloud browser Orby drives (never the user's own machine)
   virtual_computer_task: "virtual_computer",
+  // chat_control — manage the user's other chats and talk to them
+  create_chat: "chat_control",
+  rename_chat: "chat_control",
+  list_chat_attachments: "chat_control",
+  attach_documents_to_chat: "chat_control",
+  remove_documents_from_chat: "chat_control",
+  ask_chat: "chat_control",
 };
 
 
