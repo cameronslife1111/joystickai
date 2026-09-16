@@ -103,6 +103,8 @@ interface Props {
   onOpenDocument?: (documentId: string) => void;
   /** The open chat was deleted from inside the chat window. */
   onThreadDeleted?: () => void;
+  /** Green ➡ button: jump to the next sentence in this document with a linked chat. */
+  onNextLinkedChat?: () => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
    * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
