@@ -174,6 +174,14 @@ async function classifyTurn(
     "4. Short confirmations (\"ok do it\", \"go ahead\", \"yes\", \"start\") are \"plan\" when the conversation just agreed on work to do.\n" +
     "5. capabilities: list every capability the work genuinely needs, and nothing else. For \"plan\", always include \"planning\" when there is more than one step. For \"chat\" return an empty list. For \"web\" return [\"web_search\"].\n" +
     "6. rationale: one short plain-text sentence naming the task you detected. No markdown.\n" +
+    (!auto && caps.planning
+      ? "7. MULTI-STEP PLANNING IS SWITCHED ON for this message. The user does not have to say \"make a plan\" — " +
+        "having it on means they want work done through a plan. Default to \"plan\" for ANY message that asks you to " +
+        "make, create, add, write, rename, change, edit, move, delete, organize, generate, schedule, find-and-do, " +
+        "or handle something — however casually it is phrased, and even if it sounds like one small step. " +
+        "Choose \"chat\" ONLY for a pure question, an explanation request, an opinion, a greeting, or small talk that " +
+        "asks for no change and no creation whatsoever. When in doubt, choose \"plan\".\n"
+      : "") +
     (userOn.length
       ? `The user explicitly switched these on for this message, so they are definitely wanted: ${userOn.join(", ")}.\n`
       : "") +
