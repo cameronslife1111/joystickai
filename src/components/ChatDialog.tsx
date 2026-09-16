@@ -1820,7 +1820,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setSettingsOpen(true)}
                 className="h-9 w-9 shrink-0"
               >
-                <SettingsIcon className="h-4 w-4" />
+                <SettingsIcon className="h-4 w-4 text-zinc-400" />
               </Button>
               <Button
                 size="icon"
@@ -1837,7 +1837,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 ) : voice.live ? (
                   <PhoneOff className="h-4 w-4" />
                 ) : (
-                  <Phone className="h-4 w-4" />
+                  <Phone className="h-4 w-4 text-green-500" />
                 )}
               </Button>
               <Button
@@ -1866,7 +1866,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   setRenameValue(activeThread.title);
                 }}
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-4 w-4 text-yellow-400" />
               </Button>
               <Button
                 size="icon"
@@ -1878,7 +1878,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setDocPickerOpen(true)}
                 className="relative h-9 w-9 shrink-0"
               >
-                <Paperclip className="h-4 w-4" />
+                <Paperclip className="h-4 w-4 text-blue-400" />
                 {contextDocIds.length > 0 && (
                   <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
                     {contextDocIds.length}
@@ -1895,7 +1895,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setDocTitlePickerOpen(true)}
                 className="h-9 w-9 shrink-0"
               >
-                <Quote className="h-4 w-4" />
+                <Quote className="h-4 w-4 text-orange-400" />
               </Button>
               <Button
                 size="icon"
@@ -1907,7 +1907,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 onClick={() => setTitlePickerOpen(true)}
                 className="h-9 w-9 shrink-0"
               >
-                <Type className="h-4 w-4" />
+                <Type className="h-4 w-4 text-purple-400" />
               </Button>
             </div>
 
