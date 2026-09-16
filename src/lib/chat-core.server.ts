@@ -266,6 +266,7 @@ async function classifyTurn(
           image_generation: caps.image_generation || wanted.has("image_generation"),
           video_generation: caps.video_generation || wanted.has("video_generation"),
           scheduling: caps.scheduling || wanted.has("scheduling"),
+          chat_control: caps.chat_control || wanted.has("chat_control"),
         }
       : { ...caps };
 
