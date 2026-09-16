@@ -262,7 +262,7 @@ describe("device sentence speech", () => {
     expect(isSpeaking()).toBe(false);
   });
 
-  test("re-arms transient speech after an iOS audio interruption", () => {
+  test("re-arms speech after an iOS audio interruption without claiming a category", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     setSpeechEnabled(true);
@@ -273,7 +273,7 @@ describe("device sentence speech", () => {
     session.state = "active";
     session.requestedTypes.length = 0;
     expect(speakText("after interruption")).toBe(true);
-    expect(session.requestedTypes).toContain("transient");
+    expect(session.requestedTypes).toEqual([]);
     expect(synth.spoken.at(-1)?.text).toBe("after interruption");
     cancelSpeech();
   });
