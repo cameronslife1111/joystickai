@@ -20,7 +20,7 @@ import { sendTextToChatThread, createChatThread } from "@/lib/chat-send";
 import { useVoiceDictation, appendTranscript } from "@/lib/use-voice-dictation";
 import { ChatDialog } from "@/components/ChatDialog";
 import { HandsFreeProvider, HandsFreeIndicator } from "@/lib/hands-free";
-import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SentenceText } from "@/components/SentenceText";
@@ -123,7 +123,7 @@ function AppPageInner() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [soundSettingsOpen, setSoundSettingsOpen] = useState(false);
+  
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   /** What a single press on the sentence does. Remembered on this device. */
   const [tapMode, setTapMode] = useState<"editor" | "sentence">(() => {
@@ -899,7 +899,6 @@ function AppPageInner() {
     chatOpen ||
     planApprovalOpen ||
     plansScreenOpen ||
-    soundSettingsOpen ||
     themeSheetOpen ||
     pinPickerOpen ||
     exportChooserOpen;
@@ -1599,8 +1598,7 @@ function AppPageInner() {
       if (editing || quickEditing || composing) return;
 
       // Close the topmost open popup first (nested sheets before their parents).
-      if (soundSettingsOpen) setSoundSettingsOpen(false);
-      else if (themeSheetOpen) setThemeSheetOpen(false);
+      if (themeSheetOpen) setThemeSheetOpen(false);
       else if (pinPickerOpen) setPinPickerOpen(false);
       else if (exportChooserOpen) setExportChooserOpen(false);
       else if (linkPickerOpen) setLinkPickerOpen(false);
@@ -1625,7 +1623,7 @@ function AppPageInner() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     editing, quickEditing, composing,
-    soundSettingsOpen, themeSheetOpen, pinPickerOpen, exportChooserOpen,
+    themeSheetOpen, pinPickerOpen, exportChooserOpen,
     linkPickerOpen, sendOpen, planApprovalOpen, plansScreenOpen,
     moveOpen, jumpOpen, renameOpen, newDocOpen, deleteDocOpen,
     searchOpen, recentOpen, favoritesOpen, chatOpen, menuOpen,
