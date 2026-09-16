@@ -1825,12 +1825,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 size="icon"
                 variant="ghost"
                 type="button"
-                aria-label="Chat settings"
-                title="Chat settings"
+                aria-label={enabledCapCount > 0 ? `Chat settings: ${enabledCapCount} capabilities on` : "Chat settings"}
+                title={enabledCapCount > 0 ? `${enabledCapCount} capabilities on` : "Chat settings"}
                 onClick={() => setSettingsOpen(true)}
-                className="h-9 w-9 shrink-0"
+                className="relative h-9 w-9 shrink-0"
               >
                 <SettingsIcon className="h-4 w-4 text-zinc-400" />
+                {enabledCapCount > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground">
+                    {enabledCapCount}
+                  </span>
+                )}
               </Button>
               <Button
                 size="icon"
