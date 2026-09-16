@@ -174,6 +174,14 @@ async function classifyTurn(
     "4. Short confirmations (\"ok do it\", \"go ahead\", \"yes\", \"start\") are \"plan\" when the conversation just agreed on work to do.\n" +
     "5. capabilities: list every capability the work genuinely needs, and nothing else. For \"plan\", always include \"planning\" when there is more than one step. For \"chat\" return an empty list. For \"web\" return [\"web_search\"].\n" +
     "6. rationale: one short plain-text sentence naming the task you detected. No markdown.\n" +
+    (!auto && caps.planning
+      ? "7. MULTI-STEP PLANNING IS SWITCHED ON for this message. The user does not have to say \"make a plan\" — " +
+        "having it on means they want work done through a plan. Default to \"plan\" for ANY message that asks you to " +
+        "make, create, add, write, rename, change, edit, move, delete, organize, generate, schedule, find-and-do, " +
+        "or handle something — however casually it is phrased, and even if it sounds like one small step. " +
+        "Choose \"chat\" ONLY for a pure question, an explanation request, an opinion, a greeting, or small talk that " +
+        "asks for no change and no creation whatsoever. When in doubt, choose \"plan\".\n"
+      : "") +
     (userOn.length
       ? `The user explicitly switched these on for this message, so they are definitely wanted: ${userOn.join(", ")}.\n`
       : "") +
@@ -239,13 +247,49 @@ async function classifyTurn(
       merged.document_editing = true;
     }
 
+    // Safety net: with multi-step planning switched on, an actionable request
+    // must never fall back to a plain text answer just because the router was
+    // hesitant. The user shouldn't have to say "make a plan".
+    if (!auto && caps.planning && route !== "plan" && looksActionable(latestText)) {
+      route = "plan";
+    }
+
 
     const rationale = typeof parsed?.rationale === "string" ? parsed.rationale.trim().slice(0, 400) : "";
     return { route, capabilities: merged, rationale };
   } catch (e) {
     console.warn("[chat classifyTurn] failed", e);
+    // Router unavailable: with planning on, an actionable ask still becomes a plan.
+    if (!auto && caps.planning && looksActionable(latestText)) {
+      return { route: "plan", capabilities: caps, rationale: "" };
+    }
     return { route: "chat", capabilities: caps, rationale: "" };
   }
+}
+
+/**
+ * Cheap check for "this message asks Orby to DO something", used only as a
+ * backstop when multi-step planning is switched on.
+ */
+const ACTION_WORDS = [
+  "make", "create", "add", "write", "rewrite", "draft", "build", "generate",
+  "rename", "retitle", "label", "change", "update", "edit", "fix", "replace",
+  "move", "reorder", "organize", "sort", "delete", "remove", "clear", "clean up",
+  "attach", "link", "unlink", "insert", "append", "split", "merge", "copy",
+  "schedule", "remind", "set up", "put", "save", "upload", "download",
+  "image", "picture", "photo", "video", "render", "upscale", "shrink",
+  "document", "sentence", "chat", "plan", "do it", "go ahead", "start",
+  "keep going", "continue", "handle", "take care of", "send",
+];
+
+function looksActionable(text: string): boolean {
+  const t = (text ?? "").toLowerCase().trim();
+  if (!t) return false;
+  // Pure questions asking for information stay conversational.
+  const isQuestion = t.endsWith("?") || /^(what|why|who|when|where|which|how|is|are|was|were|does|do|did|can you tell|explain|tell me about)\b/.test(t);
+  const hasAction = ACTION_WORDS.some((w) => t.includes(w));
+  if (isQuestion && !/^(can|could|will|would|please)\b/.test(t)) return false;
+  return hasAction;
 }
 
 /**
