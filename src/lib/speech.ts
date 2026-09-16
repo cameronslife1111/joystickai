@@ -1,9 +1,4 @@
-import {
-  assertMixableSessionWithRetries,
-  onIosAudioSessionInterrupted,
-  requestIosMixableSession,
-  requestIosSpeechSession,
-} from "@/lib/audio-session";
+import { onIosAudioSessionInterrupted } from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
