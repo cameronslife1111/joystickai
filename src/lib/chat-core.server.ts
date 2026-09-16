@@ -16,6 +16,33 @@ import {
   type ChatTurnInput,
 } from "./chat-types";
 
+/**
+ * Advance a plan immediately (same call the cron tick makes). Used right after a
+ * paused plan gets its answer so the user sees it continue without waiting for
+ * the next tick — and so it continues even with the app closed.
+ */
+async function kickPlan(planId: string, userId: string): Promise<void> {
+  const SUPABASE_URL = process.env["SUPABASE_URL"];
+  const SERVICE_ROLE_KEY = process.env["SUPABASE_SERVICE_ROLE_KEY"];
+  const PLAN_TICK_SECRET = process.env["PLAN_TICK_SECRET"];
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !PLAN_TICK_SECRET || !userId) return;
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/plan-step`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+      },
+      body: JSON.stringify({ plan_id: planId, user_id: userId, internal_secret: PLAN_TICK_SECRET }),
+      signal: AbortSignal.timeout(25_000),
+    });
+  } catch (err) {
+    // The cron tick will pick the plan up shortly; never fail the chat turn here.
+    console.warn("[chat resume] plan kick failed", err);
+  }
+}
+
 async function buildContext(
   supabase: any,
   contextDocumentIds: string[],
