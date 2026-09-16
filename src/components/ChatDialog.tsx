@@ -516,12 +516,51 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     },
   });
 
+  /**
+   * Per-chat status for the list dots, from one database call:
+   * "approval" (🟣 plan waiting) > "working" (🟡 busy) > "empty" (⚪ no
+   * messages) > "done" (🟢 has replies). Polled while the chat is open so a
+   * background plan flipping a chat to "approval" shows up on its own.
+   */
+  const { data: threadStatuses = {} } = useQuery({
+    queryKey: ["chat_thread_statuses", userId],
+    enabled: !!userId && open,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+    queryFn: async (): Promise<Record<string, string>> => {
+      const { data, error } = await (supabase as any).rpc("chat_thread_statuses");
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const r of (data ?? []) as { thread_id: string; status: string }[]) {
+        map[r.thread_id] = r.status;
+      }
+      return map;
+    },
+  });
+
   /** Threads with work in flight — local optimism plus queued server turns. */
   const busyThreads = useMemo(() => {
     const set = new Set(busyThreadIds);
     for (const t of pendingTurns) if (t.thread_id) set.add(t.thread_id);
     return set;
   }, [busyThreadIds, pendingTurns]);
+
+  /**
+   * List-dot status for a thread. Local optimism wins so a chat you just
+   * messaged shows yellow immediately, before the status call catches up.
+   */
+  const threadDotStatus = (threadId: string): "approval" | "working" | "empty" | "done" => {
+    if (busyThreads.has(threadId)) return "working";
+    const s = threadStatuses[threadId];
+    if (s === "approval" || s === "working" || s === "done") return s;
+    return "empty";
+  };
+  const THREAD_DOT: Record<string, { cls: string; label: string }> = {
+    approval: { cls: "bg-purple-500", label: "Plan needs approval" },
+    working: { cls: "bg-yellow-400", label: "Orby is working in this chat" },
+    done: { cls: "bg-green-500", label: "Chat has replies" },
+    empty: { cls: "bg-muted-foreground/35", label: "Empty chat" },
+  };
 
   /**
    * Nothing may think forever. The server's queued-turn list is the truth: a
@@ -2155,6 +2194,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             isUnread(t) ? "font-semibold text-foreground" : ""
                           }`}
                         >
+                          <span
+                            aria-label={THREAD_DOT[threadDotStatus(t.id)].label}
+                            title={THREAD_DOT[threadDotStatus(t.id)].label}
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${THREAD_DOT[threadDotStatus(t.id)].cls}`}
+                          />
                           {isUnread(t) && (
                             <span
                               aria-label="Unread"

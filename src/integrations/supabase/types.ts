@@ -1082,6 +1082,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      chat_thread_statuses: {
+        Args: never
+        Returns: {
+          status: string
+          thread_id: string
+        }[]
+      }
       claim_due_schedule: {
         Args: { p_id: string }
         Returns: {
