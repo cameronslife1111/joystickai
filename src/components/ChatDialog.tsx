@@ -1000,7 +1000,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     const last = [...own].reverse().find((m) => m.role === "assistant" && m.content?.trim());
     if (last) speakMessage(last.id, last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, autoSpeak, activeThreadId, drawerOpen, messages]);
+  }, [open, autoSpeak, activeThreadId, openThreadId, drawerOpen, messages]);
 
   /**
    * Pull in replies the server finished. A turn leaving the pending list means
