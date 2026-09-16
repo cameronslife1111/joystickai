@@ -19,6 +19,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "scheduling",
   "web_search",
   "davinci_resolve",
+  "chat_control",
 ];
 
 

@@ -175,6 +175,7 @@ const DEFAULT_CAPS: ChatCapabilities = {
   scheduling: true,
   davinci_resolve: false,
   virtual_computer: false,
+  chat_control: false,
 };
 
 /** Nothing checked → Orby just replies with text. */
@@ -188,6 +189,7 @@ const NO_CAPS: ChatCapabilities = {
   scheduling: false,
   davinci_resolve: false,
   virtual_computer: false,
+  chat_control: false,
 };
 
 
@@ -210,6 +212,11 @@ const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[]
     label: "🖥️ Virtual Computer",
     hint: "Orby uses a temporary cloud browser — never your own computer",
   },
+  {
+    key: "chat_control",
+    label: "💬 Chat control",
+    hint: "Create & rename chats, change their documents, ask another chat",
+  },
 ];
 
 // action groups that map to plan tool groups
@@ -221,6 +228,7 @@ const ACTION_TOOL_GROUPS: (keyof ChatCapabilities)[] = [
   "web_search",
   "davinci_resolve",
   "virtual_computer",
+  "chat_control",
 ];
 
 
