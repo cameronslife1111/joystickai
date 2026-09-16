@@ -1,9 +1,4 @@
-import {
-  assertMixableSessionWithRetries,
-  onIosAudioSessionInterrupted,
-  requestIosMixableSession,
-  requestIosSpeechSession,
-} from "@/lib/audio-session";
+import { onIosAudioSessionInterrupted } from "@/lib/audio-session";
 import { stopMicForPlayback } from "@/lib/audio-recorder";
 
 type SpeakOpts = {
@@ -203,7 +198,6 @@ export function handleAppForeground() {
   primed = false;
   hardResetEngine();
   primeSpeech();
-  assertMixableSessionWithRetries();
 }
 
 function pageIsVisible(): boolean {
@@ -267,7 +261,6 @@ export function cancelSpeech() {
   try {
     engine.cancel();
   } catch {}
-  requestIosMixableSession();
 }
 
 export function isSpeaking(): boolean {
@@ -301,32 +294,29 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   attachPrimer();
   if (!primed) primeSpeech();
-  // Take the audio route back from any held microphone and keep the iOS
-  // category mixable so speech layers over the user's music.
+  // Hand back a microphone that is finished or abandoned. A live recording is
+  // left alone — recording flows cancel speech, so this never cuts a take.
   stopMicForPlayback();
-  requestIosSpeechSession();
 
   // Replace whatever is being read: single cancel, then speak, in the same
-  // user-gesture turn so WebKit allows the new utterance to start.
+  // user-gesture turn so WebKit allows the new utterance to start. Always
+  // resume + cancel first: after an app switch, a call, or a recording, the
+  // queue can be suspended or holding a phantom utterance.
   cancelSpeech();
-  if (engineStale) {
-    // First press after coming back from another app: the queue can still be
-    // suspended or holding a phantom utterance. Resume + cancel before speaking.
-    engineStale = false;
-    try {
-      if (engine.paused) engine.resume();
-    } catch {}
-    try {
-      engine.cancel();
-    } catch {}
-  }
+  engineStale = false;
+  try {
+    if (engine.paused) engine.resume();
+  } catch {}
+  try {
+    engine.cancel();
+  } catch {}
   const sequence = requestSequence;
   let recoveryAttempts = 0;
 
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
-    // Reassert for every submission: a watchdog retry can happen after iOS has
-    // changed the category during an interruption or microphone hand-back.
-    requestIosSpeechSession();
+    // No audio-session category is requested anywhere in this path: the device
+    // speech engine owns its own session, which is what keeps it audible with
+    // the ring switch on and layered over other apps' audio.
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.rate = opts.rate ?? SPEECH_RATE;
     if (opts.pitch !== undefined) utterance.pitch = opts.pitch;
@@ -341,7 +331,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       startWatchdog = null;
       audibleSpeaking = false;
       activeUtterance = null;
-      requestIosMixableSession();
       return true;
     };
 
@@ -395,7 +384,6 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       }
       audibleSpeaking = false;
       activeUtterance = null;
-      requestIosMixableSession();
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
     }, 900);

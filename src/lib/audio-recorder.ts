@@ -351,13 +351,19 @@ function teardownWarm(bumpGeneration: boolean, restoreSession = true) {
 }
 
 /**
- * Synchronously stop any held or half-closed microphone so speech playback can
- * take the audio route immediately. Callers only speak when no recording is
- * active (recording flows cancel speech first), so this never kills a live
- * take — it finishes teardown without waiting on WebKit's timers.
+ * Synchronously hand a finished or abandoned microphone back so speech can use
+ * the audio route immediately. A genuinely live recording is left untouched:
+ * reading a sentence must never cut a take that is still capturing.
  */
 export function stopMicForPlayback(): void {
+  if (activeRecorders > 0) return;
+  if (!warm) return;
   teardownWarm(true);
+}
+
+/** True while at least one recording is actively capturing audio. */
+export function isRecordingLive(): boolean {
+  return activeRecorders > 0;
 }
 
 /** Fully release the microphone (call when leaving the screen). */

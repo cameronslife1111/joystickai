@@ -171,20 +171,28 @@ describe("device sentence speech", () => {
     }
   });
 
-  test("requests transient speech then restores ambient without an exclusive category", () => {
+  test("requests no audio category at all and creates no audio element", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
-    setSpeechEnabled(true);
-
-    expect(speakText("Mix this over music.")).toBe(true);
-    expect(session.requestedTypes).toContain("transient");
-    expect(session.requestedTypes).not.toContain("playback");
-    expect(session.requestedTypes).not.toContain("transient-solo");
-    expect(session.requestedTypes).not.toContain("auto");
-
-    synth.spoken[0]!.onstart?.();
-    synth.spoken[0]!.onend?.();
-    expect(session.type).toBe("ambient");
+    const win = globalThis as unknown as Record<string, unknown>;
+    const originalAudio = win["Audio"];
+    let audioElements = 0;
+    win["Audio"] = class { constructor() { audioElements += 1; } };
+    try {
+      setSpeechEnabled(true);
+      expect(speakText("Mix this over music.")).toBe(true);
+      synth.spoken[0]!.onstart?.();
+      synth.spoken[0]!.onend?.();
+      // The device speech engine owns its own session; touching the page's
+      // category is what puts speech on the ring-switch channel.
+      expect(session.requestedTypes).toEqual([]);
+      expect(session.type).toBe("ambient");
+      expect(audioElements).toBe(0);
+    } finally {
+      if (originalAudio === undefined) delete win["Audio"];
+      else win["Audio"] = originalAudio;
+      cancelSpeech();
+    }
   });
 
   test("a new sentence cancels the old one, then speaks the newest", () => {
@@ -254,7 +262,7 @@ describe("device sentence speech", () => {
     expect(isSpeaking()).toBe(false);
   });
 
-  test("re-arms transient speech after an iOS audio interruption", () => {
+  test("re-arms speech after an iOS audio interruption without claiming a category", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     setSpeechEnabled(true);
@@ -265,7 +273,7 @@ describe("device sentence speech", () => {
     session.state = "active";
     session.requestedTypes.length = 0;
     expect(speakText("after interruption")).toBe(true);
-    expect(session.requestedTypes).toContain("transient");
+    expect(session.requestedTypes).toEqual([]);
     expect(synth.spoken.at(-1)?.text).toBe("after interruption");
     cancelSpeech();
   });
