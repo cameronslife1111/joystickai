@@ -247,6 +247,13 @@ async function classifyTurn(
       merged.document_editing = true;
     }
 
+    // Safety net: with multi-step planning switched on, an actionable request
+    // must never fall back to a plain text answer just because the router was
+    // hesitant. The user shouldn't have to say "make a plan".
+    if (!auto && caps.planning && route !== "plan" && looksActionable(latestText)) {
+      route = "plan";
+    }
+
 
     const rationale = typeof parsed?.rationale === "string" ? parsed.rationale.trim().slice(0, 400) : "";
     return { route, capabilities: merged, rationale };
