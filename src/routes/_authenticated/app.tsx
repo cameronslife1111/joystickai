@@ -1333,6 +1333,37 @@ function AppPageInner() {
     return true;
   }, [currentSentence?.linked_thread_id, claimSpeech]);
 
+  /**
+   * Green ➡ button inside an open chat: jump straight to the next sentence in
+   * this document that has a linked chat and open that chat, without going
+   * back to the document first. Wraps around to the start.
+   */
+  const goToNextLinkedChat = useCallback(async (): Promise<boolean> => {
+    const list = sentences ?? [];
+    if (list.length === 0) return false;
+    const start = Math.max(0, Math.min(currentIdx, list.length - 1));
+    for (let step = 1; step <= list.length; step++) {
+      const s = list[(start + step) % list.length];
+      const threadId = s?.linked_thread_id;
+      if (!threadId) continue;
+      const { data: row } = await supabase
+        .from("chat_threads")
+        .select("id")
+        .eq("id", threadId)
+        .maybeSingle();
+      if (!row) continue;
+      void setIndex((start + step) % list.length);
+      claimSpeech();
+      cancelSpeech();
+      setPendingChatThreadId(threadId);
+      setChatStartInList(false);
+      setChatOpen(true);
+      return true;
+    }
+    toast.error("No other linked chats in this document");
+    return false;
+  }, [sentences, currentIdx, setIndex, claimSpeech]);
+
   // Auto-open a sentence's linked chat when the preference is on — but ONLY when
   // the move came from the green (next document) button. Arrow buttons and every
   // other navigation must never auto-open a chat.
