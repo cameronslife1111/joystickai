@@ -1927,6 +1927,17 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </div>
 
             <div className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {enabledCapCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearCaps}
+                  aria-label="Clear capabilities"
+                  title="Clear capabilities"
+                  className="shrink-0 rounded-full border border-foreground/15 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                >
+                  ✕ Clear capabilities
+                </button>
+              )}
               <SettingsIcon className="h-3 w-3" />
               {enabledCapCount === 0
                 ? "Text reply"
