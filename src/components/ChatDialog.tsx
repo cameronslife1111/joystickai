@@ -516,6 +516,28 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     },
   });
 
+  /**
+   * Per-chat status for the list dots, from one database call:
+   * "approval" (🟣 plan waiting) > "working" (🟡 busy) > "empty" (⚪ no
+   * messages) > "done" (🟢 has replies). Polled while the chat is open so a
+   * background plan flipping a chat to "approval" shows up on its own.
+   */
+  const { data: threadStatuses = {} } = useQuery({
+    queryKey: ["chat_thread_statuses", userId],
+    enabled: !!userId && open,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+    queryFn: async (): Promise<Record<string, string>> => {
+      const { data, error } = await (supabase as any).rpc("chat_thread_statuses");
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      for (const r of (data ?? []) as { thread_id: string; status: string }[]) {
+        map[r.thread_id] = r.status;
+      }
+      return map;
+    },
+  });
+
   /** Threads with work in flight — local optimism plus queued server turns. */
   const busyThreads = useMemo(() => {
     const set = new Set(busyThreadIds);
