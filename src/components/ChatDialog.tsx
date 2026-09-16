@@ -2194,6 +2194,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             isUnread(t) ? "font-semibold text-foreground" : ""
                           }`}
                         >
+                          <span
+                            aria-label={THREAD_DOT[threadDotStatus(t.id)].label}
+                            title={THREAD_DOT[threadDotStatus(t.id)].label}
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${THREAD_DOT[threadDotStatus(t.id)].cls}`}
+                          />
                           {isUnread(t) && (
                             <span
                               aria-label="Unread"
