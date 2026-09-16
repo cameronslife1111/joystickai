@@ -103,6 +103,8 @@ interface Props {
   onOpenDocument?: (documentId: string) => void;
   /** The open chat was deleted from inside the chat window. */
   onThreadDeleted?: () => void;
+  /** Green ➡ button: jump to the next sentence in this document with a linked chat. */
+  onNextLinkedChat?: () => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
    * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
@@ -292,7 +294,7 @@ type PendingTurn = {
   created_at?: string | null;
 };
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, delegate }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, delegate }: Props) {
   const qc = useQueryClient();
   const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
@@ -2112,16 +2114,28 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </div>
           </div>
 
-          {/* Back button — matches the grid menu's bottom back button */}
-          <div className="border-t border-foreground/10 p-3">
+          {/* Back button — matches the grid menu's bottom back button. Next to it,
+              a narrow green ➡ jumps to the next linked chat in this document. */}
+          <div className="flex items-center gap-2 border-t border-foreground/10 p-3">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label="Close chat"
-              className="flex w-full items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 transition hover:bg-card hover:text-foreground"
+              className="flex flex-1 items-center justify-center rounded-2xl border border-foreground/10 bg-card/60 py-3 text-foreground/80 transition hover:bg-card hover:text-foreground"
             >
               <span className="text-lg">←</span>
             </button>
+            {onNextLinkedChat && activeThreadId && (
+              <button
+                type="button"
+                onClick={() => onNextLinkedChat()}
+                aria-label="Next linked chat"
+                title="Next linked chat in this document"
+                className="flex w-[15%] shrink-0 items-center justify-center rounded-2xl border border-green-500/40 bg-green-600/80 py-3 text-white transition hover:bg-green-600"
+              >
+                <span className="text-lg">→</span>
+              </button>
+            )}
           </div>
 
           {/* Threads list — fills the whole chat panel */}
