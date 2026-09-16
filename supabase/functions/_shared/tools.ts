@@ -101,6 +101,20 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "insert_text_after_sentence",
+    description:
+      "Insert new text immediately AFTER (or before) an exact existing sentence in a document, leaving every other sentence, emoji, character and order untouched. Use this whenever the user says 'add X right after Y' / 'put this under that line'. " +
+      "document_id is REQUIRED and must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template. anchor_text must be the target sentence's text (exact text preferred; trimmed/emoji-insensitive matching is attempted as a fallback). " +
+      "Fails with a clear error and changes nothing if the anchor is not found. If the anchor appears more than once, it fails and asks for an occurrence number unless `occurrence` is given (1-based). Safe to retry: if the text is already in place next to the anchor it reports already_inserted and inserts nothing.",
+    args: {
+      document_id: { type: "string", description: "Target document UUID", required: true },
+      anchor_text: { type: "string", description: "The existing sentence to anchor on", required: true },
+      text_to_insert: { type: "string", description: "The text to insert (may contain several sentences)", required: true },
+      position: { type: "string", description: "'after' (default) | 'before'", required: false },
+      occurrence: { type: "number", description: "1-based occurrence of the anchor when it appears more than once", required: false },
+    },
+  },
+  {
     name: "update_sentence_content",
     description: "Rewrite the content of an existing sentence. The target sentence_id is REQUIRED and must be a concrete sentence id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template; never rely on an implied or 'previous' sentence.",
     args: {
