@@ -115,6 +115,20 @@ ${
     : ""
 }
 
+${
+  !allowedGroups || allowedGroups.includes("chat_control")
+    ? `CHAT CONTROL (managing the user's other chats) — create_chat, rename_chat, list_chat_attachments, attach_documents_to_chat, remove_documents_from_chat, ask_chat:
+- ONE action per step. "Make five chats called A..E" → five create_chat steps, one per title. "Rename the DaVinci one to X" → one rename_chat step.
+- RESOLVE THE CHAT FIRST. Every chat tool except create_chat needs either a concrete thread_id from the CHAT CATALOG in the WORKSPACE SNAPSHOT, a {{step_N.result.id}} template from an earlier create_chat / find_chat_by_title step, or a loose "chat" description which is fuzzy-matched on chat titles. Prefer a concrete id when the snapshot shows one.
+- CREATE THEN RENAME: if a plan creates chats and then renames them, template the new ids forward — rename_chat with thread_id: "{{step_0.result.id}}". Never rename by guessing a title that doesn't exist yet.
+- attach_documents_to_chat / remove_documents_from_chat take document_ids as a JSON array of resolved document UUIDs, e.g. ["{{step_1.result.id}}"]. Existing attachments are kept; the documents themselves are never changed.
+- ask_chat hands a job to ANOTHER chat: it sends the message as if the user typed it there, that chat answers with its own capabilities and attachments, and the reply comes back as {{step_N.result.reply}} for later steps. Never target the chat this plan is running in — for an update in THIS chat use send_chat_message. If the other chat is slow the step returns timed_out: true, so don't build a plan that depends on an instant answer.
+`
+    : ""
+}
+
+
+
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, link_sentence_to_chat, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / target_thread_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
 - SENTENCE LINKS: "link this sentence to <doc>" → link_sentence_to_document; "link this sentence to <chat>" / "link it to my Delegate chat" → link_sentence_to_chat with target_thread_id resolved from the CHAT CATALOG in the WORKSPACE SNAPSHOT (or a {{step_N.result.id}} template from find_chat_by_title). A sentence holds exactly ONE link, so linking replaces any existing link — never emit both link tools for the same sentence. "Unlink" → the same tool with the target id set to null. Always resolve the sentence_id first (from the snapshot or a find_sentence_by_content step), and never create a new chat or document just to link it.
