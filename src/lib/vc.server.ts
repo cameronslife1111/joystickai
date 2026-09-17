@@ -241,8 +241,13 @@ async function createProviderRun(row: VcRunRow, extra = "") {
   const body: Record<string, unknown> = {
     task: buildTask(row, aliases, extra),
     model: VC_MODEL,
+    workspaceId: VC_WORKSPACE_ID,
     maxCostUsd: VC_MAX_COST_USD,
-    browserSettings: { ...(profileId ? { profileId } : {}), record: false },
+    browserSettings: {
+      ...(profileId ? { profileId } : {}),
+      proxyCountryCode: "us",
+      record: false,
+    },
     ...(bindings.length ? { secretBindings: bindings } : {}),
     ...(row.session_id ? { sessionId: row.session_id } : {}),
   };
