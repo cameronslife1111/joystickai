@@ -1038,6 +1038,18 @@ function AppPageInner() {
     setComposing(true);
   }, []);
 
+  // 💡 Chat composer bulb: close the chat and drop the typed text into the
+  // New idea composer, pre-filled and ready for the "Send to which list?" flow.
+  const sendChatTextToIdeas = useCallback((text: string) => {
+    setChatOpen(false);
+    setPendingChatThreadId(null);
+    setChatStartInList(false);
+    setDelegatePayload(null);
+    cancelSpeech();
+    setComposeText(text);
+    setComposing(true);
+  }, [cancelSpeech]);
+
   const onSwipeUp = useCallback(async () => {
     if (editingRef.current) return; // editor open — block navigation
     const token = claimSpeech();
@@ -4513,6 +4525,7 @@ function AppPageInner() {
         delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
         onNextLinkedChat={() => void goToNextLinkedChat()}
+        onSendToIdeas={sendChatTextToIdeas}
         onThreadDeleted={() => {
           setChatOpen(false);
           setPendingChatThreadId(null);
