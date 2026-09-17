@@ -26,6 +26,7 @@ import {
   PhoneOff,
   Clock,
   StickyNote,
+  Lightbulb,
   Quote,
   Pause,
   RotateCcw,
@@ -296,7 +297,7 @@ type PendingTurn = {
   created_at?: string | null;
 };
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, delegate }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, onSendToIdeas, delegate }: Props) {
   const qc = useQueryClient();
   const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
@@ -2062,6 +2063,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                 className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
               <div className="flex shrink-0 flex-col justify-end gap-2">
+                {onSendToIdeas && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    type="button"
+                    onClick={() => {
+                      if (!input.trim()) return;
+                      onSendToIdeas(input);
+                    }}
+                    disabled={!input.trim()}
+                    aria-label="Send text to New idea"
+                    title="Move this text to the New idea page"
+                    className="text-yellow-400 hover:text-yellow-300"
+                  >
+                    <Lightbulb className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   size="icon"
                   variant="ghost"
