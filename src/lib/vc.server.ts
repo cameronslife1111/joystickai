@@ -10,8 +10,10 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const API = "https://api.browser-use.com/api/v4";
 
-/** Browser Use v4's own default, and the cheapest capable computer-use model. */
-export const VC_MODEL = "gpt-5.6-luna";
+/** The model the machine is driven with (chosen on the Browser Use dashboard). */
+export const VC_MODEL = "deepseek-v4.1-flash";
+/** The Browser Use workspace the runs and their credits belong to. */
+export const VC_WORKSPACE_ID = "a1bc6f8b-07db-44fc-b683-a06320a46bc2";
 /** Balanced limits — enforced here, never left to the model. */
 export const VC_MAX_RUNTIME_MS = 8 * 60_000;
 export const VC_MAX_ATTEMPTS = 3; // first try + 2 retries
