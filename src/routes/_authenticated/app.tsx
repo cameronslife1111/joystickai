@@ -4521,6 +4521,7 @@ function AppPageInner() {
         currentDocumentId={activeDocId}
         documents={(docs ?? []).map((d) => ({ id: d.id, title: d.title }))}
         openThreadId={pendingChatThreadId}
+        onOpenThreadApplied={() => setPendingChatThreadId(null)}
         startInThreadList={chatStartInList}
         delegate={delegatePayload}
         onOpenDocument={(id) => void goToDocument(id)}
