@@ -98,6 +98,8 @@ interface Props {
   documents: { id: string; title: string }[];
   /** When provided while opening, select this thread instead of the default. */
   openThreadId?: string | null;
+  /** Called once openThreadId has been applied so the caller can clear it. */
+  onOpenThreadApplied?: () => void;
   /** Open straight to the chat list instead of the last conversation. */
   startInThreadList?: boolean;
   /** Open an attached document in the reader (chat closes first). */
