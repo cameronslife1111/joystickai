@@ -59,7 +59,7 @@ async function invokeEdgeFunction(
 
 // ---- Runtime plan expansion (expand_plan) ----
 const PLANNER_PROVIDER = Deno.env.get("PLANNER_PROVIDER") ?? "openai";
-const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-sol";
+const PLANNER_MODEL = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-luna";
 const MAX_EXPANSION_STEPS = 400;
 
 async function callExpansionLLM(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -1306,7 +1306,7 @@ const TOOL_HANDLERS: Record<string, any> = {
   async generate_text(args, _ctx) {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-    const model = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-sol";
+    const model = Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-luna";
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -2223,7 +2223,7 @@ async function composeWrapUp(
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-sol",
+        model: Deno.env.get("PLANNER_MODEL") ?? "gpt-5.6-luna",
         messages: [
           { role: "system", content: system },
           { role: "user", content: userPrompt },

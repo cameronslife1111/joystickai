@@ -67,7 +67,7 @@ export const analyzeDelegateStep = createServerFn({ method: "POST" })
 
       const provider = createOpenAiProvider(apiKey);
       const { text } = await generateText({
-        model: provider("gpt-5.6-sol"),
+        model: provider("gpt-5.6-luna"),
         system: DELEGATE_ANALYZE_SYSTEM,
         messages: [
           {
