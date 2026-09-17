@@ -98,6 +98,8 @@ interface Props {
   documents: { id: string; title: string }[];
   /** When provided while opening, select this thread instead of the default. */
   openThreadId?: string | null;
+  /** Called once openThreadId has been applied so the caller can clear it. */
+  onOpenThreadApplied?: () => void;
   /** Open straight to the chat list instead of the last conversation. */
   startInThreadList?: boolean;
   /** Open an attached document in the reader (chat closes first). */
@@ -297,7 +299,7 @@ type PendingTurn = {
   created_at?: string | null;
 };
 
-export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, onSendToIdeas, delegate }: Props) {
+export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, openThreadId, onOpenThreadApplied, startInThreadList, onOpenDocument, onThreadDeleted, onNextLinkedChat, onSendToIdeas, delegate }: Props) {
   const qc = useQueryClient();
   const runTurn = useServerFn(processChatTurn);
   const nameThread = useServerFn(generateThreadTitle);
@@ -832,6 +834,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           : null;
       if (openThreadId && threads.some((t) => t.id === openThreadId)) {
         setActiveThreadId(openThreadId);
+        onOpenThreadApplied?.();
       } else if (savedId && threads.some((t) => t.id === savedId)) {
         setActiveThreadId(savedId);
       } else if (threads.length > 0) {
@@ -857,6 +860,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     if (!threads.some((t) => t.id === openThreadId)) return;
     setActiveThreadId(openThreadId);
     setDrawerOpen(false);
+    onOpenThreadApplied?.();
   }, [open, openThreadId, threads, activeThreadId]);
 
   // Remember the last chat the user was on so re-opening returns to it.
