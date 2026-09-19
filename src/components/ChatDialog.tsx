@@ -1010,16 +1010,16 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     return el.scrollHeight - el.scrollTop - el.clientHeight <= slack;
   }, []);
 
-  // Opening a chat (or switching threads) must land at the bottom. Plan cards,
-  // media thumbnails and long replies get their real height after the first
-  // paint, so re-pin over a short settle window instead of scrolling once.
+  // Opening a chat (or switching threads) lands at the top of the last message.
+  // Plan cards, media thumbnails and long replies get their real height after
+  // the first paint, so re-pin over a short settle window instead of once.
   useEffect(() => {
     if (!open || !activeThreadId) return;
     const timers = [0, 60, 150, 300, 600, 1000, 1600].map((ms) =>
-      window.setTimeout(() => scrollToBottom("auto"), ms),
+      window.setTimeout(() => scrollToLastBubbleTop("auto"), ms),
     );
     return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [open, activeThreadId, messages.length, scrollToBottom]);
+  }, [open, activeThreadId, messages.length, scrollToLastBubbleTop]);
 
   // New messages / live plan updates keep the smooth follow, but never yank the
   // view down when the user has scrolled up to read.
