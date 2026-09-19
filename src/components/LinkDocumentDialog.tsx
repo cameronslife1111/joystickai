@@ -151,6 +151,42 @@ export function LinkDocumentDialog({
     applyLink({ linked_document_id: null, linked_thread_id: threadId });
   const unlink = () => applyLink({ linked_document_id: null, linked_thread_id: null });
 
+  /** Creates a brand-new document or chat with the typed name, then links it. */
+  const submitCreate = async () => {
+    const name = createName.trim();
+    if (!name || creating) return;
+    try {
+      setCreating(true);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("You're not signed in");
+      if (tab === "docs") {
+        const position = (freshDocs ?? documents).length;
+        const { data, error } = await supabase
+          .from("documents")
+          .insert({ user_id: u.user.id, title: name, position })
+          .select("id")
+          .single();
+        if (error || !data) throw new Error(error?.message || "Couldn't create the document");
+        qc.invalidateQueries({ queryKey: ["documents"] });
+        qc.invalidateQueries({ queryKey: ["link_documents"] });
+        setCreateOpen(false);
+        setCreateName("");
+        await applyLink({ linked_document_id: data.id, linked_thread_id: null });
+      } else {
+        const thread = await createChatThread(u.user.id, name);
+        qc.invalidateQueries({ queryKey: ["link_chat_threads"] });
+        qc.invalidateQueries({ queryKey: ["chat_threads"] });
+        setCreateOpen(false);
+        setCreateName("");
+        await applyLink({ linked_document_id: null, linked_thread_id: thread.id });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create it");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const hasLink = !!currentLinkedDocumentId || !!currentLinkedThreadId;
 
   return (
