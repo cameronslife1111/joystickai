@@ -171,7 +171,7 @@ describe("device sentence speech", () => {
     }
   });
 
-  test("requests no audio category at all and creates no audio element", () => {
+  test("asks only for the mixable ambient category and creates no audio element", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     const win = globalThis as unknown as Record<string, unknown>;
@@ -183,9 +183,9 @@ describe("device sentence speech", () => {
       expect(speakText("Mix this over music.")).toBe(true);
       synth.spoken[0]!.onstart?.();
       synth.spoken[0]!.onend?.();
-      // The device speech engine owns its own session; touching the page's
-      // category is what puts speech on the ring-switch channel.
-      expect(session.requestedTypes).toEqual([]);
+      // Ambient is the only category iOS mixes with other apps; nothing else
+      // may ever be requested from the speech path.
+      expect(session.requestedTypes.every((t) => t === "ambient")).toBe(true);
       expect(session.type).toBe("ambient");
       expect(audioElements).toBe(0);
     } finally {
@@ -194,6 +194,7 @@ describe("device sentence speech", () => {
       cancelSpeech();
     }
   });
+
 
   test("a new sentence cancels the old one, then speaks the newest", () => {
     const synth = installFakeSynth();
@@ -262,7 +263,7 @@ describe("device sentence speech", () => {
     expect(isSpeaking()).toBe(false);
   });
 
-  test("re-arms speech after an iOS audio interruption without claiming a category", () => {
+  test("re-arms speech after an iOS audio interruption, still only asking for ambient", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     setSpeechEnabled(true);
@@ -273,10 +274,11 @@ describe("device sentence speech", () => {
     session.state = "active";
     session.requestedTypes.length = 0;
     expect(speakText("after interruption")).toBe(true);
-    expect(session.requestedTypes).toEqual([]);
+    expect(session.requestedTypes.every((t) => t === "ambient")).toBe(true);
     expect(synth.spoken.at(-1)?.text).toBe("after interruption");
     cancelSpeech();
   });
+
 
   test("bails cleanly on a device with no speech support", () => {
     removeSynth();
