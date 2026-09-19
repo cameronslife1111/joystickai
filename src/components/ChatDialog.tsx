@@ -1751,6 +1751,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   ) : (
                     <div
                       key={m.id}
+                      data-msg-row
                       className={m.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}
                     >
                       <div
