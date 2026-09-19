@@ -24,6 +24,8 @@ import {
   AlertCircle,
   Phone,
   PhoneOff,
+  Mic,
+  MicOff,
   Clock,
   StickyNote,
   Lightbulb,
@@ -924,6 +926,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       state: call.threadId && call.threadId !== activeThreadId ? ("idle" as const) : call.state,
       live: call.live && call.threadId === activeThreadId,
       connecting: call.connecting && call.threadId === activeThreadId,
+      muted: call.muted,
+      toggleMute: call.toggleMute,
       stop: call.stop,
       start: () =>
         activeThreadId

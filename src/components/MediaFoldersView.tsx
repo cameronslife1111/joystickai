@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import {
   FolderPlus, Images, Inbox, MoreVertical, Pencil, Trash2, ChevronUp, ChevronDown,
-  ChevronRight, Music, Play, Loader2,
+  ChevronRight, Music, Play, Loader2, Copy,
 } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
 import type { MediaFolder } from "@/lib/media-folders";
 import { ALL_MEDIA, UNSORTED } from "@/lib/media-folders";
@@ -298,7 +299,6 @@ export function MediaFoldersView({
       {renameFor && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={() => setRenameFor(null)}
         >
           <div
             className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
@@ -316,6 +316,19 @@ export function MediaFoldersView({
               className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
             />
             <div className="flex justify-end gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(renameText);
+                    toast.success("Copied to clipboard");
+                  } catch {
+                    toast.error("Could not copy");
+                  }
+                }}
+                className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm hover:bg-foreground/5"
+              >
+                <Copy className="h-4 w-4" /> Copy
+              </button>
               <button
                 onClick={() => setRenameFor(null)}
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
