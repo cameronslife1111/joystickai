@@ -45,6 +45,10 @@ export function LinkDocumentDialog({
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("docs");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (open) {
