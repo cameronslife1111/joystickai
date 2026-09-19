@@ -532,7 +532,8 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   source.connect(processor);
   processor.connect(ctx.destination);
 
-  // Detach only this recording's processor; the stream + context stay warm.
+  // Release the microphone completely as soon as this recording ends: holding
+  // it warm on iOS blocks other apps (Voice Memos) from recording at all.
   const detach = () => {
     if (processor.onaudioprocess === null) return;
     clearTimeout(readyTimer);
@@ -544,8 +545,10 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     } catch {}
     processor.onaudioprocess = null;
     activeRecorders = Math.max(0, activeRecorders - 1);
+    if (activeRecorders === 0) teardownWarm(true);
     maybeCloseStaleContext();
   };
+
 
   return {
     ready,
