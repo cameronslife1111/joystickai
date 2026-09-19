@@ -351,15 +351,9 @@ function teardownWarm(bumpGeneration: boolean, restoreSession = true) {
 }
 
 /**
- * Synchronously hand a finished or abandoned microphone back so speech can use
- * the audio route immediately. A genuinely live recording is left untouched:
- * reading a sentence must never cut a take that is still capturing.
+ * True while at least one recording is actively capturing audio.
  */
-export function stopMicForPlayback(): void {
-  if (activeRecorders > 0) return;
-  if (!warm) return;
-  teardownWarm(true);
-}
+
 
 /** True while at least one recording is actively capturing audio. */
 export function isRecordingLive(): boolean {
@@ -538,7 +532,8 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
   source.connect(processor);
   processor.connect(ctx.destination);
 
-  // Detach only this recording's processor; the stream + context stay warm.
+  // Release the microphone completely as soon as this recording ends: holding
+  // it warm on iOS blocks other apps (Voice Memos) from recording at all.
   const detach = () => {
     if (processor.onaudioprocess === null) return;
     clearTimeout(readyTimer);
@@ -550,8 +545,10 @@ export async function startPcmRecorder(): Promise<PcmRecorder> {
     } catch {}
     processor.onaudioprocess = null;
     activeRecorders = Math.max(0, activeRecorders - 1);
+    if (activeRecorders === 0) teardownWarm(true);
     maybeCloseStaleContext();
   };
+
 
   return {
     ready,

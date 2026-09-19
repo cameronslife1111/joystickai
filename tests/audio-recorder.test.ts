@@ -129,18 +129,20 @@ describe("audio recorder lifecycle", () => {
     expect(stream.track.stopCalls).toBe(1);
   });
 
-  test("release stops a warm microphone stream", async () => {
+  test("ending a recording releases the microphone immediately", async () => {
     const stream = new FakeStream();
     useFakeMic(() => Promise.resolve(stream));
 
     const recorder = await startPcmRecorder();
     recorder.cancel();
-    expect(stream.track.stopCalls).toBe(0);
+    // Nothing is kept warm: another app must be able to record right away.
+    expect(stream.track.stopCalls).toBe(1);
 
     await releaseMic();
 
     expect(stream.track.stopCalls).toBe(1);
   });
+
 
   test("retries once when the first microphone request is rejected", async () => {
     const stream = new FakeStream();
@@ -235,6 +237,7 @@ describe("audio recorder lifecycle", () => {
       return Promise.resolve(calls === 1 ? first : second);
     });
     useFakeContext(InterruptibleContext);
+    globalThis.window.dispatchEvent(new Event("pagehide"));
     globalThis.window.dispatchEvent(new Event("focus"));
 
     const rec1 = await startPcmRecorder();
@@ -253,6 +256,7 @@ describe("audio recorder lifecycle", () => {
   test("rebuilds a recorder context when resume hangs", async () => {
     const stream = new FakeStream();
     useFakeMic(() => Promise.resolve(stream));
+    globalThis.window.dispatchEvent(new Event("pagehide"));
     globalThis.window.dispatchEvent(new Event("focus"));
     useFakeContext(HangingContext);
 

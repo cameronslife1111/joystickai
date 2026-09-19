@@ -1,5 +1,5 @@
-import { onIosAudioSessionInterrupted } from "@/lib/audio-session";
-import { stopMicForPlayback } from "@/lib/audio-recorder";
+import { onIosAudioSessionInterrupted, requestIosMixableSession } from "@/lib/audio-session";
+
 
 type SpeakOpts = {
   rate?: number;
@@ -294,9 +294,12 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   attachPrimer();
   if (!primed) primeSpeech();
-  // Hand back a microphone that is finished or abandoned. A live recording is
-  // left alone — recording flows cancel speech, so this never cuts a take.
-  stopMicForPlayback();
+  // Reading aloud never touches the microphone: another app (Voice Memos) may
+  // be recording, and grabbing or handing back the mic would kill its take.
+  // Ask for the mixable ambient category so the device voice layers over other
+  // apps' audio instead of taking the route over.
+  requestIosMixableSession();
+
 
   // Replace whatever is being read: single cancel, then speak, in the same
   // user-gesture turn so WebKit allows the new utterance to start. Always
