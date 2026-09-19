@@ -63,9 +63,29 @@ export function endIosRecordingSession(token: number | null): boolean {
   }
 }
 
+/**
+ * Ask for the shared ("ambient") category before the device speech engine
+ * speaks. Ambient is the one category iOS treats as mixable, so music and
+ * another app's recording keep running underneath. We never set it while a
+ * recording of our own is live, which owns `play-and-record`.
+ */
+export function requestIosMixableSession(): boolean {
+  if (activeRecordingTokens.size > 0) return false;
+  const session = iosAudioSession();
+  if (!session) return false;
+  try {
+    if (session.type === "ambient") return true;
+    session.type = "ambient";
+    return session.type === "ambient";
+  } catch {
+    return false;
+  }
+}
+
 export function isIosRecordingSessionActive(): boolean {
   return activeRecordingTokens.size > 0;
 }
+
 
 export function iosAudioSessionState() {
   const session = iosAudioSession();

@@ -1,5 +1,5 @@
-import { onIosAudioSessionInterrupted } from "@/lib/audio-session";
-import { stopMicForPlayback } from "@/lib/audio-recorder";
+import { onIosAudioSessionInterrupted, requestIosMixableSession } from "@/lib/audio-session";
+
 
 type SpeakOpts = {
   rate?: number;
