@@ -1737,7 +1737,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               <div ref={messagesListRef} className="flex flex-col gap-4">
                 {messages.map((m) =>
                   m.kind === "plan" && m.plan_id ? (
-                    <div key={m.id} className="flex flex-col items-start">
+                    <div key={m.id} data-msg-row className="flex flex-col items-start">
                       <PlanProgressCard
                         planId={m.plan_id}
                         autoSpeak={autoSpeak && open}
