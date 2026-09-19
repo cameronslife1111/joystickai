@@ -332,6 +332,44 @@ export function LinkDocumentDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Name popup for a brand-new document/chat — only Create/Cancel closes it. */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent
+          className="max-w-sm"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {tab === "docs" ? "New document" : "New chat"}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Name it, press Create, and it will be linked to this sentence.
+            </p>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submitCreate();
+              }
+            }}
+            placeholder={tab === "docs" ? "Document name…" : "Chat name…"}
+          />
+          <DialogFooter className="flex !flex-row !justify-end gap-2 sm:!justify-end">
+            <Button variant="ghost" disabled={creating} onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={creating || !createName.trim()} onClick={() => void submitCreate()}>
+              {creating ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
