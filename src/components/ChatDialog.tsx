@@ -981,6 +981,28 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
+  /**
+   * Land at the TOP of the last message so the newest reply starts at the top
+   * of the viewport (people open a chat to read the latest bubble downward).
+   */
+  const scrollToLastBubbleTop = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = scrollRef.current;
+      const list = messagesListRef.current;
+      if (!el) return;
+      const rows = list?.querySelectorAll<HTMLElement>("[data-msg-row]");
+      const last = rows && rows.length ? rows[rows.length - 1] : null;
+      if (!last || !list) {
+        el.scrollTo({ top: el.scrollHeight, behavior });
+        return;
+      }
+      const target = list.offsetTop + last.offsetTop - 12;
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTo({ top: Math.min(Math.max(0, target), max), behavior });
+    },
+    [],
+  );
+
   /** True when the user is already parked at (or very near) the bottom. */
   const atBottom = useCallback((slack = 120) => {
     const el = scrollRef.current;
