@@ -351,15 +351,9 @@ function teardownWarm(bumpGeneration: boolean, restoreSession = true) {
 }
 
 /**
- * Synchronously hand a finished or abandoned microphone back so speech can use
- * the audio route immediately. A genuinely live recording is left untouched:
- * reading a sentence must never cut a take that is still capturing.
+ * True while at least one recording is actively capturing audio.
  */
-export function stopMicForPlayback(): void {
-  if (activeRecorders > 0) return;
-  if (!warm) return;
-  teardownWarm(true);
-}
+
 
 /** True while at least one recording is actively capturing audio. */
 export function isRecordingLive(): boolean {
