@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { SentenceText } from "@/components/SentenceText";
 import { LinkDocumentDialog } from "@/components/LinkDocumentDialog";
+import { DocumentPickerSheet } from "@/components/DocumentPickerSheet";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { normalizeSearch } from "@/lib/docSearch";
 import { Input } from "@/components/ui/input";
@@ -251,6 +252,54 @@ function AppPageInner() {
       });
     }, []),
   );
+
+  // 📄 insert-document picker for the full-document editor.
+  const [editDocPickerOpen, setEditDocPickerOpen] = useState(false);
+
+  /** Insert the picked documents' full text into the edit text at the caret. */
+  const insertDocTextAtCursorIntoEdit = useCallback(
+    (pickedDocs: { id: string; title: string }[]) => {
+      if (!pickedDocs.length) return;
+      void (async () => {
+        const blocks: string[] = [];
+        for (const d of pickedDocs) {
+          const { data } = await supabase
+            .from("sentences")
+            .select("id, content")
+            .eq("document_id", d.id)
+            .order("order_index", { ascending: true });
+          const body = (data ?? [])
+            .map((s) => (s.content ?? "").trim())
+            .filter(Boolean)
+            .join("\n\n");
+          if (body) blocks.push(body);
+        }
+        if (!blocks.length) {
+          toast.error("That document has no text yet");
+          return;
+        }
+        const text = blocks.join("\n\n");
+        setEditText((prev) => {
+          const sel = editCaretRef.current;
+          const start = Math.min(sel?.start ?? prev.length, prev.length);
+          const end = Math.min(Math.max(sel?.end ?? start, start), prev.length);
+          const before = prev.slice(0, start);
+          const after = prev.slice(end);
+          const caret = start + text.length;
+          editCaretRef.current = { start: caret, end: caret };
+          requestAnimationFrame(() => {
+            const el = editTextareaRef.current;
+            if (!el) return;
+            el.focus();
+            try { el.setSelectionRange(caret, caret); } catch {}
+          });
+          return before + text + after;
+        });
+      })();
+    },
+    [],
+  );
+
 
   const callAi = useServerFn(aiContinue);
   const askOrby = useServerFn(askAi);
@@ -3334,6 +3383,27 @@ function AppPageInner() {
                 </button>
                 <button
                   type="button"
+                  onPointerDown={(e) => {
+                    // Keep the textarea focused so the caret position stays valid.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const el = editTextareaRef.current;
+                    editCaretRef.current = {
+                      start: el?.selectionStart ?? editText.length,
+                      end: el?.selectionEnd ?? el?.selectionStart ?? editText.length,
+                    };
+                    setEditDocPickerOpen(true);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label="Insert document text"
+                  title="Insert document text"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  📄
+                </button>
+                <button
+                  type="button"
                   onClick={handleEditJump}
                   disabled={!editText.trim()}
                   aria-label="Jump to top"
@@ -4535,6 +4605,14 @@ function AppPageInner() {
           const text = currentSentence?.content;
           if (text) speak(text, claimSpeech());
         }}
+      />
+      <DocumentPickerSheet
+        open={editDocPickerOpen}
+        onOpenChange={setEditDocPickerOpen}
+        initialSelectedIds={[]}
+        heading="Insert document text"
+        onConfirm={() => {}}
+        onConfirmDocs={insertDocTextAtCursorIntoEdit}
       />
       {currentSentence && (
         <LinkDocumentDialog
