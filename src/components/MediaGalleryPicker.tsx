@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Music, Pencil, Expand } from "lucide-react";
+import { Play, Music, Pencil, Expand, Copy } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -259,7 +259,6 @@ export function MediaGalleryPicker({
         {renameAsset && (
           <div
             className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-            onClick={() => setRenameAsset(null)}
           >
             <div
               className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
@@ -277,6 +276,19 @@ export function MediaGalleryPicker({
                 className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"
               />
               <div className="flex justify-end gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(renameText);
+                      toast.success("Copied to clipboard");
+                    } catch {
+                      toast.error("Could not copy");
+                    }
+                  }}
+                  className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm hover:bg-foreground/5"
+                >
+                  <Copy className="h-4 w-4" /> Copy
+                </button>
                 <button
                   onClick={() => setRenameAsset(null)}
                   className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground"

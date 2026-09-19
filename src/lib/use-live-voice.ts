@@ -123,6 +123,7 @@ export function useLiveVoice({
   const mintSession = useServerFn(createLiveSession);
   const [state, setState] = useState<CallState>("idle");
   const [speaking, setSpeaking] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -186,6 +187,7 @@ export function useLiveVoice({
     bufRef.current = { user: "", assistant: "" };
     lastAssistantRef.current = "";
     setSpeaking(false);
+    setMuted(false);
     setState("idle");
   }, []);
 
@@ -380,6 +382,18 @@ export function useLiveVoice({
     }
   }, [buildContext, buildDocumentIds, buildThreadId, mintSession, stop]);
 
+  /**
+   * Silence the outgoing mic without touching the connection — the call stays
+   * live, Orby just hears nothing until the user unmutes.
+   */
+  const toggleMute = useCallback(() => {
+    const stream = streamRef.current;
+    if (stream) {
+      for (const track of stream.getAudioTracks()) track.enabled = muted;
+    }
+    setMuted((m) => !m);
+  }, [muted]);
+
   /** Silent context the model can use but must not read out. */
   const appendThinking = useCallback(
     (content: string, delegationId: string | null = null) =>
@@ -421,6 +435,8 @@ export function useLiveVoice({
     live: state === "live",
     connecting: state === "connecting",
     speaking,
+    muted,
+    toggleMute,
     start,
     stop,
     appendThinking,

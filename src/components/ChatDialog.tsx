@@ -24,6 +24,8 @@ import {
   AlertCircle,
   Phone,
   PhoneOff,
+  Mic,
+  MicOff,
   Clock,
   StickyNote,
   Lightbulb,
@@ -924,6 +926,8 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       state: call.threadId && call.threadId !== activeThreadId ? ("idle" as const) : call.state,
       live: call.live && call.threadId === activeThreadId,
       connecting: call.connecting && call.threadId === activeThreadId,
+      muted: call.muted,
+      toggleMute: call.toggleMute,
       stop: call.stop,
       start: () =>
         activeThreadId
@@ -1862,6 +1866,23 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   <Phone className="h-4 w-4 text-green-500" />
                 )}
               </Button>
+              {voice.live && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  type="button"
+                  aria-label={voice.muted ? "Unmute microphone" : "Mute microphone"}
+                  title={voice.muted ? "Unmute microphone" : "Mute microphone"}
+                  onClick={voice.toggleMute}
+                  className="h-9 w-9 shrink-0"
+                >
+                  {voice.muted ? (
+                    <MicOff className="h-4 w-4 text-destructive" />
+                  ) : (
+                    <Mic className="h-4 w-4 text-foreground" />
+                  )}
+                </Button>
+              )}
               <Button
                 size="icon"
                 variant="ghost"
@@ -2368,7 +2389,11 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
       </AlertDialog>
 
       <Dialog open={!!renameThread} onOpenChange={(o) => { if (!o) setRenameThread(null); }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent
+          className="sm:max-w-sm"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Rename thread</DialogTitle>
           </DialogHeader>
@@ -2384,6 +2409,20 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             autoFocus
           />
           <div className="mt-2 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              className="mr-auto"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(renameValue);
+                  toast.success("Copied to clipboard");
+                } catch {
+                  toast.error("Could not copy");
+                }
+              }}
+            >
+              <Copy className="h-4 w-4" /> Copy
+            </Button>
             <Button variant="ghost" onClick={() => setRenameThread(null)}>Cancel</Button>
             <Button onClick={() => void submitRename()}>Save</Button>
           </div>

@@ -1251,7 +1251,6 @@ function MediaPage() {
       {sheetAsset && renameOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={() => { setRenameOpen(false); setSheetAsset(null); }}
         >
           <div
             className="w-full max-w-sm rounded-2xl border border-foreground/10 bg-card p-4"
