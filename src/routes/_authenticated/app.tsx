@@ -3259,6 +3259,25 @@ function AppPageInner() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    if (typeof document !== "undefined") {
+                      (document.activeElement as HTMLElement | null)?.blur?.();
+                    }
+                    setNewDocSeedText(composeText);
+                    setNewDocText("");
+                    setNewDocOpen(true);
+                  }}
+                  disabled={!composeText.trim()}
+                  aria-label="Make a new document from this text"
+                  title="Make a new document from this text"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
+                  style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
+                >
+                  🆕
+                </button>
+
+                <button
+                  type="button"
                   onPointerDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -4649,6 +4668,19 @@ function AppPageInner() {
           if (text) speak(text, claimSpeech());
         }}
       />
+      <DocumentPickerSheet
+        open={newDocTitlePickerOpen}
+        onOpenChange={setNewDocTitlePickerOpen}
+        initialSelectedIds={[]}
+        heading="Insert a document title"
+        onConfirm={() => {}}
+        onConfirmDocs={(picked) => {
+          const titles = picked.map((d) => d.title).filter(Boolean);
+          if (!titles.length) return;
+          setNewDocText((prev) => (prev.trim() ? `${prev} ${titles.join(" ")}` : titles.join(" ")));
+        }}
+      />
+
       <DocumentPickerSheet
         open={editDocPickerOpen}
         onOpenChange={setEditDocPickerOpen}
