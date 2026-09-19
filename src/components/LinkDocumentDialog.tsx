@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { toast } from "@/lib/toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { normalizeSearch } from "@/lib/docSearch";
+import { createChatThread } from "@/lib/chat-send";
+import { Plus } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -43,6 +45,10 @@ export function LinkDocumentDialog({
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("docs");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (open) {
@@ -145,6 +151,42 @@ export function LinkDocumentDialog({
     applyLink({ linked_document_id: null, linked_thread_id: threadId });
   const unlink = () => applyLink({ linked_document_id: null, linked_thread_id: null });
 
+  /** Creates a brand-new document or chat with the typed name, then links it. */
+  const submitCreate = async () => {
+    const name = createName.trim();
+    if (!name || creating) return;
+    try {
+      setCreating(true);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("You're not signed in");
+      if (tab === "docs") {
+        const position = (freshDocs ?? documents).length;
+        const { data, error } = await supabase
+          .from("documents")
+          .insert({ user_id: u.user.id, title: name, position })
+          .select("id")
+          .single();
+        if (error || !data) throw new Error(error?.message || "Couldn't create the document");
+        qc.invalidateQueries({ queryKey: ["documents"] });
+        qc.invalidateQueries({ queryKey: ["link_documents"] });
+        setCreateOpen(false);
+        setCreateName("");
+        await applyLink({ linked_document_id: data.id, linked_thread_id: null });
+      } else {
+        const thread = await createChatThread(u.user.id, name);
+        qc.invalidateQueries({ queryKey: ["link_chat_threads"] });
+        qc.invalidateQueries({ queryKey: ["chat_threads"] });
+        setCreateOpen(false);
+        setCreateName("");
+        await applyLink({ linked_document_id: null, linked_thread_id: thread.id });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create it");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const hasLink = !!currentLinkedDocumentId || !!currentLinkedThreadId;
 
   return (
@@ -196,6 +238,18 @@ export function LinkDocumentDialog({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={tab === "docs" ? "Search documents…" : "Search chats…"}
         />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setCreateName("");
+            setCreateOpen(true);
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10 active:scale-[0.98]"
+        >
+          <Plus className="h-4 w-4" />
+          {tab === "docs" ? "New document" : "New chat"}
+        </button>
         <div className="flex-1 overflow-y-auto -mx-1 px-1">
           {tab === "docs" ? (
             filtered.length === 0 ? (
@@ -278,6 +332,44 @@ export function LinkDocumentDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Name popup for a brand-new document/chat — only Create/Cancel closes it. */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent
+          className="max-w-sm"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {tab === "docs" ? "New document" : "New chat"}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Name it, press Create, and it will be linked to this sentence.
+            </p>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submitCreate();
+              }
+            }}
+            placeholder={tab === "docs" ? "Document name…" : "Chat name…"}
+          />
+          <DialogFooter className="flex !flex-row !justify-end gap-2 sm:!justify-end">
+            <Button variant="ghost" disabled={creating} onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={creating || !createName.trim()} onClick={() => void submitCreate()}>
+              {creating ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
