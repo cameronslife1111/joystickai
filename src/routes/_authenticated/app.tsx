@@ -4141,7 +4141,6 @@ function AppPageInner() {
       {renameOpen && activeDoc && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
-          onClick={() => setRenameOpen(false)}
         >
           <div
             className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
@@ -4159,6 +4158,15 @@ function AppPageInner() {
               className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
             />
             <div className="flex justify-end gap-2">
+              <button onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(renameText);
+                  toast.success("Copied to clipboard");
+                } catch {
+                  toast.error("Could not copy");
+                }
+              }}
+                className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm hover:bg-foreground/5"><Copy className="h-4 w-4" /> Copy</button>
               <button onClick={() => setRenameOpen(false)}
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button onClick={() => void submitRenameDoc()}
