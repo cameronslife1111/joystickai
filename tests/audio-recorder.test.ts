@@ -237,6 +237,7 @@ describe("audio recorder lifecycle", () => {
       return Promise.resolve(calls === 1 ? first : second);
     });
     useFakeContext(InterruptibleContext);
+    globalThis.window.dispatchEvent(new Event("pagehide"));
     globalThis.window.dispatchEvent(new Event("focus"));
 
     const rec1 = await startPcmRecorder();
@@ -255,6 +256,7 @@ describe("audio recorder lifecycle", () => {
   test("rebuilds a recorder context when resume hangs", async () => {
     const stream = new FakeStream();
     useFakeMic(() => Promise.resolve(stream));
+    globalThis.window.dispatchEvent(new Event("pagehide"));
     globalThis.window.dispatchEvent(new Event("focus"));
     useFakeContext(HangingContext);
 
