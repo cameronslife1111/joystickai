@@ -238,6 +238,18 @@ export function LinkDocumentDialog({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={tab === "docs" ? "Search documents…" : "Search chats…"}
         />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setCreateName("");
+            setCreateOpen(true);
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium text-primary transition hover:bg-primary/10 active:scale-[0.98]"
+        >
+          <Plus className="h-4 w-4" />
+          {tab === "docs" ? "New document" : "New chat"}
+        </button>
         <div className="flex-1 overflow-y-auto -mx-1 px-1">
           {tab === "docs" ? (
             filtered.length === 0 ? (
