@@ -11,7 +11,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "@/lib/toast";
-import { PhoneOff } from "lucide-react";
+import { Mic, MicOff, PhoneOff } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useLiveVoice, type CallState } from "@/lib/use-live-voice";
@@ -26,6 +26,9 @@ type HandsFreeApi = {
   live: boolean;
   connecting: boolean;
   speaking: boolean;
+  /** True while the user's mic is silenced but the call is still running. */
+  muted: boolean;
+  toggleMute: () => void;
   /** Thread the live (or connecting) call belongs to. */
   threadId: string | null;
   /** Start a call for `threadId`; `context` is the recent conversation text. */
@@ -348,11 +351,13 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
       live: voice.live,
       connecting: voice.connecting,
       speaking: voice.speaking,
+      muted: voice.muted,
+      toggleMute: voice.toggleMute,
       threadId,
       start,
       stop,
     }),
-    [voice.state, voice.live, voice.connecting, voice.speaking, threadId, start, stop],
+    [voice.state, voice.live, voice.connecting, voice.speaking, voice.muted, voice.toggleMute, threadId, start, stop],
   );
 
   return <HandsFreeContext.Provider value={api}>{children}</HandsFreeContext.Provider>;
@@ -372,19 +377,33 @@ export function HandsFreeIndicator({ hidden }: { hidden?: boolean }) {
   const call = useHandsFree();
   if (hidden || !(call.live || call.connecting)) return null;
   return (
-    <button
-      type="button"
-      onClick={call.stop}
-      className="fixed left-1/2 top-3 z-[60] -translate-x-1/2 flex items-center gap-2 rounded-full bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow-lg"
+    <div
+      className="fixed left-1/2 top-3 z-[60] flex -translate-x-1/2 items-center gap-2"
       style={{ WebkitTouchCallout: "none", userSelect: "none" }}
-      aria-label="End hands-free call"
     >
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
-      </span>
-      {call.connecting ? "Connecting…" : call.speaking ? "Orby is speaking" : "Hands-free live"}
-      <PhoneOff className="h-4 w-4" />
-    </button>
+      <button
+        type="button"
+        onClick={call.stop}
+        className="flex items-center gap-2 rounded-full bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow-lg"
+        aria-label="End hands-free call"
+      >
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
+        </span>
+        {call.connecting ? "Connecting…" : call.speaking ? "Orby is speaking" : "Hands-free live"}
+        <PhoneOff className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={call.toggleMute}
+        disabled={!call.live}
+        aria-label={call.muted ? "Unmute microphone" : "Mute microphone"}
+        title={call.muted ? "Unmute microphone" : "Mute microphone"}
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-foreground/15 bg-card text-foreground shadow-lg transition active:scale-95 disabled:opacity-50"
+      >
+        {call.muted ? <MicOff className="h-4 w-4 text-destructive" /> : <Mic className="h-4 w-4" />}
+      </button>
+    </div>
   );
 }
