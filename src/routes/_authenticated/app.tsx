@@ -29,7 +29,7 @@ import { DocumentPickerSheet } from "@/components/DocumentPickerSheet";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { normalizeSearch } from "@/lib/docSearch";
 import { Input } from "@/components/ui/input";
-import { Copy, Link as LinkIcon } from "lucide-react";
+import { Copy, Link as LinkIcon, Quote } from "lucide-react";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
@@ -148,6 +148,10 @@ function AppPageInner() {
   const [renameText, setRenameText] = useState("");
   const [newDocOpen, setNewDocOpen] = useState(false);
   const [newDocText, setNewDocText] = useState("");
+  // When the New idea composer opens this dialog, its text becomes the new
+  // document's sentences.
+  const [newDocSeedText, setNewDocSeedText] = useState("");
+  const [newDocTitlePickerOpen, setNewDocTitlePickerOpen] = useState(false);
   const [deleteDocOpen, setDeleteDocOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -2765,16 +2769,34 @@ function AppPageInner() {
 
   const submitNewDoc = useCallback(async () => {
     const title = newDocText.trim() || "Untitled";
+    const seed = newDocSeedText.trim();
     setNewDocOpen(false);
+    setNewDocSeedText("");
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     const pos = (docs?.length ?? 0);
     const { data } = await supabase.from("documents")
       .insert({ user_id: u.user.id, title, position: pos })
       .select().single();
-    if (data) setActiveDocId(data.id);
+    if (data) {
+      if (seed) {
+        const parts = splitIntoSentences(seed);
+        if (parts.length) {
+          await supabase.rpc("insert_sentences_at", {
+            p_document_id: data.id,
+            p_contents: parts,
+            p_insert_at: 0,
+          });
+          qc.invalidateQueries({ queryKey: ["sentences", data.id] });
+          cancelCompose();
+          toast.success(`Created ${title}`);
+        }
+      }
+      setActiveDocId(data.id);
+    }
     qc.invalidateQueries({ queryKey: ["documents"] });
-  }, [newDocText, docs, qc]);
+  }, [newDocText, newDocSeedText, docs, qc, cancelCompose]);
+
 
   const submitDeleteDoc = useCallback(async () => {
     if (!activeDoc) { setDeleteDocOpen(false); return; }
@@ -4179,13 +4201,17 @@ function AppPageInner() {
       {newDocOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-background/85 px-4 backdrop-blur-md"
-          onClick={() => setNewDocOpen(false)}
         >
           <div
             className="w-full max-w-xs rounded-3xl border border-foreground/10 bg-card/80 p-4 backdrop-blur"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-3 font-display text-base">New document</p>
+            {newDocSeedText ? (
+              <p className="mb-3 line-clamp-3 rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-muted-foreground">
+                {newDocSeedText}
+              </p>
+            ) : null}
             <input
               autoFocus
               placeholder="Document title"
@@ -4193,12 +4219,20 @@ function AppPageInner() {
               onChange={(e) => setNewDocText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void submitNewDoc();
-                if (e.key === "Escape") setNewDocOpen(false);
               }}
               className="mb-4 w-full rounded-xl border border-foreground/15 bg-background px-3 py-2 text-base outline-none focus:border-primary/50"
             />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setNewDocOpen(false)}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNewDocTitlePickerOpen(true)}
+                aria-label="Insert a document title"
+                title="Insert a document title"
+                className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-foreground/15 bg-background px-3 py-2 text-sm hover:bg-foreground/5"
+              >
+                <Quote className="h-4 w-4 text-orange-400" /> Title
+              </button>
+              <button onClick={() => { setNewDocOpen(false); setNewDocSeedText(""); }}
                 className="rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
               <button onClick={() => void submitNewDoc()}
                 className="rounded-xl border border-primary/40 bg-primary/15 px-3 py-2 text-sm text-primary hover:bg-primary/25">Create</button>
@@ -4206,6 +4240,7 @@ function AppPageInner() {
           </div>
         </div>
       )}
+
 
       {deleteDocOpen && activeDoc && (
         <div
