@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { toast } from "@/lib/toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { normalizeSearch } from "@/lib/docSearch";
+import { createChatThread } from "@/lib/chat-send";
+import { Plus } from "lucide-react";
 
 interface Props {
   open: boolean;
