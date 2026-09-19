@@ -29,7 +29,7 @@ import { DocumentPickerSheet } from "@/components/DocumentPickerSheet";
 import { sortDocsByTitle } from "@/lib/sortDocs";
 import { normalizeSearch } from "@/lib/docSearch";
 import { Input } from "@/components/ui/input";
-import { Link as LinkIcon } from "lucide-react";
+import { Copy, Link as LinkIcon } from "lucide-react";
 import { PlanApprovalDialog } from "@/components/PlanApprovalDialog";
 import { AIPlansScreen } from "@/components/AIPlansScreen";
 import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
