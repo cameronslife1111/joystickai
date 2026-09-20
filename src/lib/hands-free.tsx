@@ -49,6 +49,8 @@ const HandsFreeContext = createContext<HandsFreeApi | null>(null);
 const DOC_POLL_MS = 2_500;
 /** How often the call looks for new backend results to speak. */
 const RESULT_POLL_MS = 3_000;
+/** How often the call checks whether its delegated job has finished. */
+const TURN_POLL_MS = 2_000;
 
 
 export function HandsFreeProvider({ children }: { children: ReactNode }) {
@@ -311,7 +313,8 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
 
   // Anything Orby's backend posts into this thread while the call is live —
   // a plan kickoff line, a finished plan's wrap-up, a normal reply — is handed
-  // to the live voice so she can say it in her own words.
+  // to the live voice so she can say it in her own words. The result carries the
+  // still-open delegation id, so a delivered result can never read as pending.
   useEffect(() => {
     if (!voice.live || !threadId) return;
     let cancelled = false;
@@ -335,8 +338,21 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
           spokenIdsRef.current.add(row.id);
           const text = toPlainText(row.content ?? "").trim();
           if (!text) continue;
+          // Only tag the result when the open job belongs to this same chat.
+          const job = pendingJobRef.current;
+          const delegationId = job && job.threadId === threadId ? job.delegationId : null;
           voiceRef.current.appendCommentary(
-            `Result from your backend — tell the user this in your own words, briefly:\n${text}`,
+            `Result from your backend — this is FINISHED and delivered. Tell the user this in your own words, briefly:\n${text}`,
+            delegationId,
+          );
+          console.info(
+            ...delegationLog("result_delivered", {
+              conversationId: threadId,
+              messageId: row.id,
+              delegationId,
+              turnId: job?.turnId ?? null,
+              persistedResult: true,
+            }),
           );
           qc.invalidateQueries({ queryKey: ["chat_messages", threadId] });
         }
@@ -353,6 +369,74 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
     };
   }, [voice.live, threadId, qc]);
+
+  // The open delegated job is watched to its terminal state, and the voice side
+  // is told — tagged with the same delegation id — the moment it finishes. This
+  // is the only thing that clears the pending state, so Orby can never be left
+  // claiming she is still working on something that is already done. Outcomes
+  // that post nothing into the chat (an answer handed to a paused plan) are
+  // signalled here too.
+  useEffect(() => {
+    if (!voice.live) return;
+    let cancelled = false;
+    let busy = false;
+
+    const tick = async () => {
+      const job = pendingJobRef.current;
+      if (cancelled || busy || !job) return;
+      busy = true;
+      try {
+        const { data } = await supabase
+          .from("chat_turns")
+          .select("status, error, payload")
+          .eq("id", job.turnId)
+          .maybeSingle();
+        const status = (data as any)?.status as string | undefined;
+        if (cancelled || !isTerminalTurnStatus(status)) return;
+        // Still the same job? A newer delegation owns the slot otherwise.
+        if (pendingJobRef.current?.turnId !== job.turnId) return;
+
+        const payload = ((data as any)?.payload ?? {}) as any;
+        const note = buildCompletionNote({
+          status: status as string,
+          route: payload.route ?? null,
+          error: (data as any)?.error ?? null,
+          assistantMessageId: payload.assistantMessageId ?? null,
+        });
+        pendingJobRef.current = null;
+        pendingTurnRef.current = false;
+        console.info(
+          ...delegationLog("completed", {
+            conversationId: job.threadId,
+            messageId: job.messageId,
+            delegationId: job.delegationId,
+            turnId: job.turnId,
+            status: status ?? null,
+            route: payload.route ?? null,
+            persistedResult: !!payload.assistantMessageId,
+            assistantMessageId: payload.assistantMessageId ?? null,
+          }),
+        );
+        if (note) {
+          if (status === "failed") {
+            voiceRef.current.appendCommentary(note, job.delegationId);
+          } else {
+            voiceRef.current.appendThinking(note, job.delegationId);
+          }
+        }
+      } catch {
+        /* transient — the next tick retries */
+      } finally {
+        busy = false;
+      }
+    };
+
+    const timer = setInterval(() => void tick(), TURN_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [voice.live]);
 
 
   // While a call is live nothing else in the app is allowed to speak, so
