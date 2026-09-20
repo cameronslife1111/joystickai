@@ -289,6 +289,19 @@ export async function runQueuedChatTurn(turnId: string): Promise<{ outcome: stri
       } as any)
       .eq("id", turn.id);
 
+    // Structured completion record: ids and status only, never message text or
+    // credentials. This is what the live call's completion watcher reads back.
+    console.info("[chat turn] completed", {
+      turnId: turn.id,
+      conversationId: threadId,
+      userId,
+      route: result.route,
+      assistantMessageId,
+      persistedResult: !!assistantMessageId,
+      status: "done",
+      historyCount: (payload.messages ?? []).length,
+    });
+
     return { outcome: "done" };
   } catch (err) {
     const message = String((err as any)?.message ?? err);
