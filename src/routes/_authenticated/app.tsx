@@ -3939,7 +3939,6 @@ function AppPageInner() {
                 next[pickerSlot!] = docId;
               }
               closePicker();
-              setFavoritesOpen(false);
               await saveFavorites(next);
             };
 
