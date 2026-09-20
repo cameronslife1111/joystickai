@@ -20,6 +20,13 @@ import { processChatTurn } from "@/lib/chat-turn.functions";
 import { normalizeCapabilities, type ChatCapabilities } from "@/lib/chat-types";
 import { toPlainText } from "@/lib/plain-text";
 import { cancelSpeech, setSpeechSuppressed } from "@/lib/speech";
+import {
+  buildCompletionNote,
+  delegationLog,
+  isTerminalTurnStatus,
+  shouldHandleDelegation,
+  type DelegatedJob,
+} from "@/lib/delegation-sync";
 
 type HandsFreeApi = {
   state: CallState;
@@ -64,6 +71,16 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
   const lastUserTextRef = useRef<string>("");
   /** One delegated backend job at a time. */
   const pendingTurnRef = useRef(false);
+  /**
+   * The delegated job still open, with its conversation/message/delegation ids
+   * captured once. Everything in its lifecycle uses these captured values, so a
+   * chat switch mid-request can never move the request, result or pending state.
+   */
+  const pendingJobRef = useRef<DelegatedJob | null>(null);
+  /** Delegation ids already acted on — a repeated callback is a no-op. */
+  const handledDelegationsRef = useRef<Set<string>>(new Set());
+  /** Message row the last spoken user turn was saved as. */
+  const lastUserMessageIdRef = useRef<string | null>(null);
   /** Only backend results newer than this are spoken. */
   const watermarkRef = useRef<string>(new Date().toISOString());
   /** Assistant rows already handled (spoken by the model, or read out). */
@@ -94,21 +111,24 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
 
   /** Persist a spoken turn into the call's thread so it appears in the chat. */
   const appendMessage = useCallback(
-    async (role: "user" | "assistant", content: string) => {
+    async (role: "user" | "assistant", content: string): Promise<string | null> => {
+      // Capture the conversation once: an insert must land in the chat that was
+      // live when the words were spoken, even if the call moves on.
       const tid = threadIdRef.current;
       const uid = userIdRef.current;
-      if (!tid || !uid) return;
+      if (!tid || !uid) return null;
       const text = role === "assistant" ? toPlainText(content) : content.trim();
-      if (!text) return;
+      if (!text) return null;
       const { data: row, error } = await supabase
         .from("chat_messages")
         .insert({ user_id: uid, thread_id: tid, role, content: text, kind: "text" })
         .select("id, role, content, created_at, kind, plan_id")
         .single();
-      if (error || !row) return;
+      if (error || !row) return null;
+      const messageId = (row as any).id as string;
       // Orby's own spoken words must never come back through the result
       // watcher as if the backend had produced them.
-      if (role === "assistant") spokenIdsRef.current.add((row as any).id as string);
+      if (role === "assistant") spokenIdsRef.current.add(messageId);
       qc.setQueryData<any[]>(["chat_messages", tid], (cur) => [...(cur ?? []), row]);
       // Keep the call's rolling context in step with what was actually said.
       contextRef.current = `${contextRef.current}\n${role === "user" ? "User: " : "Orby: "}${text}`
@@ -116,6 +136,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         .slice(-20)
         .join("\n");
       bumpThread(tid, role === "assistant");
+      return messageId;
     },
     [qc, bumpThread],
   );
@@ -127,11 +148,15 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
    */
   const runDelegated = useCallback(
     async (delegationId: string) => {
+      // Captured once for the whole lifecycle of this job.
       const tid = threadIdRef.current;
       const uid = userIdRef.current;
       const text = lastUserTextRef.current.trim();
+      const messageId = lastUserMessageIdRef.current;
       if (!tid || !uid || !text) return;
       if (pendingTurnRef.current) return; // one backend job per call at a time
+      // A repeated delegation callback must not queue a second turn.
+      if (!shouldHandleDelegation(handledDelegationsRef.current, delegationId)) return;
       pendingTurnRef.current = true;
       voiceRef.current.appendThinking(
         "Your backend has started this request. Nothing is finished yet — keep the user company and " +
@@ -139,10 +164,18 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         delegationId,
       );
       try {
-        const history = ((qc.getQueryData<any[]>(["chat_messages", tid]) ?? []) as any[])
+        // Persisted history is the source of truth — never the browser cache,
+        // which is empty when this chat was never opened.
+        const { data: rows } = await supabase
+          .from("chat_messages")
+          .select("role, content, kind, created_at")
+          .eq("thread_id", tid)
+          .order("created_at", { ascending: true })
+          .limit(200);
+        const history = ((rows ?? []) as any[])
           .slice(-20)
           .map((m) => ({
-            role: m.kind === "plan" ? "assistant" : m.role,
+            role: (m.kind === "plan" ? "assistant" : m.role) as "user" | "assistant",
             content:
               m.kind === "plan"
                 ? "[A plan was kicked off here and ran in the background.]"
@@ -175,17 +208,39 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
           .select("id")
           .single();
         if (error || !turnRow) throw error ?? new Error("Couldn't start that");
-        await runTurn({ data: { turnId: (turnRow as any).id as string } }).catch(() => {});
+        const turnId = (turnRow as any).id as string;
+        pendingJobRef.current = { delegationId, turnId, threadId: tid, messageId };
+        console.info(
+          ...delegationLog("queued", {
+            conversationId: tid,
+            messageId,
+            delegationId,
+            turnId,
+            historyCount: history.length,
+            historyRoles: history.map((m) => m.role).join(","),
+          }),
+        );
+        // Fire and forget: the completion watcher below owns the outcome, so a
+        // dropped round trip can't leave the job looking unfinished.
+        await runTurn({ data: { turnId } }).catch(() => {});
       } catch (e) {
+        pendingJobRef.current = null;
+        pendingTurnRef.current = false;
+        console.warn(
+          ...delegationLog("queue_failed", {
+            conversationId: tid,
+            messageId,
+            delegationId,
+            reason: String((e as any)?.message ?? e).slice(0, 200),
+          }),
+        );
         voiceRef.current.appendCommentary(
           "That request couldn't be started just now. Tell the user briefly and offer to try again.",
           delegationId,
         );
-      } finally {
-        pendingTurnRef.current = false;
       }
     },
-    [qc, runTurn],
+    [runTurn],
   );
 
   const voice = useLiveVoice({
