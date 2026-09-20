@@ -250,7 +250,10 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
     onUserText: useCallback(
       (t: string) => {
         lastUserTextRef.current = t;
-        void appendMessage("user", t);
+        lastUserMessageIdRef.current = null;
+        void appendMessage("user", t).then((id) => {
+          lastUserMessageIdRef.current = id;
+        });
       },
       [appendMessage],
     ),
@@ -272,6 +275,9 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
     pushedDocsRef.current = "";
     spokenIdsRef.current = new Set();
     pendingTurnRef.current = false;
+    pendingJobRef.current = null;
+    handledDelegationsRef.current = new Set();
+    lastUserMessageIdRef.current = null;
   }, []);
 
   const start = useCallback(
@@ -292,6 +298,10 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
       watermarkRef.current = new Date().toISOString();
       spokenIdsRef.current = new Set();
       lastUserTextRef.current = "";
+      lastUserMessageIdRef.current = null;
+      pendingTurnRef.current = false;
+      pendingJobRef.current = null;
+      handledDelegationsRef.current = new Set();
       threadIdRef.current = tid;
       setThreadId(tid);
       await voiceRef.current.start();
