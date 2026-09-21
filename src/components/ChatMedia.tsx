@@ -80,6 +80,7 @@ export function ChatMediaRow({
 
   const items = useMemo(() => (assets ?? []).filter((a) => a.url), [assets]);
   const active = items.find((a) => a.id === openId) ?? null;
+  const paintAsset = items.find((a) => a.id === paintId) ?? null;
   const images = useMemo(() => items.filter((a) => a.kind === "image"), [items]);
   const activeImageIndex = active?.kind === "image" ? images.findIndex((a) => a.id === active.id) : -1;
 
