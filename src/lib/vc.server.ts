@@ -313,7 +313,14 @@ export async function postChat(row: VcRunRow, content: string) {
 export async function startVcRun(runId: string) {
   const row = await loadRun(runId);
   if (!row) return { ok: false, error: "run not found" };
+  // Reflex mode: Orby drives the browser herself, at human reflex speed. Only
+  // errands that have already been handed back run the slower hosted robot.
+  if (((row as any).mode ?? "reflex") === "reflex" && process.env["TYPESAFE_API_KEY"]) {
+    const { startReflexRun } = await import("./vc-reflex.server");
+    return await startReflexRun(runId);
+  }
   try {
+
     const { runId: providerRunId, sessionId } = await createProviderRun(row);
     if (!providerRunId) throw new Error("the provider returned no run id");
     await patch(row.id, {
