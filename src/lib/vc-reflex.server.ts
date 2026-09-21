@@ -544,7 +544,11 @@ export async function reflexTick(runId: string): Promise<VcResult> {
             await scrollBy(cdp, 500);
             break;
           }
-          return await askForField(chosen);
+          {
+            const asked = await askForField(chosen);
+            if (asked) return asked;
+          }
+          break;
         case "type": {
           if (!chosen) {
             await scrollBy(cdp, 600);
@@ -566,7 +570,11 @@ export async function reflexTick(runId: string): Promise<VcResult> {
           const boxKey = `${chosen.i}|${chosen.label}`;
           if (typedBoxes.has(boxKey)) text = null;
           if (used?.oneTime) await db().from("vc_secrets").delete().eq("id", used.id);
-          if (!text) return await askForField(chosen);
+          if (!text) {
+            const asked = await askForField(chosen);
+            if (asked) return asked;
+            break;
+          }
           typedBoxes.add(boxKey);
           await typeInto(cdp, chosen, text);
           break;
