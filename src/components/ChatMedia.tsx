@@ -139,6 +139,20 @@ export function ChatMediaRow({
           <DialogTitle className="pr-8 text-sm font-medium break-words">
             {active?.title ?? "Media"}
           </DialogTitle>
+          {active?.kind === "image" && active.url && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              aria-label="Paint on image"
+              title="Paint on image"
+              onClick={() => setPaintId(active.id)}
+              className="mt-1 w-fit gap-2"
+            >
+              <Brush className="h-4 w-4" />
+              Paint
+            </Button>
+          )}
           {active?.url && (
             <div className="relative mt-2 flex min-h-40 max-h-[70svh] items-center justify-center overflow-hidden">
               {active.kind === "image" ? (
@@ -190,6 +204,21 @@ export function ChatMediaRow({
           )}
         </DialogContent>
       </Dialog>
+
+      {paintAsset && (
+        <PaintImageDialog
+          open={!!paintAsset}
+          onOpenChange={(o) => { if (!o) setPaintId(null); }}
+          asset={{
+            id: paintAsset.id,
+            url: paintAsset.url,
+            title: paintAsset.title,
+            storage_path: paintAsset.storage_path ?? null,
+            mime_type: paintAsset.mime_type,
+          }}
+          onSaved={() => { setPaintId(null); setOpenId(null); }}
+        />
+      )}
     </div>
   );
 }
