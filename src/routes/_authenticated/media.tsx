@@ -1446,6 +1446,21 @@ function MediaPage() {
 
       <GenerateImageDialog open={generateOpen} onOpenChange={setGenerateOpen} />
 
+      {paintAsset && (
+        <PaintImageDialog
+          open={!!paintAsset}
+          onOpenChange={(o) => { if (!o) setPaintAsset(null); }}
+          asset={{
+            id: paintAsset.id,
+            url: paintAsset.url,
+            title: paintAsset.title,
+            storage_path: paintAsset.storage_path,
+            mime_type: paintAsset.mime_type,
+          }}
+          onSaved={() => setPaintAsset(null)}
+        />
+      )}
+
       {regenerateAsset && (
         <RegenerateImageDialog
           open={!!regenerateAsset}
