@@ -500,7 +500,8 @@ export async function reflexTick(runId: string): Promise<VcResult> {
         const field = (el.label || "this box").slice(0, 80);
         const answered = held.find((h) => h.kind.trim().toLowerCase() === field.trim().toLowerCase());
         if (answered) {
-          if (answered.oneTime) await db().from("vc_secrets").delete().eq("id", answered.id);
+          // Keep a form answer for the rest of the errand so the same box is
+          // never asked about twice.
           typedBoxes.add(`${el.i}|${el.label}`);
           await typeInto(cdp!, el, answered.value);
           return null;
