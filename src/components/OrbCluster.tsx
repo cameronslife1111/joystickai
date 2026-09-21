@@ -34,7 +34,7 @@ interface OrbClusterProps {
   onNextDocLongPress: () => void;
   /** Red orb tap: open Search docs. */
   onSearchDocs: () => void;
-  /** Red orb hold: open the Recent docs popup. */
+  /** Red orb hold: return to the previously viewed document. */
   onRecentDocs: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
@@ -236,7 +236,7 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-red"
         Icon={Search}
-        label="Search docs (hold for Recent docs)"
+        label="Search docs (hold for previous document)"
         onPress={onSearchDocs}
         onLongPress={onRecentDocs}
         placement={{ gridColumn: 1, gridRow: "1 / span 2" }}
