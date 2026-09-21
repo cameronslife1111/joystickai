@@ -428,7 +428,7 @@ export async function reflexTick(runId: string) {
         await patch(row.id, { action_count: actions, actions: log.slice(-40), no_progress: 0 });
         cdp.close();
         cdp = null;
-        await finishOk({ ...row, ...({} as any) }, summary, null);
+        await finishOk(row as VcRunRow, summary, null);
         return { ok: true as const, status: "completed" };
       }
 
