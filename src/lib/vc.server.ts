@@ -53,7 +53,7 @@ const db = () => supabaseAdmin as any;
 
 // ---------------------------------------------------------------- provider ---
 
-async function bu(path: string, init: RequestInit = {}): Promise<any> {
+export async function bu(path: string, init: RequestInit = {}): Promise<any> {
   const key = process.env["BROWSER_USE_API_KEY"];
   if (!key) throw new Error("The virtual computer isn't set up yet (missing Browser Use API key).");
   const res = await fetch(`${API}${path}`, {
@@ -81,7 +81,7 @@ async function bu(path: string, init: RequestInit = {}): Promise<any> {
 }
 
 /** Best-effort provider call — never fail a run over a nice-to-have. */
-async function buSoft(path: string, init: RequestInit = {}): Promise<any | null> {
+export async function buSoft(path: string, init: RequestInit = {}): Promise<any | null> {
   try {
     return await bu(path, init);
   } catch (e) {
@@ -111,7 +111,7 @@ async function encryptValue(value: string): Promise<string> {
   return btoa(b64);
 }
 
-async function decryptValue(cipher: string): Promise<string> {
+export async function decryptValue(cipher: string): Promise<string> {
   const raw = Uint8Array.from(atob(cipher), (c) => c.charCodeAt(0));
   const buf = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: raw.slice(0, 12) },
@@ -123,7 +123,7 @@ async function decryptValue(cipher: string): Promise<string> {
 
 // ------------------------------------------------------------------ helpers ---
 
-function hostOf(url: string): string | null {
+export function hostOf(url: string): string | null {
   try {
     return new URL(url.includes("://") ? url : `https://${url}`).hostname.replace(/^www\./, "");
   } catch {
@@ -131,7 +131,7 @@ function hostOf(url: string): string | null {
   }
 }
 
-function normalizeDomains(row: Pick<VcRunRow, "allowed_domains" | "start_url">): string[] {
+export function normalizeDomains(row: Pick<VcRunRow, "allowed_domains" | "start_url">): string[] {
   const out = new Set<string>();
   for (const d of row.allowed_domains ?? []) {
     const h = hostOf(String(d));
@@ -144,16 +144,17 @@ function normalizeDomains(row: Pick<VcRunRow, "allowed_domains" | "start_url">):
   return [...out];
 }
 
-async function patch(runId: string, updates: Record<string, unknown>) {
+export async function patch(runId: string, updates: Record<string, unknown>) {
   await db().from("vc_runs").update(updates).eq("id", runId);
 }
 
-async function loadRun(runId: string): Promise<VcRunRow | null> {
+export async function loadRun(runId: string): Promise<VcRunRow | null> {
   const { data } = await db().from("vc_runs").select("*").eq("id", runId).maybeSingle();
   return (data as VcRunRow | null) ?? null;
 }
 
-async function ensureProfile(userId: string): Promise<string | null> {
+
+export async function ensureProfile(userId: string): Promise<string | null> {
   const { data: existing } = await db()
     .from("vc_profiles")
     .select("provider_profile_id")
@@ -280,7 +281,7 @@ async function fetchBrowser(
 }
 
 /** Always shut the machine down — this is where the money goes. */
-async function shutdown(row: Pick<VcRunRow, "session_id" | "browser_id">) {
+export async function shutdown(row: Pick<VcRunRow, "session_id" | "browser_id">) {
   if (row.browser_id)
     await buSoft(`/browsers/${row.browser_id}`, { method: "PATCH", body: JSON.stringify({ action: "stop" }) });
   if (row.session_id) {
@@ -289,7 +290,7 @@ async function shutdown(row: Pick<VcRunRow, "session_id" | "browser_id">) {
   }
 }
 
-async function postChat(row: VcRunRow, content: string) {
+export async function postChat(row: VcRunRow, content: string) {
   if (!row.thread_id) return;
   try {
     const now = new Date().toISOString();
@@ -342,7 +343,7 @@ function parseSecretRequest(text: string) {
   return { domain, kind, ask };
 }
 
-async function finishOk(row: VcRunRow, result: string, cost: number | null) {
+export async function finishOk(row: VcRunRow, result: string, cost: number | null) {
   await shutdown(row);
   await patch(row.id, {
     status: "completed",
@@ -357,7 +358,7 @@ async function finishOk(row: VcRunRow, result: string, cost: number | null) {
   if (!row.plan_id && result.trim()) await postChat(row, result.trim().slice(0, 8_000));
 }
 
-async function finishFail(row: VcRunRow, error: string) {
+export async function finishFail(row: VcRunRow, error: string) {
   await shutdown(row);
   await patch(row.id, {
     status: "failed",
