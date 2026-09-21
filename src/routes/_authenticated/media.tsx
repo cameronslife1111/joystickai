@@ -1084,6 +1084,18 @@ function MediaPage() {
                   <MoreVertical className="h-5 w-5" />
                 </button>
               )}
+              {!redoComposerOpen && currentAsset.kind === "image" && currentAsset.url && currentAsset.status === "completed" && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPaintAsset(currentAsset); }}
+                  aria-label="Paint on image"
+                  title="Paint on image"
+                  className="absolute left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white"
+                  style={{ bottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+                >
+                  <Brush className="h-5 w-5" />
+                </button>
+              )}
+
 
               <button
                 onClick={(e) => { e.stopPropagation(); setViewerIdx(null); }}
