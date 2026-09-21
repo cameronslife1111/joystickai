@@ -145,29 +145,32 @@ async function summarise(row: ReflexRow, page: PageView, log: ActionLog[]): Prom
 
 // ---------------------------------------------------------------- secrets ---
 
-/** A saved credential for this exact site, if there is one. Never logged. */
-async function savedSecret(
-  userId: string,
-  domain: string | null,
-): Promise<{ id: string; value: string; oneTime: boolean; kind: string } | null> {
-  if (!domain) return null;
+type Held = { id: string; value: string; oneTime: boolean; kind: string; secretish: boolean };
+
+/** Everything the user has handed over for this site. Never logged. */
+async function savedSecrets(userId: string, domain: string | null): Promise<Held[]> {
+  if (!domain) return [];
   const { data } = await db()
     .from("vc_secrets")
     .select("id, domain, alias, label, cipher, one_time")
     .eq("user_id", userId)
     .in("domain", [domain, domain.replace(/^www\./, "")]);
-  const row = (data ?? [])[0];
-  if (!row) return null;
-  try {
-    return {
-      id: String(row.id),
-      value: await decryptValue(row.cipher),
-      oneTime: Boolean(row.one_time),
-      kind: String(row.label ?? "password"),
-    };
-  } catch {
-    return null;
+  const out: Held[] = [];
+  for (const row of data ?? []) {
+    try {
+      const kind = String(row.label ?? "password");
+      out.push({
+        id: String(row.id),
+        value: await decryptValue(row.cipher),
+        oneTime: Boolean(row.one_time),
+        kind,
+        secretish: /password|code/i.test(kind),
+      });
+    } catch {
+      /* unreadable — ignore */
+    }
   }
+  return out;
 }
 
 // ------------------------------------------------------------------ start ---
@@ -246,13 +249,21 @@ export async function escalate(row: ReflexRow, why: string): Promise<VcResult> {
 
 // --------------------------------------------------------------- the loop ---
 
+/**
+ * A cheap "is this still the same page in the same state" print. Filled-in
+ * boxes and ticked options count, so choosing a size or typing into a field
+ * registers as progress even when the page itself doesn't reload.
+ */
 function fingerprint(page: PageView): string {
-  return `${page.url}|${page.els.length}|${page.text.slice(0, 160)}`;
+  const filled = page.els.map((el) => (el.filled ? "1" : "0")).join("");
+  return `${page.url}|${page.els.length}|${filled}|${page.text.slice(0, 160)}`;
 }
 
 function elLabel(el: PageEl): string {
-  const kind =
-    el.tag === "input" || el.tag === "textarea"
+  const tick = el.type === "radio" || el.type === "checkbox";
+  const kind = tick
+    ? `${el.type === "radio" ? "choice option" : "tick box"} (${el.checked ? "already chosen" : "not chosen"})`
+    : el.tag === "input" || el.tag === "textarea"
       ? el.secret
         ? "password box"
         : `text box${el.type && el.type !== "text" ? ` (${el.type})` : ""}`
@@ -262,7 +273,7 @@ function elLabel(el: PageEl): string {
           ? "link"
           : "button";
   const where = el.onScreen ? "on screen" : "further down the page";
-  const filled = el.filled ? ", already filled in" : "";
+  const filled = !tick && el.filled ? ", already filled in" : "";
   return `${kind} labelled "${el.label || "(no label)"}", ${where}${filled}${el.href ? `, goes to ${el.href}` : ""}`;
 }
 
@@ -273,6 +284,8 @@ function humanPhase(verb: string, el: PageEl | null, page: PageView): string {
       return `Pressing "${el?.label || "a button"}" on ${site}`;
     case "type":
       return el?.secret ? `Typing the saved password on ${site}` : `Filling in "${el?.label || "a box"}" on ${site}`;
+    case "ask_user":
+      return `Asking you for "${el?.label || "a detail"}" on ${site}`;
     case "enter":
       return `Submitting the form on ${site}`;
     case "scroll_down":
@@ -309,6 +322,8 @@ export async function reflexTick(runId: string): Promise<VcResult> {
   let actions = row.action_count ?? 0;
   let noProgress = row.no_progress ?? 0;
   let lastPrint = "";
+  let lastMove = "";
+  const typedBoxes = new Set<string>();
 
   try {
     const wsUrl = row.page_ws ?? (await findPageSocket(row.cdp_url));
@@ -331,15 +346,12 @@ export async function reflexTick(runId: string): Promise<VcResult> {
     for (let burst = 0; burst < BURST_ACTIONS && Date.now() - started < BURST_MS; burst++) {
       const page = await harvest(cdp);
       const print = fingerprint(page);
-      noProgress = print === lastPrint ? noProgress + 1 : 0;
+      const samePage = print === lastPrint;
       lastPrint = print;
-      if (noProgress >= STUCK_LIMIT) {
-        await patch(row.id, { action_count: actions, actions: log.slice(-40), no_progress: noProgress });
-        return await escalate(row, "the page stopped changing");
-      }
 
       const domain = hostOf(page.url);
-      const secret = await savedSecret(row.user_id, domain);
+      const held = await savedSecrets(row.user_id, domain);
+      const secret = held.find((h) => h.secretish) ?? null;
 
       // The answer space Jev picks from: real elements plus a few verbs.
       const elements: Record<string, unknown> = {};
@@ -348,7 +360,9 @@ export async function reflexTick(runId: string): Promise<VcResult> {
 
       const verbs: Record<string, unknown> = {
         click: "Press the chosen element (button, link, tab, checkbox).",
-        type: "Type a value into the chosen text box. Only for text boxes that still need filling in.",
+        type: "Type one of the listed values into the chosen text box, where that value plainly belongs in it.",
+        ask_user:
+          "The chosen box needs a detail none of the listed values covers — a name, address, phone number, card detail, code or answer the user never gave. Stop and ask them for it.",
         enter: "Press Enter to submit what is already typed in.",
         scroll_down: "Nothing useful is visible yet; move further down the page.",
         scroll_up: "Move back up the page.",
@@ -361,8 +375,9 @@ export async function reflexTick(runId: string): Promise<VcResult> {
       values.forEach((v, i) => {
         valueOptions[`v${i}`] = `The literal text: ${v}`;
       });
-      if (secret)
-        valueOptions["saved"] = `The user's saved ${secret.kind} for ${domain} (its characters are hidden from you).`;
+      held.forEach((h, i) => {
+        valueOptions[`h${i}`] = `The ${h.kind} the user handed over for ${domain} (its characters are hidden from you).`;
+      });
       if (!Object.keys(valueOptions).length)
         valueOptions["none"] = "There is no value available to type.";
 
@@ -373,6 +388,7 @@ export async function reflexTick(runId: string): Promise<VcResult> {
         page: { url: page.url, title: page.title, visible_text: page.text.slice(0, 2200) },
         room_to_scroll: page.scrollRoom,
         elements: page.els.slice(0, 80).map((el) => ({ id: `e${el.i}`, what: elLabel(el) })),
+        things_the_user_handed_over: held.map((h) => h.kind),
         saved_credential_available: Boolean(secret),
       };
 
@@ -423,6 +439,15 @@ export async function reflexTick(runId: string): Promise<VcResult> {
 
       if (!verb) return await escalate(row, "no decision came back");
 
+      // Stuck means the same move on an unchanged page, over and over.
+      const move = `${verb.id}:${element?.id ?? "-"}`;
+      noProgress = samePage && move === lastMove ? noProgress + 1 : 0;
+      lastMove = move;
+      if (noProgress >= STUCK_LIMIT) {
+        await patch(row.id, { action_count: actions, actions: log.slice(-40), no_progress: noProgress });
+        return await escalate(row, "the page stopped changing");
+      }
+
       // Finished?
       if (done > 0.72 || verb.id === "finish") {
         const summary = await summarise(row, page, log);
@@ -458,13 +483,53 @@ export async function reflexTick(runId: string): Promise<VcResult> {
         return { ok: true as const, status: "awaiting_secret" };
       }
 
-      if (verb.id === "escalate" || verb.confidence < MIN_CONFIDENCE) {
+      // Filling in a box is the safest move there is: either a known value goes
+      // in, or the user is asked for it. So it needs less certainty than the rest.
+      const floor = verb.id === "type" || verb.id === "ask_user" ? MIN_CONFIDENCE * 0.6 : MIN_CONFIDENCE;
+      if (verb.id === "escalate" || verb.confidence < floor) {
         await patch(row.id, { action_count: actions, actions: log.slice(-40) });
         return await escalate(row, `unsure (${verb.id}, ${verb.confidence.toFixed(2)})`);
       }
 
       const chosen =
         element && element.id !== "none" ? (page.els.find((el) => `e${el.i}` === element.id) ?? null) : null;
+
+      // Ask the user for one detail this page needs, in the chat — unless they
+      // already answered this exact box, in which case use their answer.
+      const askForField = async (el: PageEl): Promise<VcResult | null> => {
+        const field = (el.label || "this box").slice(0, 80);
+        const answered = held.find((h) => h.kind.trim().toLowerCase() === field.trim().toLowerCase());
+        if (answered) {
+          // Keep a form answer for the rest of the errand so the same box is
+          // never asked about twice.
+          typedBoxes.add(`${el.i}|${el.label}`);
+          await typeInto(cdp!, el, answered.value);
+          return null;
+        }
+        await patch(row.id, {
+          status: "awaiting_secret",
+          action_count: actions,
+          actions: log.slice(-40),
+          phase_text: `Waiting for what to put in "${field}"`,
+          secret_request: {
+            alias: `field_${field.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}`,
+            domain: domain ?? "",
+            kind: el.secret ? "password" : "info",
+            field,
+            ask: el.secret
+              ? `Please enter the password for ${domain ?? "this site"}.`
+              : `What should I put in "${field}" on ${domain ?? "this page"}?`,
+            asked_at: new Date().toISOString(),
+          },
+        });
+        await postChat(
+          row,
+          el.secret
+            ? `I need the password for ${domain}. Tap the locked box on the virtual computer card — it goes straight into the page and is never kept in this chat.`
+            : `The form on ${domain ?? "this page"} is asking for "${field}" and I don't have it. Type it into the box on the virtual computer card and I'll carry straight on.`,
+        );
+        return { ok: true as const, status: "awaiting_secret" };
+      };
 
       // Do it.
       switch (verb.id) {
@@ -475,24 +540,43 @@ export async function reflexTick(runId: string): Promise<VcResult> {
           }
           await clickAt(cdp, chosen.x, chosen.y);
           break;
+        case "ask_user":
+          if (!chosen) {
+            await scrollBy(cdp, 500);
+            break;
+          }
+          {
+            const asked = await askForField(chosen);
+            if (asked) return asked;
+          }
+          break;
         case "type": {
           if (!chosen) {
             await scrollBy(cdp, 600);
             break;
           }
           let text: string | null = null;
-          if (value?.id === "saved" && secret) {
-            text = secret.value;
-            if (secret.oneTime) await db().from("vc_secrets").delete().eq("id", secret.id);
+          let used: Held | null = null;
+          if (value && value.id.startsWith("h")) {
+            used = held[Number(value.id.slice(1))] ?? null;
+            text = used?.value ?? null;
           } else if (value && value.id.startsWith("v")) {
             text = values[Number(value.id.slice(1))] ?? null;
           } else if (chosen.secret && secret) {
+            used = secret;
             text = secret.value;
           }
+          // Once a box has been filled, going back to it means the value Orby
+          // had wasn't the right one — so ask the user rather than repeat.
+          const boxKey = `${chosen.i}|${chosen.label}`;
+          if (typedBoxes.has(boxKey)) text = null;
+          if (used?.oneTime) await db().from("vc_secrets").delete().eq("id", used.id);
           if (!text) {
-            await scrollBy(cdp, 400);
+            const asked = await askForField(chosen);
+            if (asked) return asked;
             break;
           }
+          typedBoxes.add(boxKey);
           await typeInto(cdp, chosen, text);
           break;
         }
@@ -540,6 +624,19 @@ export async function reflexTick(runId: string): Promise<VcResult> {
     if (e instanceof JevError && e.status === 401) {
       await finishFail(row, "The instant decision engine rejected the TypeSafe key, so the task was stopped.");
       return { ok: false as const, error: message };
+    }
+    // A page that navigated mid-command is normal browsing, not a dead end:
+    // drop the stale window handle and pick the page up again next poke.
+    const hiccup = /navigated or closed|couldn't read the page|timed out|socket/i.test(message);
+    if (hiccup && noProgress + 1 < STUCK_LIMIT) {
+      await patch(row.id, {
+        page_ws: null,
+        action_count: actions,
+        actions: log.slice(-40),
+        no_progress: noProgress + 1,
+        poll_at: new Date().toISOString(),
+      });
+      return { ok: true as const, status: "running", actions };
     }
     // Anything else: the slower robot finishes the job.
     return await escalate(row, message);
