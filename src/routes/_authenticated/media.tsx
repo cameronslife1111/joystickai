@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, Play, Music, X, Pencil, Download,
   RefreshCw, Film, Video, Trash2, MoreVertical, Sparkles, Loader2, AlertCircle, Layers, Mic2, Copy,
   CheckSquare, CheckCircle2, FileText, ImageIcon, FolderInput, CopyPlus, FolderMinus,
-  ArrowUpNarrowWide, Minimize2,
+  ArrowUpNarrowWide, Minimize2, Brush,
 } from "lucide-react";
 import { AppBackground } from "@/components/AppBackground";
 import { useAppBackground, setAppBackground } from "@/lib/use-app-background";
@@ -29,6 +29,7 @@ import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useDownloadAll } from "@/hooks/use-download-all";
 import { DownloadAllProgress } from "@/components/DownloadAllProgress";
 import { MediaRedoControl } from "@/components/MediaRedoControl";
+import { PaintImageDialog } from "@/components/PaintImageDialog";
 
 
 const NO_CALLOUT_STYLE: React.CSSProperties = {
@@ -147,6 +148,7 @@ function MediaPage() {
   const [remixAsset, setRemixAsset] = useState<Asset | null>(null);
   const [upscaleAsset, setUpscaleAsset] = useState<Asset | null>(null);
   const [shrinkAsset, setShrinkAsset] = useState<Asset | null>(null);
+  const [paintAsset, setPaintAsset] = useState<Asset | null>(null);
   const [failedAsset, setFailedAsset] = useState<Asset | null>(null);
   const [stuckAsset, setStuckAsset] = useState<Asset | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
