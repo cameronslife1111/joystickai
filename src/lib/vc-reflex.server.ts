@@ -492,6 +492,34 @@ export async function reflexTick(runId: string): Promise<VcResult> {
       const chosen =
         element && element.id !== "none" ? (page.els.find((el) => `e${el.i}` === element.id) ?? null) : null;
 
+      // Ask the user for one detail this page needs, in the chat.
+      const askForField = async (el: PageEl): Promise<VcResult> => {
+        const field = (el.label || "this box").slice(0, 80);
+        await patch(row.id, {
+          status: "awaiting_secret",
+          action_count: actions,
+          actions: log.slice(-40),
+          phase_text: `Waiting for what to put in "${field}"`,
+          secret_request: {
+            alias: `field_${field.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}`,
+            domain: domain ?? "",
+            kind: el.secret ? "password" : "info",
+            field,
+            ask: el.secret
+              ? `Please enter the password for ${domain ?? "this site"}.`
+              : `What should I put in "${field}" on ${domain ?? "this page"}?`,
+            asked_at: new Date().toISOString(),
+          },
+        });
+        await postChat(
+          row,
+          el.secret
+            ? `I need the password for ${domain}. Tap the locked box on the virtual computer card — it goes straight into the page and is never kept in this chat.`
+            : `The form on ${domain ?? "this page"} is asking for "${field}" and I don't have it. Type it into the box on the virtual computer card and I'll carry straight on.`,
+        );
+        return { ok: true as const, status: "awaiting_secret" };
+      };
+
       // Do it.
       switch (verb.id) {
         case "click":
@@ -501,6 +529,12 @@ export async function reflexTick(runId: string): Promise<VcResult> {
           }
           await clickAt(cdp, chosen.x, chosen.y);
           break;
+        case "ask_user":
+          if (!chosen) {
+            await scrollBy(cdp, 500);
+            break;
+          }
+          return await askForField(chosen);
         case "type": {
           if (!chosen) {
             await scrollBy(cdp, 600);
@@ -522,30 +556,7 @@ export async function reflexTick(runId: string): Promise<VcResult> {
           const boxKey = `${chosen.i}|${chosen.label}`;
           if (typedBoxes.has(boxKey)) text = null;
           if (used?.oneTime) await db().from("vc_secrets").delete().eq("id", used.id);
-          if (!text) {
-            // A box has to be filled in and nothing Orby holds belongs in it:
-            // ask the user for that one detail, in the chat.
-            const field = (chosen.label || "this box").slice(0, 80);
-            await patch(row.id, {
-              status: "awaiting_secret",
-              action_count: actions,
-              actions: log.slice(-40),
-              phase_text: `Waiting for what to put in "${field}"`,
-              secret_request: {
-                alias: `field_${field.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}`,
-                domain: domain ?? "",
-                kind: "info",
-                field,
-                ask: `What should I put in "${field}" on ${domain ?? "this page"}?`,
-                asked_at: new Date().toISOString(),
-              },
-            });
-            await postChat(
-              row,
-              `The form on ${domain ?? "this page"} is asking for "${field}" and I don't have it. Type it into the box on the virtual computer card and I'll carry straight on.`,
-            );
-            return { ok: true as const, status: "awaiting_secret" };
-          }
+          if (!text) return await askForField(chosen);
           typedBoxes.add(boxKey);
           await typeInto(cdp, chosen, text);
           break;
