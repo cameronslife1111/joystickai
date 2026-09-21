@@ -30,7 +30,7 @@ Your own TypeSafe key will be used, billed to your TypeSafe account. Once you ap
 
 ### Files
 
-- New `src/lib/jev.server.ts` — one `askJev(state, questions)` helper over the gateway, with the documented error semantics surfaced to the card.
+- New `src/lib/jev.server.ts` — one `askJev(state, questions)` helper calling TypeSafe directly with `TYPESAFE_API_KEY` read inside the handler, with clear errors surfaced to the card (and quiet escalation to the old robot if TypeSafe is unreachable).
 - New `src/lib/vc-reflex.server.ts` — browser creation, CDP burst driver, DOM harvest script, action execution, escalation handoff.
 - `src/lib/vc.server.ts` — route new runs to reflex mode, keep every existing cap, shutdown, retry and secret path; add reflex action ceiling (~120 actions).
 - Migration on `vc_runs`: `mode`, `cdp_url`, `action_count`, `actions` (jsonb log), `sub_goals`, `escalated_at`. No new tables; existing owner-only RLS and grants apply.
