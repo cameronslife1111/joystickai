@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
-import { ChevronLeft, ChevronRight, Film, Music, ImageIcon } from "lucide-react";
+import { PaintImageDialog } from "@/components/PaintImageDialog";
+import { Brush, ChevronLeft, ChevronRight, Film, Music, ImageIcon } from "lucide-react";
 
 export type ChatAsset = {
   id: string;
@@ -12,6 +13,7 @@ export type ChatAsset = {
   kind: string;
   url: string | null;
   mime_type: string | null;
+  storage_path?: string | null;
 };
 
 /** Quoted media titles the user dropped into a message: "Sunset over the bay". */
@@ -38,7 +40,7 @@ export function useChatMedia(ids: string[], titles: string[]) {
     staleTime: 60_000,
     queryFn: async (): Promise<ChatAsset[]> => {
       const found = new Map<string, ChatAsset>();
-      const cols = "id, title, kind, url, mime_type";
+      const cols = "id, title, kind, url, mime_type, storage_path";
 
       if (ids.length) {
         const { data } = await supabase.from("media_assets").select(cols).in("id", ids);
@@ -74,9 +76,11 @@ export function ChatMediaRow({
 }) {
   const { data: assets } = useChatMedia(ids, titles);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [paintId, setPaintId] = useState<string | null>(null);
 
   const items = useMemo(() => (assets ?? []).filter((a) => a.url), [assets]);
   const active = items.find((a) => a.id === openId) ?? null;
+  const paintAsset = items.find((a) => a.id === paintId) ?? null;
   const images = useMemo(() => items.filter((a) => a.kind === "image"), [items]);
   const activeImageIndex = active?.kind === "image" ? images.findIndex((a) => a.id === active.id) : -1;
 
@@ -136,6 +140,20 @@ export function ChatMediaRow({
           <DialogTitle className="pr-8 text-sm font-medium break-words">
             {active?.title ?? "Media"}
           </DialogTitle>
+          {active?.kind === "image" && active.url && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              aria-label="Paint on image"
+              title="Paint on image"
+              onClick={() => setPaintId(active.id)}
+              className="mt-1 w-fit gap-2"
+            >
+              <Brush className="h-4 w-4" />
+              Paint
+            </Button>
+          )}
           {active?.url && (
             <div className="relative mt-2 flex min-h-40 max-h-[70svh] items-center justify-center overflow-hidden">
               {active.kind === "image" ? (
@@ -187,6 +205,21 @@ export function ChatMediaRow({
           )}
         </DialogContent>
       </Dialog>
+
+      {paintAsset && (
+        <PaintImageDialog
+          open={!!paintAsset}
+          onOpenChange={(o) => { if (!o) setPaintId(null); }}
+          asset={{
+            id: paintAsset.id,
+            url: paintAsset.url,
+            title: paintAsset.title,
+            storage_path: paintAsset.storage_path ?? null,
+            mime_type: paintAsset.mime_type,
+          }}
+          onSaved={() => { setPaintId(null); setOpenId(null); }}
+        />
+      )}
     </div>
   );
 }
