@@ -494,9 +494,17 @@ export async function reflexTick(runId: string): Promise<VcResult> {
       const chosen =
         element && element.id !== "none" ? (page.els.find((el) => `e${el.i}` === element.id) ?? null) : null;
 
-      // Ask the user for one detail this page needs, in the chat.
-      const askForField = async (el: PageEl): Promise<VcResult> => {
+      // Ask the user for one detail this page needs, in the chat — unless they
+      // already answered this exact box, in which case use their answer.
+      const askForField = async (el: PageEl): Promise<VcResult | null> => {
         const field = (el.label || "this box").slice(0, 80);
+        const answered = held.find((h) => h.kind.trim().toLowerCase() === field.trim().toLowerCase());
+        if (answered) {
+          if (answered.oneTime) await db().from("vc_secrets").delete().eq("id", answered.id);
+          typedBoxes.add(`${el.i}|${el.label}`);
+          await typeInto(cdp!, el, answered.value);
+          return null;
+        }
         await patch(row.id, {
           status: "awaiting_secret",
           action_count: actions,
