@@ -393,7 +393,14 @@ export async function pollVcRun(runId: string) {
     return { ok: true, status: "awaiting_secret" };
   }
 
+  // Reflex mode drives itself; the hosted robot only handles handed-back runs.
+  if (((row as any).mode ?? "reflex") === "reflex") {
+    const { reflexTick } = await import("./vc-reflex.server");
+    return await reflexTick(row.id);
+  }
+
   if (!row.provider_run_id) return await startVcRun(row.id);
+
 
   // Hard wall clock — the main runaway guard.
   if (Date.parse(row.deadline_at) < Date.now()) {
@@ -517,11 +524,20 @@ export async function submitVcSecret(runId: string, value: string, remember: boo
       { onConflict: "user_id,domain,alias" },
     );
 
+  // Reflex mode keeps the very same browser window open — just carry on.
+  if (((row as any).mode ?? "reflex") === "reflex" && (row as any).cdp_url) {
+    await patch(row.id, { allowed_domains: [...(row.allowed_domains ?? []), domain] });
+    const { resumeReflexAfterSecret } = await import("./vc-reflex.server");
+    await resumeReflexAfterSecret(row.id);
+    return { ok: true };
+  }
+
   const resumed: VcRunRow = {
     ...row,
     allowed_domains: [...(row.allowed_domains ?? []), domain],
   };
   try {
+
     const { runId: providerRunId, sessionId } = await createProviderRun(
       resumed,
       `The credential you asked for is now available as the placeholder ${alias}. Type it into the field that needs it on ${domain} and carry on with the task. If another verification step appears, stop again using the ${NEED_SECRET} format.`,
