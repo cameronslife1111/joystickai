@@ -2,7 +2,7 @@
 
 Today the virtual computer hands the whole errand to a hosted browser robot that thinks with a big model before every single click — that is where the 10–15 seconds per click goes. This update gives Orby her own hands: she opens a throwaway cloud browser, looks at the page's clickable parts as plain text, and asks the instant decision engine (Jev) "which one do I press next?" That answer comes back in a fraction of a second, so she moves at human-reflex speed. The big model is used only twice — once at the start to set the strategy, once at the end to write the answer — plus whenever she gets stuck.
 
-Good news on the key: the instant engine is already available through Orby's existing Lovable AI connection, so your TypeSafe key isn't needed. If you'd rather bill it to your own TypeSafe account, say so and I'll ask for the key securely instead.
+Your own TypeSafe key will be used, billed to your TypeSafe account. Once you approve, I'll open the secure form to save it (as `TYPESAFE_API_KEY`) and Orby will call TypeSafe directly with it.
 
 ## What you'll see
 
