@@ -23,7 +23,7 @@ type Run = {
   live_view_url: string | null;
   result: string | null;
   error: string | null;
-  secret_request: { ask?: string; domain?: string; kind?: string } | null;
+  secret_request: { ask?: string; domain?: string; kind?: string; field?: string } | null;
   thread_id: string | null;
   created_at: string;
   mode: string | null;
@@ -148,14 +148,16 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
           <div className="flex items-center gap-2">
             <Lock className="h-3 w-3 text-muted-foreground" />
             <Input
-              type="password"
+              type={run.secret_request?.kind === "info" ? "text" : "password"}
               autoComplete="off"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               placeholder={
                 run.secret_request?.kind === "code"
                   ? "Verification code"
-                  : `Password for ${run.secret_request?.domain ?? "the site"}`
+                  : run.secret_request?.kind === "info"
+                    ? (run.secret_request?.field ?? "What to type in")
+                    : `Password for ${run.secret_request?.domain ?? "the site"}`
               }
               className="h-9 flex-1 text-sm"
             />
@@ -185,7 +187,7 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
               Send
             </Button>
           </div>
-          {run.secret_request?.kind !== "code" && (
+          {(run.secret_request?.kind ?? "password") === "password" && (
             <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <input
                 type="checkbox"

@@ -510,7 +510,9 @@ export async function submitVcSecret(runId: string, value: string, remember: boo
     return { ok: false, error: "Nothing is waiting for a password right now." };
   const alias = String(req["alias"] ?? "site_password");
   const kind = String(req["kind"] ?? "password");
-  const oneTime = kind === "code" || !remember;
+  const oneTime = kind !== "password" || !remember;
+  const label =
+    kind === "code" ? "verification code" : kind === "info" ? String(req["field"] ?? "detail") : "password";
 
   await db()
     .from("vc_secrets")
@@ -519,7 +521,7 @@ export async function submitVcSecret(runId: string, value: string, remember: boo
         user_id: row.user_id,
         domain,
         alias,
-        label: kind === "code" ? "verification code" : "password",
+        label,
         cipher: await encryptValue(value),
         one_time: oneTime,
       },

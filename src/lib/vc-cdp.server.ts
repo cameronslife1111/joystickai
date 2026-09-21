@@ -126,9 +126,19 @@ export const HARVEST_JS = `(() => {
     if (el.disabled) continue;
     const type = (el.type || '').toLowerCase();
     const isSecret = type === 'password';
-    const raw = el.getAttribute('aria-label') || el.placeholder || el.getAttribute('name') || (el.innerText || '').trim() || el.title || el.alt || '';
-    const label = String(raw).replace(/\\s+/g, ' ').trim().slice(0, 70);
-    const filled = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? Boolean(el.value) : false;
+    const tick = type === 'radio' || type === 'checkbox';
+    const own = el.labels && el.labels[0] ? (el.labels[0].innerText || '').trim() : '';
+    const valAttr = (tick || type === 'submit' || type === 'button') ? (el.value || '') : '';
+    const group = el.getAttribute ? (el.getAttribute('name') || '') : '';
+    const raw = own || el.getAttribute('aria-label') || el.placeholder || valAttr || group || (el.innerText || '').trim() || el.title || el.alt || '';
+    let label = String(raw).replace(/\\s+/g, ' ').trim().slice(0, 70);
+    if (tick && group && label.toLowerCase() !== group.toLowerCase()) label = label + ' [' + group + ']';
+    const checked = tick ? Boolean(el.checked) : false;
+    const filled = tick
+      ? checked
+      : el.tagName === 'SELECT'
+        ? Boolean(el.value)
+        : (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? Boolean(el.value) : false;
     out.push({
       i: i++,
       tag: el.tagName.toLowerCase(),
@@ -139,7 +149,8 @@ export const HARVEST_JS = `(() => {
       x: Math.round(r.left + r.width / 2),
       y: Math.round(r.top + r.height / 2),
       onScreen: r.top >= 0 && r.top < innerHeight,
-      filled
+      filled,
+      checked
     });
   }
   return JSON.stringify({
@@ -163,6 +174,7 @@ export type PageEl = {
   y: number;
   onScreen: boolean;
   filled: boolean;
+  checked: boolean;
 };
 
 export type PageView = {
