@@ -944,16 +944,23 @@ export type Database = {
       }
       vc_runs: {
         Row: {
+          action_count: number
+          actions: Json
           allowed_domains: string[]
           attempts: number
           browser_id: string | null
+          cdp_url: string | null
           cost_usd: number | null
           created_at: string
           deadline_at: string
           error: string | null
+          escalated_at: string | null
           finished_at: string | null
           id: string
           live_view_url: string | null
+          mode: string
+          no_progress: number
+          page_ws: string | null
           phase_text: string | null
           plan_id: string | null
           poll_at: string | null
@@ -965,22 +972,31 @@ export type Database = {
           started_at: string
           status: string
           step_index: number | null
+          sub_goals: Json | null
           task: string
           thread_id: string | null
+          type_values: Json | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          action_count?: number
+          actions?: Json
           allowed_domains?: string[]
           attempts?: number
           browser_id?: string | null
+          cdp_url?: string | null
           cost_usd?: number | null
           created_at?: string
           deadline_at?: string
           error?: string | null
+          escalated_at?: string | null
           finished_at?: string | null
           id?: string
           live_view_url?: string | null
+          mode?: string
+          no_progress?: number
+          page_ws?: string | null
           phase_text?: string | null
           plan_id?: string | null
           poll_at?: string | null
@@ -992,22 +1008,31 @@ export type Database = {
           started_at?: string
           status?: string
           step_index?: number | null
+          sub_goals?: Json | null
           task: string
           thread_id?: string | null
+          type_values?: Json | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          action_count?: number
+          actions?: Json
           allowed_domains?: string[]
           attempts?: number
           browser_id?: string | null
+          cdp_url?: string | null
           cost_usd?: number | null
           created_at?: string
           deadline_at?: string
           error?: string | null
+          escalated_at?: string | null
           finished_at?: string | null
           id?: string
           live_view_url?: string | null
+          mode?: string
+          no_progress?: number
+          page_ws?: string | null
           phase_text?: string | null
           plan_id?: string | null
           poll_at?: string | null
@@ -1019,8 +1044,10 @@ export type Database = {
           started_at?: string
           status?: string
           step_index?: number | null
+          sub_goals?: Json | null
           task?: string
           thread_id?: string | null
+          type_values?: Json | null
           updated_at?: string
           user_id?: string
         }

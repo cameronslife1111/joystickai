@@ -26,7 +26,10 @@ type Run = {
   secret_request: { ask?: string; domain?: string; kind?: string } | null;
   thread_id: string | null;
   created_at: string;
+  mode: string | null;
+  action_count: number | null;
 };
+
 
 const ACTIVE = ["starting", "running", "awaiting_secret"];
 
@@ -41,11 +44,13 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
 
   const { data: run, refetch } = useQuery({
     queryKey: ["vc-active-run", threadId],
-    refetchInterval: 3000,
+    refetchInterval: 1500,
     queryFn: async (): Promise<Run | null> => {
       let q = supabase
         .from("vc_runs")
-        .select("id, status, phase_text, live_view_url, result, error, secret_request, thread_id, created_at")
+        .select(
+          "id, status, phase_text, live_view_url, result, error, secret_request, thread_id, created_at, mode, action_count",
+        )
         .in("status", ACTIVE)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -55,18 +60,23 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
     },
   });
 
+  const fast = (run?.mode ?? "reflex") === "reflex";
+
   // While the card is open, push the run forward faster than the minute tick.
+  // Fast mode acts in short bursts, so it gets poked far more often.
   useEffect(() => {
     if (!run || !ACTIVE.includes(run.status)) return;
+    const every = run.status === "awaiting_secret" ? 6000 : fast ? 2000 : 6000;
     const id = window.setInterval(() => {
       void poke({ data: { runId: run.id } }).then(() => refetch());
-    }, 6000);
+    }, every);
     if (pokedFor.current !== run.id) {
       pokedFor.current = run.id;
       void poke({ data: { runId: run.id } }).then(() => refetch());
     }
     return () => window.clearInterval(id);
-  }, [run?.id, run?.status]);
+  }, [run?.id, run?.status, fast]);
+
 
   const phase = useMemo(() => {
     if (!run) return "";
@@ -84,6 +94,11 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
       <div className="flex items-center gap-2">
         <Monitor className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold">Virtual computer</span>
+        {fast && (
+          <span className="rounded-full bg-primary/15 px-2 py-[1px] text-[10px] font-medium text-primary">
+            fast mode
+          </span>
+        )}
         {!awaiting && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
           <ShieldCheck className="h-3 w-3" /> cloud only
@@ -91,6 +106,10 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
       </div>
 
       <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-muted-foreground">{phase}</p>
+      {fast && (run.action_count ?? 0) > 0 && (
+        <p className="mt-0.5 text-[10px] text-muted-foreground">{run.action_count} steps so far</p>
+      )}
+
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {run.live_view_url && (
