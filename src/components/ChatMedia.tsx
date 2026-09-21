@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
-import { Film, Music, ImageIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Film, Music, ImageIcon } from "lucide-react";
 
 export type ChatAsset = {
   id: string;
@@ -76,6 +77,29 @@ export function ChatMediaRow({
 
   const items = useMemo(() => (assets ?? []).filter((a) => a.url), [assets]);
   const active = items.find((a) => a.id === openId) ?? null;
+  const images = useMemo(() => items.filter((a) => a.kind === "image"), [items]);
+  const activeImageIndex = active?.kind === "image" ? images.findIndex((a) => a.id === active.id) : -1;
+
+  const showAdjacentImage = (offset: number) => {
+    if (activeImageIndex < 0 || images.length < 2) return;
+    const nextIndex = (activeImageIndex + offset + images.length) % images.length;
+    setOpenId(images[nextIndex]?.id ?? null);
+  };
+
+  useEffect(() => {
+    if (activeImageIndex < 0 || images.length < 2) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showAdjacentImage(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showAdjacentImage(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeImageIndex, images]);
 
   if (!items.length) return null;
 
@@ -113,13 +137,47 @@ export function ChatMediaRow({
             {active?.title ?? "Media"}
           </DialogTitle>
           {active?.url && (
-            <div className="mt-2 flex max-h-[70svh] items-center justify-center overflow-hidden">
+            <div className="relative mt-2 flex min-h-40 max-h-[70svh] items-center justify-center overflow-hidden">
               {active.kind === "image" ? (
-                <img
-                  src={proxyMediaUrl(active.url)}
-                  alt={active.title ?? "Media"}
-                  className="max-h-[70svh] w-auto rounded-md object-contain"
-                />
+                <>
+                  <img
+                    src={proxyMediaUrl(active.url)}
+                    alt={active.title ?? "Media"}
+                    className="max-h-[70svh] w-auto rounded-md object-contain"
+                  />
+                  {images.length > 1 && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        aria-label="Previous image"
+                        title="Previous image"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          showAdjacentImage(-1);
+                        }}
+                        className="absolute left-2 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-border bg-background/85 shadow-lg backdrop-blur-sm"
+                      >
+                        <ChevronLeft className="h-6 w-6" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        aria-label="Next image"
+                        title="Next image"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          showAdjacentImage(1);
+                        }}
+                        className="absolute right-2 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-border bg-background/85 shadow-lg backdrop-blur-sm"
+                      >
+                        <ChevronRight className="h-6 w-6" />
+                      </Button>
+                    </>
+                  )}
+                </>
               ) : active.kind === "video" ? (
                 <video src={proxyMediaUrl(active.url)} controls playsInline className="max-h-[70svh] w-full rounded-md" />
               ) : (
