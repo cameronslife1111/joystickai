@@ -310,7 +310,9 @@ export async function postChat(row: VcRunRow, content: string) {
 
 // ------------------------------------------------------------------ actions ---
 
-export async function startVcRun(runId: string) {
+export type VcResult = { ok: boolean; error?: string; status?: string; actions?: number };
+
+export async function startVcRun(runId: string): Promise<VcResult> {
   const row = await loadRun(runId);
   if (!row) return { ok: false, error: "run not found" };
   // Reflex mode: Orby drives the browser herself, at human reflex speed. Only

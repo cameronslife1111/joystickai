@@ -29,6 +29,7 @@ import {
   postChat,
   shutdown,
   VC_MAX_RUNTIME_MS,
+  type VcResult,
   type VcRunRow,
 } from "./vc.server";
 import {
@@ -172,7 +173,7 @@ async function savedSecret(
 // ------------------------------------------------------------------ start ---
 
 /** Book a cloud browser and drive it ourselves. */
-export async function startReflexRun(runId: string) {
+export async function startReflexRun(runId: string): Promise<VcResult> {
   const row = (await loadRun(runId)) as ReflexRow | null;
   if (!row) return { ok: false as const, error: "run not found" };
   try {
@@ -224,7 +225,7 @@ export async function startReflexRun(runId: string) {
  * Hand the errand to the hosted robot (today's path). The saved profile keeps
  * whatever the fast pass signed into, so nothing is lost.
  */
-export async function escalate(row: ReflexRow, why: string) {
+export async function escalate(row: ReflexRow, why: string): Promise<VcResult> {
   await shutdown(row);
   await patch(row.id, {
     mode: "agent",
@@ -289,7 +290,7 @@ function humanPhase(verb: string, el: PageEl | null, page: PageView): string {
  * Push a reflex run forward by a burst of actions. Safe to call as often as
  * you like; each call opens a socket, acts, and closes it.
  */
-export async function reflexTick(runId: string) {
+export async function reflexTick(runId: string): Promise<VcResult> {
   const row = (await loadRun(runId)) as ReflexRow | null;
   if (!row) return { ok: false as const, error: "run not found" };
   if (row.status !== "running") return { ok: true as const, status: row.status };
@@ -548,7 +549,7 @@ export async function reflexTick(runId: string) {
 }
 
 /** After a password arrives, carry on in the same browser window. */
-export async function resumeReflexAfterSecret(runId: string) {
+export async function resumeReflexAfterSecret(runId: string): Promise<VcResult> {
   const row = (await loadRun(runId)) as ReflexRow | null;
   if (!row) return { ok: false as const, error: "run not found" };
   await patch(row.id, {
