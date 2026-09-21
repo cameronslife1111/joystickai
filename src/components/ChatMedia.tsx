@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { proxyMediaUrl } from "@/lib/sb-proxy";
-import { ChevronLeft, ChevronRight, Film, Music, ImageIcon } from "lucide-react";
+import { PaintImageDialog } from "@/components/PaintImageDialog";
+import { Brush, ChevronLeft, ChevronRight, Film, Music, ImageIcon } from "lucide-react";
 
 export type ChatAsset = {
   id: string;
@@ -12,6 +13,7 @@ export type ChatAsset = {
   kind: string;
   url: string | null;
   mime_type: string | null;
+  storage_path?: string | null;
 };
 
 /** Quoted media titles the user dropped into a message: "Sunset over the bay". */
@@ -38,7 +40,7 @@ export function useChatMedia(ids: string[], titles: string[]) {
     staleTime: 60_000,
     queryFn: async (): Promise<ChatAsset[]> => {
       const found = new Map<string, ChatAsset>();
-      const cols = "id, title, kind, url, mime_type";
+      const cols = "id, title, kind, url, mime_type, storage_path";
 
       if (ids.length) {
         const { data } = await supabase.from("media_assets").select(cols).in("id", ids);
@@ -74,6 +76,7 @@ export function ChatMediaRow({
 }) {
   const { data: assets } = useChatMedia(ids, titles);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [paintId, setPaintId] = useState<string | null>(null);
 
   const items = useMemo(() => (assets ?? []).filter((a) => a.url), [assets]);
   const active = items.find((a) => a.id === openId) ?? null;
