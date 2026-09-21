@@ -284,6 +284,8 @@ function humanPhase(verb: string, el: PageEl | null, page: PageView): string {
       return `Pressing "${el?.label || "a button"}" on ${site}`;
     case "type":
       return el?.secret ? `Typing the saved password on ${site}` : `Filling in "${el?.label || "a box"}" on ${site}`;
+    case "ask_user":
+      return `Asking you for "${el?.label || "a detail"}" on ${site}`;
     case "enter":
       return `Submitting the form on ${site}`;
     case "scroll_down":
@@ -483,7 +485,7 @@ export async function reflexTick(runId: string): Promise<VcResult> {
 
       // Filling in a box is the safest move there is: either a known value goes
       // in, or the user is asked for it. So it needs less certainty than the rest.
-      const floor = verb.id === "type" ? MIN_CONFIDENCE * 0.6 : MIN_CONFIDENCE;
+      const floor = verb.id === "type" || verb.id === "ask_user" ? MIN_CONFIDENCE * 0.6 : MIN_CONFIDENCE;
       if (verb.id === "escalate" || verb.confidence < floor) {
         await patch(row.id, { action_count: actions, actions: log.slice(-40) });
         return await escalate(row, `unsure (${verb.id}, ${verb.confidence.toFixed(2)})`);
