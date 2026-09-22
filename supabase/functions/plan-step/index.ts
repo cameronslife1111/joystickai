@@ -1948,7 +1948,9 @@ const TOOL_HANDLERS: Record<string, any> = {
         thread_id: thread_id ?? null,
         plan_id: plan_id ?? null,
         status: "starting",
+        deadline_at: new Date(Date.now() + 8 * 60_000).toISOString(),
         phase_text: "Booking a machine…",
+
       })
       .select("id")
       .single();
