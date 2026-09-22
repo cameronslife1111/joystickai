@@ -395,6 +395,20 @@ export async function pollVcRun(runId: string) {
     return { ok: true, status: "awaiting_secret" };
   }
 
+  // Freshly queued: book the machine. If it's still un-booked well past a
+  // sensible wait, stop it with a plain message instead of hanging.
+  if (row.status === "starting" && !row.browser_id && !row.provider_run_id) {
+    const begun = String((row as any).started_at ?? (row as any).created_at ?? "");
+    const age = Date.now() - (Date.parse(begun) || Date.now());
+
+    if (age > 90_000) {
+
+      await finishFail(row, "The virtual computer couldn't get a machine to work on. Please try again in a moment.");
+      return { ok: true, status: "failed" };
+    }
+    return await startVcRun(row.id);
+  }
+
   // Reflex mode drives itself; the hosted robot only handles handed-back runs.
   if (((row as any).mode ?? "reflex") === "reflex") {
     const { reflexTick } = await import("./vc-reflex.server");
@@ -402,6 +416,7 @@ export async function pollVcRun(runId: string) {
   }
 
   if (!row.provider_run_id) return await startVcRun(row.id);
+
 
 
   // Hard wall clock — the main runaway guard.
