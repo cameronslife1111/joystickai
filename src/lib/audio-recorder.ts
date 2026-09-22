@@ -288,6 +288,10 @@ function watchStream(stream: MediaStream) {
       try {
         track.stop();
       } catch {}
+      // A track can die while iOS suspends the page. Release the recording
+      // token now rather than leaving every later speech request locked in the
+      // exclusive play-and-record category until the page returns.
+      if (activeRecorders === 0) endMicSession();
     };
     track.addEventListener?.("ended", invalidate);
     track.addEventListener?.("mute", invalidate);

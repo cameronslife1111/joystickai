@@ -191,6 +191,24 @@ export function useLiveVoice({
     setState("idle");
   }, []);
 
+  // iOS can suspend a WebRTC page without ever moving connectionState away
+  // from "connected". Tear the call down at the page lifecycle boundary so its
+  // microphone and play-and-record category cannot remain stuck after return.
+  useEffect(() => {
+    const stopWhenHidden = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "hidden") return;
+      stop();
+    };
+    window.addEventListener("pagehide", stop);
+    window.addEventListener("freeze", stop);
+    document.addEventListener("visibilitychange", stopWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", stop);
+      window.removeEventListener("freeze", stop);
+      document.removeEventListener("visibilitychange", stopWhenHidden);
+    };
+  }, [stop]);
+
   /** Send a data-channel command, queueing it until `session.started`. */
   const send = useCallback((event: Record<string, unknown>): boolean => {
     const dc = dcRef.current;

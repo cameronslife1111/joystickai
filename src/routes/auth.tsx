@@ -5,7 +5,16 @@ import { toast } from "@/lib/toast";
 import { Orb } from "@/components/Orb";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in — Orby" }] }),
+  head: () => ({
+    meta: [
+      { title: "Sign in — Orby" },
+      { name: "description", content: "Sign in to Orby to focus, organize documents, and continue your work." },
+      { property: "og:title", content: "Sign in — Orby" },
+      { property: "og:description", content: "Sign in to Orby to focus, organize documents, and continue your work." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: AuthPage,
 });
 

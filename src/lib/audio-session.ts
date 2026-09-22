@@ -82,6 +82,29 @@ export function requestIosMixableSession(): boolean {
   }
 }
 
+/**
+ * Request iOS's nonexclusive short-prompt category. `transient` may duck other
+ * audio while it continues; older WebKit builds can reject it, so the only
+ * fallback is the still-mixable `ambient` category.
+ */
+export function beginIosSpeechSession(): "transient" | "ambient" | null {
+  if (activeRecordingTokens.size > 0) return null;
+  const session = iosAudioSession();
+  if (!session) return null;
+  for (const type of ["transient", "ambient"] as const) {
+    try {
+      session.type = type;
+      if (session.type === type) return type;
+    } catch {}
+  }
+  return null;
+}
+
+/** Return a finished prompt to the shared idle category. */
+export function endIosSpeechSession(): boolean {
+  return requestIosMixableSession();
+}
+
 export function isIosRecordingSessionActive(): boolean {
   return activeRecordingTokens.size > 0;
 }

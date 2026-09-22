@@ -171,7 +171,7 @@ describe("device sentence speech", () => {
     }
   });
 
-  test("asks only for the mixable ambient category and creates no audio element", () => {
+  test("asks for short-speech ducking, restores ambient, and creates no audio element", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     const win = globalThis as unknown as Record<string, unknown>;
@@ -183,9 +183,9 @@ describe("device sentence speech", () => {
       expect(speakText("Mix this over music.")).toBe(true);
       synth.spoken[0]!.onstart?.();
       synth.spoken[0]!.onend?.();
-      // Ambient is the only category iOS mixes with other apps; nothing else
-      // may ever be requested from the speech path.
-      expect(session.requestedTypes.every((t) => t === "ambient")).toBe(true);
+      expect(session.requestedTypes).toContain("transient");
+      expect(session.requestedTypes).not.toContain("playback");
+      expect(session.requestedTypes).not.toContain("transient-solo");
       expect(session.type).toBe("ambient");
       expect(audioElements).toBe(0);
     } finally {
@@ -263,7 +263,7 @@ describe("device sentence speech", () => {
     expect(isSpeaking()).toBe(false);
   });
 
-  test("re-arms speech after an iOS audio interruption, still only asking for ambient", () => {
+  test("re-arms short-speech mode after an iOS audio interruption", () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     setSpeechEnabled(true);
@@ -274,7 +274,9 @@ describe("device sentence speech", () => {
     session.state = "active";
     session.requestedTypes.length = 0;
     expect(speakText("after interruption")).toBe(true);
-    expect(session.requestedTypes.every((t) => t === "ambient")).toBe(true);
+    expect(session.requestedTypes).toContain("transient");
+    expect(session.requestedTypes).not.toContain("playback");
+    expect(session.requestedTypes).not.toContain("transient-solo");
     expect(synth.spoken.at(-1)?.text).toBe("after interruption");
     cancelSpeech();
   });

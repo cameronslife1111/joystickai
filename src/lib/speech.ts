@@ -1,4 +1,8 @@
-import { onIosAudioSessionInterrupted, requestIosMixableSession } from "@/lib/audio-session";
+import {
+  beginIosSpeechSession,
+  endIosSpeechSession,
+  onIosAudioSessionInterrupted,
+} from "@/lib/audio-session";
 
 
 type SpeakOpts = {
@@ -120,9 +124,6 @@ function primeSpeech() {
   try {
     engine.getVoices?.();
   } catch {}
-  try {
-    if (engine.paused) engine.resume();
-  } catch {}
 }
 
 function attachPrimer() {
@@ -153,50 +154,13 @@ function attachPrimer() {
 
 let recoveryListenersAttached = false;
 let wasHidden = false;
-/** Set whenever the app was backgrounded: the engine may be wedged. */
-let engineStale = false;
-let resetTimers: ReturnType<typeof setTimeout>[] = [];
 let removeAudioSessionListener: (() => void) | null = null;
-
-function clearResetTimers() {
-  for (const timer of resetTimers) clearTimeout(timer);
-  resetTimers = [];
-}
-
-/**
- * Force WebKit's queue back to idle. After an app switch, a phone call or a
- * screen lock, `speechSynthesis` can keep reporting `speaking` forever while
- * producing no sound, and a single cancel() often isn't enough — resume first
- * (a suspended queue ignores cancel), then cancel, repeatedly over ~1s.
- */
-function hardResetEngine() {
-  const engine = synth();
-  if (!engine) return;
-  const kick = () => {
-    try {
-      if (engine.paused) engine.resume();
-    } catch {}
-    try {
-      engine.cancel();
-    } catch {}
-  };
-  kick();
-  clearResetTimers();
-  for (const delay of [50, 200, 600]) {
-    const timer = setTimeout(() => {
-      if (audibleSpeaking) return; // real speech started meanwhile
-      kick();
-    }, delay);
-    (timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
-    resetTimers.push(timer);
-  }
-}
 
 export function handleAppForeground() {
   cancelSpeech();
-  engineStale = true;
   primed = false;
-  hardResetEngine();
+  // Refresh WebKit's lazily-populated voice list. Never resume a stale queue:
+  // that can revive an interrupted utterance and race the next user press.
   primeSpeech();
 }
 
@@ -213,7 +177,6 @@ function attachForegroundRecovery() {
     if (!pageIsVisible()) {
       wasHidden = true;
       cancelSpeech();
-      engineStale = true;
       return;
     }
     if (!wasHidden) return;
@@ -227,7 +190,6 @@ function attachForegroundRecovery() {
   window.addEventListener("focus", onMaybeForeground);
   window.addEventListener("pagehide", () => {
     wasHidden = true;
-    engineStale = true;
     cancelSpeech();
   });
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
@@ -235,7 +197,6 @@ function attachForegroundRecovery() {
   }
   removeAudioSessionListener?.();
   removeAudioSessionListener = onIosAudioSessionInterrupted(() => {
-    engineStale = true;
     wasHidden = true;
     cancelSpeech();
   });
@@ -249,18 +210,23 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
-export function cancelSpeech() {
+function clearSpeechEngine(restoreIdleSession: boolean) {
   requestSequence += 1;
   audibleSpeaking = false;
   activeUtterance = null;
   if (startWatchdog) clearTimeout(startWatchdog);
   startWatchdog = null;
-  clearResetTimers();
   const engine = synth();
-  if (!engine) return;
-  try {
-    engine.cancel();
-  } catch {}
+  if (engine) {
+    try {
+      engine.cancel();
+    } catch {}
+  }
+  if (restoreIdleSession) endIosSpeechSession();
+}
+
+export function cancelSpeech() {
+  clearSpeechEngine(true);
 }
 
 export function isSpeaking(): boolean {
@@ -294,32 +260,15 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
 
   attachPrimer();
   if (!primed) primeSpeech();
-  // Reading aloud never touches the microphone: another app (Voice Memos) may
-  // be recording, and grabbing or handing back the mic would kill its take.
-  // Ask for the mixable ambient category so the device voice layers over other
-  // apps' audio instead of taking the route over.
-  requestIosMixableSession();
-
-
-  // Replace whatever is being read: single cancel, then speak, in the same
-  // user-gesture turn so WebKit allows the new utterance to start. Always
-  // resume + cancel first: after an app switch, a call, or a recording, the
-  // queue can be suspended or holding a phantom utterance.
-  cancelSpeech();
-  engineStale = false;
-  try {
-    if (engine.paused) engine.resume();
-  } catch {}
-  try {
-    engine.cancel();
-  } catch {}
+  // One cancellation, then one fresh utterance in the same user gesture. A
+  // delayed reset loop can erase a newer swipe after returning from an app.
+  clearSpeechEngine(false);
   const sequence = requestSequence;
-  let recoveryAttempts = 0;
 
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
-    // No audio-session category is requested anywhere in this path: the device
-    // speech engine owns its own session, which is what keeps it audible with
-    // the ring switch on and layered over other apps' audio.
+    // This does not open, stop or release a microphone. `transient` asks iOS to
+    // duck other audio; unsupported builds fall back to ambient mixing.
+    beginIosSpeechSession();
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.rate = opts.rate ?? SPEECH_RATE;
     if (opts.pitch !== undefined) utterance.pitch = opts.pitch;
@@ -334,6 +283,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       startWatchdog = null;
       audibleSpeaking = false;
       activeUtterance = null;
+      endIosSpeechSession();
       return true;
     };
 
@@ -354,6 +304,9 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         // could not be resolved — try once with an explicit local voice.
         const retryVoice = fallbackVoice(engine);
         if (retryVoice) {
+          try {
+            engine.cancel();
+          } catch {}
           speak(retryVoice, true);
           return;
         }
@@ -364,39 +317,42 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
     };
 
     activeUtterance = utterance;
-    // Watchdog: nothing started, and no error either (a silently swallowed or
-    // phantom WebKit utterance). Recover by forcing the queue idle and
-    // resubmitting, then by pinning an explicit voice, then give up.
+    // A silently swallowed default utterance gets one concrete local-voice
+    // retry. Never schedule repeated queue resets that could kill a later swipe.
     if (startWatchdog) clearTimeout(startWatchdog);
     startWatchdog = setTimeout(() => {
       if (sequence !== requestSequence || audibleSpeaking) return;
       startWatchdog = null;
-      if (recoveryAttempts < 2) {
-        // Never trust engine.speaking here: after an app switch iOS reports an
-        // active queue while playing nothing. Force it idle and try again.
-        recoveryAttempts += 1;
-        const voice = isRetry ? null : fallbackVoice(engine);
-        try {
-          if (engine.paused) engine.resume();
-        } catch {}
-        try {
-          engine.cancel();
-        } catch {}
-        speak(voice, isRetry || voice !== null);
-        return;
+      if (!isRetry) {
+        const voice = fallbackVoice(engine);
+        if (voice) {
+          try {
+            engine.cancel();
+          } catch {}
+          speak(voice, true);
+          return;
+        }
       }
       audibleSpeaking = false;
       activeUtterance = null;
+      endIosSpeechSession();
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
-    }, 900);
+    }, 1_200);
 
-    try {
-      if (engine.paused) engine.resume();
-    } catch {}
     try {
       engine.speak(utterance);
     } catch {
+      if (!isRetry) {
+        const voice = fallbackVoice(engine);
+        if (voice) {
+          try {
+            engine.cancel();
+          } catch {}
+          speak(voice, true);
+          return;
+        }
+      }
       if (!settle()) return;
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
