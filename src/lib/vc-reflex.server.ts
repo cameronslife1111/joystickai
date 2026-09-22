@@ -332,7 +332,7 @@ export async function reflexTick(runId: string): Promise<VcResult> {
   const typedBoxes = new Set<string>();
 
   try {
-    const wsUrl = row.page_ws ?? (await findPageSocket(row.cdp_url));
+    const wsUrl = row.page_ws ?? (await findPageSocket(String(row.cdp_url)));
     if (!wsUrl) return await escalate(row, "no page to drive");
     if (wsUrl !== row.page_ws) await patch(row.id, { page_ws: wsUrl });
 
