@@ -3829,12 +3829,24 @@ function AppPageInner() {
           >
             <div className="mb-3 flex items-center justify-between px-2">
               <div className="font-display text-lg">★ Favorites</div>
-              <button
-                onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    void saveFavorites(Array.from({ length: 50 }, () => null));
+                    setPickerSlot(null);
+                  }}
+                  disabled={lockFavorites || favorites.every((id) => !id)}
+                  className="text-sm text-destructive/80 hover:text-destructive disabled:opacity-40 disabled:hover:text-destructive/80"
+                >
+                  Clear all slots
+                </button>
+                <button
+                  onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
             </div>
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
               Long press a slot below to jump to the next document, or tap it to choose one.{" "}
