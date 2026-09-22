@@ -398,7 +398,9 @@ export async function pollVcRun(runId: string) {
   // Freshly queued: book the machine. If it's still un-booked well past a
   // sensible wait, stop it with a plain message instead of hanging.
   if (row.status === "starting" && !row.browser_id && !row.provider_run_id) {
-    const age = Date.now() - (Date.parse(String(row.started_at ?? row.created_at ?? "")) || Date.now());
+    const begun = String((row as any).started_at ?? (row as any).created_at ?? "");
+    const age = Date.now() - (Date.parse(begun) || Date.now());
+
     if (age > 90_000) {
 
       await finishFail(row, "The virtual computer couldn't get a machine to work on. Please try again in a moment.");
