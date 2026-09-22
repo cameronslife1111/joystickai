@@ -37,7 +37,16 @@ import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
 import { WELCOME_DOC_TITLE, WELCOME_DOC_SENTENCES } from "@/lib/welcome-document";
 
 export const Route = createFileRoute("/_authenticated/app")({
-  head: () => ({ meta: [{ title: "Orby" }] }),
+  head: () => ({
+    meta: [
+      { title: "Focus — Orby" },
+      { name: "description", content: "Move through your Orby documents one sentence at a time." },
+      { property: "og:title", content: "Focus — Orby" },
+      { property: "og:description", content: "Move through your Orby documents one sentence at a time." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: AppPage,
 });
 

@@ -42,7 +42,16 @@ import { proxyMediaUrl } from "@/lib/sb-proxy";
 import { useFeatureLock } from "@/lib/use-feature-lock";
 
 export const Route = createFileRoute("/_authenticated/media")({
-  head: () => ({ meta: [{ title: "Media Gallery · Orby" }] }),
+  head: () => ({
+    meta: [
+      { title: "Media Gallery — Orby" },
+      { name: "description", content: "Browse, organize, edit, and download your Orby media." },
+      { property: "og:title", content: "Media Gallery — Orby" },
+      { property: "og:description", content: "Browse, organize, edit, and download your Orby media." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   validateSearch: (search: Record<string, unknown>): { folder?: string } => ({
     folder: typeof search.folder === "string" && search.folder ? search.folder : undefined,
   }),
