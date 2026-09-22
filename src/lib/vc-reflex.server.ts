@@ -308,10 +308,11 @@ export async function reflexTick(runId: string): Promise<VcResult> {
   if (!row) return { ok: false as const, error: "run not found" };
   // A freshly queued errand ("starting") has no machine yet — book one instead
   // of waiting on itself forever.
-  if (row.status === "starting" || !row.cdp_url) {
-    if (row.status === "starting" || row.status === "running") return await startReflexRun(row.id);
+  if (!row.cdp_url && (row.status === "starting" || row.status === "running")) {
+    return await startReflexRun(row.id);
   }
   if (row.status !== "running") return { ok: true as const, status: row.status };
+
 
   if (Date.parse(row.deadline_at) < Date.now()) {
     await finishFail(row, `The task hit its ${Math.round(VC_MAX_RUNTIME_MS / 60_000)}-minute limit and was stopped.`);

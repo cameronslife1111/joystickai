@@ -399,7 +399,8 @@ export async function pollVcRun(runId: string) {
   // sensible wait, stop it with a plain message instead of hanging.
   if (row.status === "starting" && !row.browser_id && !row.provider_run_id) {
     const age = Date.now() - (Date.parse(String(row.started_at ?? row.created_at ?? "")) || Date.now());
-    if (age > 90_000 && (row.attempts ?? 0) >= 1) {
+    if (age > 90_000) {
+
       await finishFail(row, "The virtual computer couldn't get a machine to work on. Please try again in a moment.");
       return { ok: true, status: "failed" };
     }
