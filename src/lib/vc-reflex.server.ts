@@ -82,7 +82,7 @@ type ActionLog = { at: string; what: string };
 async function bigModel() {
   const key = process.env["OPENAI_API_KEY"];
   if (!key) throw new Error("Missing OPENAI_API_KEY");
-  return createOpenAiProvider(key)("gpt-5.6-luna");
+  return createOpenAiProvider(key)("gpt-6-luna");
 }
 
 /**

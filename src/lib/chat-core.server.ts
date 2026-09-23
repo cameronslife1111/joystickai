@@ -423,7 +423,7 @@ export async function runChatTurn(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const provider = createOpenAiProvider(apiKey);
-  const model = provider("gpt-5.6-luna");
+  const model = provider("gpt-6-luna");
 
   const system =
     ORBY_BASE_RULES +
