@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import { cleanForSpeech, speakText, setSpeechEnabled, setSpeechSuppressed, isSpeaking, cancelSpeech, setSpeechVoice, getSpeechVoice } from "../src/lib/speech";
+import { cleanForSpeech, speakText, setSpeechEnabled, setSpeechSuppressed, isSpeaking, cancelSpeech, setSpeechVoice, getSpeechVoice, onVoiceChanged } from "../src/lib/speech";
 
 describe("speech", () => {
   beforeEach(() => { setSpeechEnabled(false); setSpeechSuppressed(false); });
@@ -24,6 +24,9 @@ describe("speech", () => {
     expect(getSpeechVoice()).toBe("Puck");
     setSpeechVoice("Nope");
     expect(getSpeechVoice()).toBe("Puck");
+  });
+  test("voice changes safely cancel old preloads", () => {
+    expect(() => onVoiceChanged()).not.toThrow();
   });
   test("cancel leaves nothing playing", () => {
     cancelSpeech();

@@ -7,6 +7,7 @@ const MODEL = "gemini-3.8-flash-lite-tts";
 const VOICES = ["Charon", "Fenrir", "Puck", "Orus", "Iapetus", "Kore", "Aoede", "Leda", "Zephyr", "Autonoe"] as const;
 
 let sbClient: ReturnType<typeof createClient> | null = null;
+let quotaPausedUntil = 0;
 async function authorized(request: Request): Promise<boolean> {
   const auth = request.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
@@ -38,6 +39,10 @@ export const Route = createFileRoute("/api/tts")({
         const voice = VOICES.includes(payload.voice as never) ? (payload.voice as string) : "Kore";
         const googleKey = process.env["GOOGLE_API_KEY"];
         if (!googleKey) return new Response("Speech error", { status: 500 });
+        if (Date.now() < quotaPausedUntil) {
+          const retryAfter = Math.max(1, Math.ceil((quotaPausedUntil - Date.now()) / 1000));
+          return new Response("Speech error", { status: 429, headers: { "retry-after": String(retryAfter) } });
+        }
 
         try {
           // Auth and Gemini start in parallel; audio is only sent if auth passes.
@@ -63,7 +68,18 @@ export const Route = createFileRoute("/api/tts")({
           }
           const res = await resP;
           if (!res.ok || !res.body) {
-            console.error("gemini tts failed", res.status, await res.text().catch(() => ""));
+            const errorText = await res.text().catch(() => "");
+            if (res.status === 429) {
+              const retryMatch = errorText.match(/"retryDelay"\s*:\s*"(\d+)s"/);
+              const retrySeconds = retryMatch ? Number(retryMatch[1]) : 60;
+              quotaPausedUntil = Date.now() + Math.max(60, retrySeconds) * 1000;
+              console.error("gemini tts quota paused", retrySeconds);
+              return new Response("Speech error", {
+                status: 429,
+                headers: { "retry-after": String(Math.max(60, retrySeconds)) },
+              });
+            }
+            console.error("gemini tts failed", res.status, errorText);
             return new Response("Speech error", { status: res.status || 502 });
           }
           const decoder = new TextDecoder();

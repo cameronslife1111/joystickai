@@ -900,7 +900,7 @@ function AppPageInner() {
     const t = setTimeout(() => {
       if (mutedRef.current || inCallRef.current || recordingRef.current) return;
       const texts: string[] = [];
-      for (const d of [0, 1, 2, -1, -2]) {
+      for (const d of [0, 1, -1, 2, -2]) {
         const s = sentences[currentIdx + d]?.content;
         if (s) texts.push(stripEmoji(s));
       }
@@ -1028,34 +1028,6 @@ function AppPageInner() {
       return next;
     });
   }, [activeDocId]);
-
-  // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
-  // Any change to activeDocId / currentIdx / sentence text tears this effect
-  // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
-  // Does NOT touch Orb mood — the shared speech-state poll animates the mouth.
-  const repeatText = sentences?.[currentIdx]?.content;
-  useEffect(() => {
-    if (!repeatText) return;
-    let id: ReturnType<typeof setTimeout>;
-    const schedule = () => {
-      id = setTimeout(() => {
-        if (
-          mutedRef.current ||
-          recordingRef.current ||
-          busyRef.current ||
-          (typeof document !== "undefined" && document.hidden)
-        ) {
-          schedule();
-          return;
-        }
-        const token = claimSpeech();
-        speak(repeatText, token);
-        schedule();
-      }, 2 * 60 * 1000);
-    };
-    schedule();
-    return () => clearTimeout(id);
-  }, [activeDocId, currentIdx, repeatText, speak, claimSpeech]);
 
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
