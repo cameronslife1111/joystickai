@@ -121,6 +121,8 @@ function removeSynth() {
   const win = globalThis as unknown as Record<string, unknown>;
   win["window"] = globalThis;
   delete win["speechSynthesis"];
+  delete win["AudioContext"];
+  delete win["webkitAudioContext"];
 }
 
 describe("device sentence speech", () => {
