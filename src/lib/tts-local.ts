@@ -186,12 +186,13 @@ export function prefetchLocalClips(texts: string[], speed = 1) {
     wanted.add(k);
     ordered.push(t);
   }
-  // Drop stale waiting jobs (their promises are simply forgotten).
+  // Drop stale waiting jobs so the engine follows the user's position.
   for (let i = queue.length - 1; i >= 0; i--) {
     const j = queue[i];
     if (!wanted.has(j.key)) {
       queue.splice(i, 1);
       cache.delete(j.key);
+      j.reject(new Error("skipped"));
     }
   }
   // Re-order the remaining queue to match the new priority.
