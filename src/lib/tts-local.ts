@@ -111,5 +111,8 @@ export function generateLocalClip(text: string, speed = 1): Promise<LocalClip> {
 /** Prepare upcoming sentences ahead of time. Only runs once the voice is ready. */
 export function prefetchLocalClips(texts: string[], speed = 1) {
   if (state !== "ready") return;
-  for (const t of texts) if (t) void generateLocalClip(t, speed).catch(() => {});
+  for (const raw of texts) {
+    const t = raw.replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D]/gu, "").replace(/\s+/g, " ").trim();
+    if (t) void generateLocalClip(t, speed).catch(() => {});
+  }
 }
