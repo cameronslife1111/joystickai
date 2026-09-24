@@ -92,11 +92,32 @@ const inflight = new Map<string, Inflight>();
 let wantedKeys = new Set<string>();
 /** Do not keep hitting a provider that has already told us its quota is exhausted. */
 let providerPausedUntil = 0;
+const PROVIDER_PAUSE_KEY = "orby_tts_paused_until";
+
+function currentProviderPause(): number {
+  if (providerPausedUntil > Date.now()) return providerPausedUntil;
+  if (typeof window === "undefined") return 0;
+  try {
+    const stored = Number(window.localStorage.getItem(PROVIDER_PAUSE_KEY));
+    if (Number.isFinite(stored) && stored > Date.now()) {
+      providerPausedUntil = stored;
+      return stored;
+    }
+    window.localStorage.removeItem(PROVIDER_PAUSE_KEY);
+  } catch {}
+  return 0;
+}
+
+function pauseProviderUntil(timestamp: number) {
+  providerPausedUntil = timestamp;
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(PROVIDER_PAUSE_KEY, String(timestamp)); } catch {}
+}
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function postTts(clean: string, v: string, signal: AbortSignal, live: boolean): Promise<Response> {
-  if (Date.now() < providerPausedUntil) {
+  if (currentProviderPause()) {
     return new Response("Speech error", { status: 429 });
   }
   const token = await getToken();
@@ -121,11 +142,11 @@ async function postTts(clean: string, v: string, signal: AbortSignal, live: bool
   }
   if (res.status === 429) {
     const retryAfter = Number(res.headers.get("retry-after"));
-    providerPausedUntil = Date.now() + (
+    pauseProviderUntil(Date.now() + (
       Number.isFinite(retryAfter) && retryAfter > 0
         ? retryAfter * 1000
         : 60_000
-    );
+    ));
   }
   return res;
 }
@@ -267,7 +288,7 @@ export function prewarmSpeech(texts: string[]) {
 async function runPrewarm(items: { key: string; clean: string; v: string }[], gen: number) {
   await sleep(250);
   for (const item of items) {
-    if (gen !== prewarmGen || Date.now() < providerPausedUntil) return;
+    if (gen !== prewarmGen || currentProviderPause()) return;
     if (liveGate) await liveGate;
     if (gen !== prewarmGen || cache.has(item.key) || !wantedKeys.has(item.key)) continue;
     const e = startDownload(item.key, item.clean, item.v, false);
