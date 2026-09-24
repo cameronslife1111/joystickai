@@ -10,7 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice, setSpeechHighQuality } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice } from "@/lib/speech";
 import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
@@ -880,11 +880,9 @@ function AppPageInner() {
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
   const ttsVoice = prefs?.tts_voice ?? "Kore";
-  const ttsHq = prefs?.tts_high_quality ?? false;
   useEffect(() => { setSpeechVoice(ttsVoice); }, [ttsVoice]);
-  useEffect(() => { setSpeechHighQuality(ttsHq); }, [ttsHq]);
   const [soundOpen, setSoundOpen] = useState(false);
-  const saveSoundPref = useCallback(async (patch: { tts_voice?: string; tts_high_quality?: boolean }) => {
+  const saveSoundPref = useCallback(async (patch: { tts_voice?: string }) => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
     qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), ...patch }));
@@ -4799,10 +4797,8 @@ function AppPageInner() {
         onOpenChange={setSoundOpen}
         muted={muted}
         voice={ttsVoice}
-        highQuality={ttsHq}
         onMutedChange={(m) => { void saveMuted(m); }}
         onVoiceChange={(v) => { void saveSoundPref({ tts_voice: v }); }}
-        onHighQualityChange={(on) => { void saveSoundPref({ tts_high_quality: on }); }}
       />
     </main>
   );
