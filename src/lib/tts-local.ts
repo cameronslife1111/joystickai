@@ -47,7 +47,9 @@ export function setLocalVoice(id: string) {
 
 export function onLocalVoiceChange(fn: () => void) {
   voiceListeners.add(fn);
-  return () => voiceListeners.delete(fn);
+  return () => {
+    voiceListeners.delete(fn);
+  };
 }
 
 function supported(): boolean {
@@ -80,8 +82,8 @@ function ensureWorker(): Worker | null {
       state = "failed";
       for (const j of queue) j.reject(new Error("voice failed to load"));
       queue.length = 0;
-    } else if ((m.type === "audio" || m.type === "error") && inflight?.id === m.id) {
-      const { job } = inflight;
+    } else if ((m.type === "audio" || m.type === "error") && inflight && inflight.id === m.id) {
+      const job = inflight.job;
       inflight = null;
       if (m.type === "audio") {
         done.add(job.key);
