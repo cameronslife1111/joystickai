@@ -916,9 +916,11 @@ const TOOL_HANDLERS: Record<string, any> = {
   async create_favorites_group(args, { user_id, admin }) {
     const name = String(args.name ?? "").trim().slice(0, 120);
     if (!name) throw new Error("A group name is required");
-    const raw = Array.isArray(args.documents)
-      ? args.documents
-      : String(args.documents ?? "").split(/\n|,|;/);
+    let raw: any = args.documents;
+    if (typeof raw === "string" && raw.trim().startsWith("[")) {
+      try { raw = JSON.parse(raw); } catch { /* fall through */ }
+    }
+    if (!Array.isArray(raw)) raw = String(raw ?? "").split(/\n|,|;/);
     const refs = raw.map((s: any) => String(s ?? "").trim()).filter(Boolean).slice(0, 300);
     const { data: docs, error: dErr } = await admin
       .from("documents").select("id, title").eq("user_id", user_id);
