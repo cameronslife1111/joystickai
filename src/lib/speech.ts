@@ -67,7 +67,7 @@ async function getToken(): Promise<string | null> {
 
 // ---- cache ----
 const SAMPLE_RATE = 24_000;
-const CACHE_MAX = 30;
+const CACHE_MAX = 80;
 const cache = new Map<string, Float32Array[]>();
 function cacheGet(k: string) {
   const v = cache.get(k);
@@ -86,20 +86,31 @@ let sources: AudioBufferSourceNode[] = [];
 let streamPlaying = false;
 let streamSeq = 0;
 
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
+function scheduleIdleSuspend() {
+  clearIdle();
+  idleTimer = setTimeout(() => { idleTimer = null; if (!streamPlaying) suspendCtx(); }, 2000);
+}
+function suspendCtx() {
+  if (ctx && ctx.state === "running") { try { void ctx.suspend(); } catch {} }
+}
+
+/** Created lazily, only when a sentence is about to play, at the device's own rate. */
 function audioCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
   const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
   if (!Ctor) return null;
+  requestIosMixableSession();
   const st = ctx?.state as string | undefined;
-  if (ctx && (st === "closed" || st === "interrupted")) { try { void ctx.close(); } catch {} ctx = null; }
-  if (!ctx) { try { ctx = new Ctor({ sampleRate: SAMPLE_RATE }); } catch { ctx = new Ctor(); } }
+  if (ctx && st === "closed") ctx = null;
+  if (!ctx) { try { ctx = new Ctor(); } catch { return null; } }
   if (ctx && ctx.state !== "running") { try { void ctx.resume(); } catch {} }
+  try {
+    const s = (navigator as any)?.audioSession;
+    if (s) console.debug("[orby-audio]", s.type, s.state, ctx?.state);
+  } catch {}
   return ctx;
-}
-
-function resetAudioContext() {
-  if (ctx) { try { void ctx.close(); } catch {} }
-  ctx = null;
 }
 
 let listenersAttached = false;
@@ -107,11 +118,9 @@ function attachListeners() {
   if (listenersAttached || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   listenersAttached = true;
   wireAuth();
-  const unlock = () => { requestIosMixableSession(); audioCtx(); };
-  for (const ev of ["pointerdown", "touchend", "keydown"] as const) {
-    window.addEventListener(ev, unlock, { passive: true });
-  }
-  const onHide = () => { cancelSpeech(); resetAudioContext(); };
+  // Leaving the app: stop speaking and quietly pause. Never close/rebuild or
+  // touch the audio mode, so other apps' music and recordings are left alone.
+  const onHide = () => { cancelSpeech(); cancelPrewarm(); clearIdle(); suspendCtx(); };
   window.addEventListener("pagehide", onHide);
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") onHide(); });
@@ -120,8 +129,8 @@ function attachListeners() {
 }
 if (typeof window !== "undefined") { try { attachListeners(); } catch {} }
 
-/** Called when the app returns to the foreground: rebuild audio fresh. */
-export function handleAppForeground() { cancelSpeech(); resetAudioContext(); }
+/** App returned to the foreground: do nothing until the user presses to read. */
+export function handleAppForeground() { cancelSpeech(); }
 
 function stopStream() {
   streamSeq += 1;
@@ -133,9 +142,63 @@ function stopStream() {
 }
 
 export function cancelSpeech() { stopStream(); }
-export function cancelPrewarm() {}
 export function isSpeaking() { return streamPlaying; }
-export function resetSpeechCaches() { cancelSpeech(); cache.clear(); }
+export function resetSpeechCaches() { cancelSpeech(); cancelPrewarm(); cache.clear(); }
+
+// ---- prewarm (fills the cache without playing) ----
+let prewarmQueue: string[] = [];
+let prewarmAbort: AbortController | null = null;
+let prewarmBusy = false;
+let prewarmGen = 0;
+export function cancelPrewarm() {
+  prewarmGen += 1;
+  prewarmQueue = [];
+  prewarmAbort?.abort();
+  prewarmAbort = null;
+  prewarmBusy = false;
+}
+/** Replace the prewarm queue with these sentences (in priority order). */
+export function prewarmSpeech(texts: string[]) {
+  cancelPrewarm();
+  if (!speechEnabled || speechSuppressed || typeof fetch !== "function") return;
+  const seen = new Set<string>();
+  for (const t of texts) {
+    const c = cleanForSpeech(t ?? "");
+    if (!c || !SPEAKABLE_RE.test(c) || seen.has(c) || cache.has(`${voice}|${c}`)) continue;
+    seen.add(c); prewarmQueue.push(c);
+  }
+  void runPrewarm(prewarmGen);
+}
+async function runPrewarm(gen: number) {
+  if (prewarmBusy) return;
+  prewarmBusy = true;
+  try {
+    // let the live sentence get the bandwidth first
+    await new Promise((r) => setTimeout(r, 350));
+    while (gen === prewarmGen && prewarmQueue.length) {
+      const clean = prewarmQueue.shift()!;
+      const v = voice;
+      const key = `${v}|${clean}`;
+      if (cache.has(key)) continue;
+      const abort = new AbortController();
+      prewarmAbort = abort;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/tts", {
+          method: "POST", signal: abort.signal,
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ text: clean, voice: v }),
+        });
+        if (!res.ok) continue;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (gen !== prewarmGen) return;
+        const f = pcmToFloat(bytes.length % 2 ? bytes.slice(0, -1) : bytes);
+        if (f.length) cachePut(key, [f]);
+      } catch { if (gen !== prewarmGen) return; }
+    }
+  } finally { if (gen === prewarmGen) { prewarmBusy = false; prewarmAbort = null; } }
+}
 
 function pcmToFloat(bytes: Uint8Array): Float32Array {
   const n = bytes.length >> 1;
@@ -147,7 +210,7 @@ function pcmToFloat(bytes: Uint8Array): Float32Array {
 
 function speakStreamed(clean: string, opts: SpeakOpts): boolean {
   attachListeners();
-  requestIosMixableSession();
+  clearIdle();
   const ac = audioCtx();
   if (!ac || typeof fetch !== "function") { emitSpeechError(); opts.onError?.(); return false; }
   stopStream();
@@ -159,6 +222,7 @@ function speakStreamed(clean: string, opts: SpeakOpts): boolean {
   const done = () => {
     if (seq !== streamSeq || !finished || pending > 0) return;
     streamPlaying = false;
+    scheduleIdleSuspend();
     opts.onEnd?.();
   };
   const play = (samples: Float32Array) => {
