@@ -92,6 +92,21 @@ export const TOOL_CATALOG: ToolDef[] = [
     },
   },
   {
+    name: "create_favorites_group",
+    description:
+      "Save a named favorites group (an ordered list of the user's documents for the Favorites slots). List documents in the exact order the user wants; each entry may be a document id or a loose title, fuzzy-matched. Saving with an existing name overwrites it. Set load_now true ONLY if the user asked to load/apply it now. Returns { name, documents, not_found, loaded }.",
+    args: {
+      name: { type: "string", description: "Group name", required: true },
+      documents: { type: "array", description: "Ordered array of document ids or loose titles (slot 1 first)", required: true },
+      load_now: { type: "boolean", description: "Also load it into the Favorites slots now", required: false },
+    },
+  },
+  {
+    name: "list_favorites_groups",
+    description: "List the user's saved favorites groups with document counts.",
+    args: {},
+  },
+  {
     name: "add_sentence",
     description: "Add a new sentence to a document. Position can be 'top' or 'bottom'. Default is 'bottom'. Do NOT use 'after_current' — plans have no notion of a 'current' sentence. The target document_id is REQUIRED and must be a concrete document id from the WORKSPACE SNAPSHOT or a {{step_N.result.id}} template (e.g. from a create_document step); never rely on an implied or 'previous' document.",
     args: {
