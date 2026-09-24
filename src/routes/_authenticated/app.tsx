@@ -11,7 +11,6 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
 import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
-import { prefetchLocalClips } from "@/lib/tts-local";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -879,18 +878,6 @@ function AppPageInner() {
   // silence. Sentences are read by the device's own voice, so there is nothing
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
-  // Free on-device voice: prepare the current and next sentences ahead of time.
-  useEffect(() => {
-    if (muted || !sentences) return;
-    const t = setTimeout(() => {
-      prefetchLocalClips(
-        [currentIdx, currentIdx + 1, currentIdx + 2, currentIdx + 3, currentIdx - 1]
-          .map((i) => stripEmoji(sentences[i]?.content ?? ""))
-          .filter(Boolean),
-      );
-    }, 150);
-    return () => clearTimeout(t);
-  }, [muted, sentences, currentIdx]);
 
 
 
