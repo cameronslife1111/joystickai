@@ -11,7 +11,6 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
 import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
-import { prefetchLocalClips, onLocalVoiceChange, LOCAL_VOICES, getLocalVoice, setLocalVoice } from "@/lib/tts-local";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -136,8 +135,6 @@ function AppPageInner() {
   const [menuOpen, setMenuOpen] = useState(false);
   
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
-  const [soundSheetOpen, setSoundSheetOpen] = useState(false);
-  const [localVoice, setLocalVoiceState] = useState<string>(() => (typeof window === "undefined" ? "af_heart" : getLocalVoice()));
   /** What a single press on the sentence does. Remembered on this device. */
   const [tapMode, setTapMode] = useState<"editor" | "sentence">(() => {
     if (typeof window === "undefined") return "editor";
@@ -881,40 +878,6 @@ function AppPageInner() {
   // silence. Sentences are read by the device's own voice, so there is nothing
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
-  // Free on-device voice: keep a prioritized look-ahead plan in both directions,
-  // plus where the pinned doc and next doc would land. The newest swipe always
-  // replaces the plan, so the engine never works on sentences left behind.
-  const [voiceTick, setVoiceTick] = useState(0);
-  useEffect(() => onLocalVoiceChange(() => setVoiceTick((t) => t + 1)), []);
-  useEffect(() => {
-    if (muted || !sentences) return;
-    const t = setTimeout(() => {
-      const at = (list: Sentence[] | undefined, i: number) => (list && i >= 0 && i < list.length ? list[i].content : "");
-      const plan: string[] = [];
-      const push = (s: string) => { if (s) plan.push(stripEmoji(s)); };
-      push(at(sentences, currentIdx));
-      // Interleave forward (weighted) and backward so fast swipes either way hit cache.
-      for (let d = 1; d <= 12; d++) {
-        push(at(sentences, currentIdx + d));
-        if (d <= 6) push(at(sentences, currentIdx - d));
-      }
-      const landing = (docId: string | null | undefined, count: number, out: string[]) => {
-        if (!docId || docId === activeDocId) return;
-        const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
-        if (!list?.length) return;
-        const doc = docs?.find((d) => d.id === docId) as any;
-        const start = Math.min(Math.max(savedIndexFor(docId, doc?.current_sentence_index ?? 0), 0), list.length - 1);
-        for (let d = 0; d < count; d++) { const s = at(list, start + d); if (s) out.push(stripEmoji(s)); }
-      };
-      // Pinned document right after the nearest neighbours; next doc at the end.
-      const pinned: string[] = [];
-      landing(pinnedDocId, 3, pinned);
-      plan.splice(Math.min(plan.length, 5), 0, ...pinned);
-      landing(nextDocTargetId, 2, plan);
-      prefetchLocalClips(plan);
-    }, 60);
-    return () => clearTimeout(t);
-  }, [muted, sentences, currentIdx, pinnedDocId, nextDocTargetId, activeDocId, docs, warmTick, voiceTick, qc, savedIndexFor]);
 
 
 
@@ -999,7 +962,6 @@ function AppPageInner() {
     planApprovalOpen ||
     plansScreenOpen ||
     themeSheetOpen ||
-    soundSheetOpen ||
     pinPickerOpen ||
     exportChooserOpen;
 
@@ -2886,9 +2848,10 @@ function AppPageInner() {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
       fn: () => {
-        // Opens the Sound popup: on/off plus the voice picker.
-        setMenuOpen(false);
-        setSoundSheetOpen(true);
+        // One press mutes/unmutes right from the menu; the icon flips in place.
+        const next = !muted;
+        void saveMuted(next);
+        toast.success(next ? "Sound off" : "Sound on");
       },
     },
     { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
@@ -3651,59 +3614,6 @@ function AppPageInner() {
 
 
       {/* Appearance + sentence-press settings */}
-      {soundSheetOpen && (
-        <div
-          className="absolute inset-0 z-[60] flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
-          onClick={() => setSoundSheetOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-3xl border border-foreground/10 bg-card/80 p-5 backdrop-blur"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="font-display text-lg">{muted ? "🔇" : "🔊"} Sound</div>
-              <button onClick={() => setSoundSheetOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
-                Close
-              </button>
-            </div>
-            <div className="mb-5 grid grid-cols-2 gap-2">
-              {([false, true] as const).map((m) => (
-                <button
-                  key={String(m)}
-                  type="button"
-                  onClick={() => void saveMuted(m)}
-                  className={cn(
-                    "rounded-2xl border px-3 py-2.5 text-sm transition active:scale-95",
-                    muted === m ? "border-foreground/30 bg-foreground/10 font-medium" : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
-                  )}
-                >
-                  {m ? "🔇 Off" : "🔊 On"}
-                </button>
-              ))}
-            </div>
-            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Voice</div>
-            <div className="grid max-h-[45vh] grid-cols-2 gap-2 overflow-y-auto">
-              {LOCAL_VOICES.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => {
-                    setLocalVoice(v.id);
-                    setLocalVoiceState(v.id);
-                    if (!muted) speakText("Hi, this is how I sound.");
-                  }}
-                  className={cn(
-                    "rounded-2xl border px-3 py-2.5 text-left text-sm transition active:scale-95",
-                    localVoice === v.id ? "border-foreground/30 bg-foreground/10 font-medium" : "border-foreground/10 bg-foreground/5 hover:bg-foreground/10",
-                  )}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       {themeSheetOpen && (
         <div
           className="absolute inset-0 z-[60] flex items-center justify-center bg-background/80 px-4 backdrop-blur-md"
