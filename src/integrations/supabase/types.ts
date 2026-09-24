@@ -220,6 +220,33 @@ export type Database = {
         }
         Relationships: []
       }
+      favorite_groups: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slots: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          slots?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slots?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mcp_commands: {
         Row: {
           arguments: Json

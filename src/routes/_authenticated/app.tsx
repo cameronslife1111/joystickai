@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { FavoriteGroupsSheet, FAVORITE_SLOTS } from "@/components/FavoriteGroupsSheet";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -146,6 +147,7 @@ function AppPageInner() {
   const [quickEditText, setQuickEditText] = useState("");
   
   const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [slotFilter, setSlotFilter] = useState<string | null>(null);
   const [pinPickerOpen, setPinPickerOpen] = useState(false);
@@ -2494,7 +2496,7 @@ function AppPageInner() {
     const nextDoc = sorted[(curPos + 1) % sorted.length];
     if (!nextDoc) return;
     const next = [...favorites];
-    while (next.length < 50) next.push(null);
+    while (next.length < FAVORITE_SLOTS) next.push(null);
     if (curId) {
       for (let i = 0; i < next.length; i++) if (next[i] === curId) next[i] = nextDoc.id;
     } else {
@@ -3818,6 +3820,16 @@ function AppPageInner() {
       )}
 
 
+      {favoritesOpen && groupsOpen && (
+        <div className="absolute inset-0 z-[60]">
+          <FavoriteGroupsSheet
+            favorites={favorites}
+            locked={lockFavorites}
+            onLoad={(slots) => saveFavorites(slots)}
+            onClose={() => setGroupsOpen(false)}
+          />
+        </div>
+      )}
       {/* Favorites editor overlay */}
       {favoritesOpen && (
         <div
@@ -3833,13 +3845,19 @@ function AppPageInner() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    void saveFavorites(Array.from({ length: 50 }, () => null));
+                    void saveFavorites(Array.from({ length: FAVORITE_SLOTS }, () => null));
                     setPickerSlot(null);
                   }}
                   disabled={lockFavorites || favorites.every((id) => !id)}
                   className="text-sm text-destructive/80 hover:text-destructive disabled:opacity-40 disabled:hover:text-destructive/80"
                 >
                   Clear all slots
+                </button>
+                <button
+                  onClick={() => { setPickerSlot(null); setGroupsOpen(true); }}
+                  className="text-sm text-primary/90 hover:text-primary"
+                >
+                  Groups
                 </button>
                 <button
                   onClick={() => { setFavoritesOpen(false); setPickerSlot(null); }}
@@ -3851,7 +3869,7 @@ function AppPageInner() {
             </div>
             <div className="mb-2 px-2 text-[11px] text-muted-foreground">
               Long press a slot below to jump to the next document, or tap it to choose one.{" "}
-              {favorites.filter(Boolean).length} / 50 filled.
+              {favorites.filter(Boolean).length} / {FAVORITE_SLOTS} filled.
             </div>
 
             <div className="mb-2 flex flex-wrap gap-1.5 px-1">
@@ -3880,7 +3898,7 @@ function AppPageInner() {
               )}
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1">
-              {Array.from({ length: 50 }).map((_, i) => {
+              {Array.from({ length: FAVORITE_SLOTS }).map((_, i) => {
                 const docId = favorites[i] ?? null;
                 const doc = docId ? docs?.find((d) => d.id === docId) : null;
                 if (slotFilter && !(doc && doc.title.includes(slotFilter))) return null;
@@ -3956,7 +3974,7 @@ function AppPageInner() {
             const pickDoc = async (docId: string) => {
               // Assign the slot only — stay on the current document/sentence.
               const next = [...favorites];
-              while (next.length < 50) next.push(null);
+              while (next.length < FAVORITE_SLOTS) next.push(null);
               if (replaceMatching && targetId) {
                 for (let i = 0; i < next.length; i++) {
                   if (next[i] === targetId) next[i] = docId;
@@ -3991,7 +4009,7 @@ function AppPageInner() {
                     <button
                       onClick={async () => {
                         const next = [...favorites];
-                        while (next.length < 50) next.push(null);
+                        while (next.length < FAVORITE_SLOTS) next.push(null);
                         next[pickerSlot!] = null;
                         await saveFavorites(next);
                         closePicker();

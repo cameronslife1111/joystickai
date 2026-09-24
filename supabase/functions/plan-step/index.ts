@@ -118,6 +118,7 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     mark_document_for_deletion: ["document_id"],
     mark_media_for_deletion: ["media_id"],
     rename_document: ["document_id", "new_title"],
+    create_favorites_group: ["name", "documents"],
     rename_media: ["media_id", "new_title"],
     read_document: ["document_id"],
     regenerate_image: ["source_media_id"],
@@ -911,6 +912,61 @@ const TOOL_HANDLERS: Record<string, any> = {
       .single();
     if (error) throw new Error(error.message);
     return data;
+  },
+  async create_favorites_group(args, { user_id, admin }) {
+    const name = String(args.name ?? "").trim().slice(0, 120);
+    if (!name) throw new Error("A group name is required");
+    let raw: any = args.documents;
+    if (typeof raw === "string" && raw.trim().startsWith("[")) {
+      try { raw = JSON.parse(raw); } catch { /* fall through */ }
+    }
+    if (!Array.isArray(raw)) raw = String(raw ?? "").split(/\n|,|;/);
+    const refs = raw.map((s: any) => String(s ?? "").trim()).filter(Boolean).slice(0, 300);
+    const { data: docs, error: dErr } = await admin
+      .from("documents").select("id, title").eq("user_id", user_id);
+    if (dErr) throw new Error(dErr.message);
+    const all = (docs ?? []) as { id: string; title: string }[];
+    const used: { id: string; title: string }[] = [];
+    const missing: string[] = [];
+    for (const ref of refs) {
+      const byId = all.find((d) => d.id === ref);
+      if (byId) { used.push(byId); continue; }
+      const q = tokenize(ref);
+      let best: { id: string; title: string } | null = null;
+      let bestScore = 0;
+      for (const d of all) {
+        const s = scoreCandidate(d.title ?? "", ref, q);
+        if (s > bestScore) { bestScore = s; best = d; }
+      }
+      if (best && bestScore > 0) used.push(best); else missing.push(ref);
+    }
+    const slots: (string | null)[] = used.map((d) => d.id);
+    while (slots.length < 300) slots.push(null);
+    const { error } = await admin.from("favorite_groups").upsert(
+      { user_id, name, slots, updated_at: new Date().toISOString() } as any,
+      { onConflict: "user_id,name" },
+    );
+    if (error) throw new Error(error.message);
+    let loaded = false;
+    if (args.load_now === true || args.load_now === "true") {
+      const { data: pref } = await admin
+        .from("user_preferences").select("lock_favorites").eq("user_id", user_id).maybeSingle();
+      if (!(pref as any)?.lock_favorites) {
+        const { error: uErr } = await admin.from("user_preferences")
+          .upsert({ user_id, favorites: slots } as any, { onConflict: "user_id" });
+        loaded = !uErr;
+      }
+    }
+    return { name, documents: used.map((d, i) => `${i + 1}. ${d.title}`), not_found: missing, loaded };
+  },
+  async list_favorites_groups(_args, { user_id, admin }) {
+    const { data, error } = await admin
+      .from("favorite_groups").select("name, slots, updated_at").eq("user_id", user_id).order("name");
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((g: any) => ({
+      name: g.name,
+      count: Array.isArray(g.slots) ? g.slots.filter(Boolean).length : 0,
+    }));
   },
   async add_sentence(args, { user_id, admin, supabase }) {
     const pos = args.position ?? "bottom";

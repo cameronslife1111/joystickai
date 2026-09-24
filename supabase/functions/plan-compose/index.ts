@@ -130,6 +130,7 @@ ${
 
 
 WHERE RULES — every step must lock its target (this is the #1 cause of plan failures, follow it exactly):
+- FAVORITES GROUPS: when the user describes an ordered set of documents to save as a favorites group, use ONE create_favorites_group step with the group name and the documents in the exact order given (prefer ids from the WORKSPACE SNAPSHOT). Set load_now only if they asked to load/apply it.
 - EVERY mutating step must carry its full destination EXPLICITLY in its own args. For add_sentence, move_sentence, update_sentence_content, link_sentence_to_document, link_sentence_to_chat, mark_sentence_for_deletion, mark_document_for_deletion, mark_media_for_deletion, rename_document, rename_media, and the image/video tools, the relevant target id (document_id / sentence_id / target_document_id / target_thread_id / media_id / source_media_id / source_image_id / etc.) MUST be present in that step's args, resolved either to a concrete id from the WORKSPACE SNAPSHOT or to a {{step_N.result.id}} template from an earlier step. NEVER leave a destination implied by a previous step's prose or description.
 - SENTENCE LINKS: "link this sentence to <doc>" → link_sentence_to_document; "link this sentence to <chat>" / "link it to my Delegate chat" → link_sentence_to_chat with target_thread_id resolved from the CHAT CATALOG in the WORKSPACE SNAPSHOT (or a {{step_N.result.id}} template from find_chat_by_title). A sentence holds exactly ONE link, so linking replaces any existing link — never emit both link tools for the same sentence. "Unlink" → the same tool with the target id set to null. Always resolve the sentence_id first (from the snapshot or a find_sentence_by_content step), and never create a new chat or document just to link it.
 - NEW-DOC → FILL pattern: when you create a document and then add content to it, EVERY following add_sentence MUST set document_id: "{{step_N.result.id}}" pointing at the create_document step. Do not assume "the document we just made" — wire the id through the template every single time.
@@ -819,6 +820,7 @@ Deno.serve(async (req) => {
       mark_document_for_deletion: ["document_id"],
       mark_media_for_deletion: ["media_id"],
       rename_document: ["document_id", "new_title"],
+      create_favorites_group: ["name", "documents"],
       rename_media: ["media_id", "new_title"],
       read_document: ["document_id"],
       regenerate_image: ["source_media_id"],
