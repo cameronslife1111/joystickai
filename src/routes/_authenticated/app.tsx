@@ -10,7 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice, prewarmSpeech } from "@/lib/speech";
 import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
