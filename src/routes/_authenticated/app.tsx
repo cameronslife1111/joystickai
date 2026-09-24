@@ -4794,6 +4794,16 @@ function AppPageInner() {
         </DialogContent>
       </Dialog>
 
+      <SoundSettingsDialog
+        open={soundOpen}
+        onOpenChange={setSoundOpen}
+        muted={muted}
+        voice={ttsVoice}
+        highQuality={ttsHq}
+        onMutedChange={(m) => { void saveMuted(m); }}
+        onVoiceChange={(v) => { void saveSoundPref({ tts_voice: v }); }}
+        onHighQualityChange={(on) => { void saveSoundPref({ tts_high_quality: on }); }}
+      />
     </main>
   );
 }
