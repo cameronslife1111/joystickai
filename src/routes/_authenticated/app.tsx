@@ -896,17 +896,19 @@ function AppPageInner() {
         push(at(sentences, currentIdx + d));
         if (d <= 6) push(at(sentences, currentIdx - d));
       }
-      const landing = (docId: string | null | undefined, count: number) => {
+      const landing = (docId: string | null | undefined, count: number, out: string[]) => {
         if (!docId || docId === activeDocId) return;
         const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
         if (!list?.length) return;
         const doc = docs?.find((d) => d.id === docId) as any;
         const start = Math.min(Math.max(savedIndexFor(docId, doc?.current_sentence_index ?? 0), 0), list.length - 1);
-        for (let d = 0; d < count; d++) push(at(list, start + d));
+        for (let d = 0; d < count; d++) { const s = at(list, start + d); if (s) out.push(stripEmoji(s)); }
       };
-      // Pinned document right after the nearest neighbours.
-      plan.splice(Math.min(plan.length, 5), 0, ...(() => { const tmp: string[] = []; const save = plan.length; landing(pinnedDocId, 3); return plan.splice(save).concat(tmp); })());
-      landing(nextDocTargetId, 2);
+      // Pinned document right after the nearest neighbours; next doc at the end.
+      const pinned: string[] = [];
+      landing(pinnedDocId, 3, pinned);
+      plan.splice(Math.min(plan.length, 5), 0, ...pinned);
+      landing(nextDocTargetId, 2, plan);
       prefetchLocalClips(plan);
     }, 60);
     return () => clearTimeout(t);
