@@ -893,30 +893,21 @@ function AppPageInner() {
     }
   }, [docs, favorites, activeDocId, qc]);
 
-  // Voice-preload the next 3 sentences, then every green-orb landing sentence.
+  const ttsVoiceForWarm = prefs?.tts_voice ?? "Kore";
+  // Voice-preload only the current sentence and the 2 before/after it.
   useEffect(() => {
-    if (muted || !sentences || !docs) return;
+    if (muted || !sentences) return;
     const t = setTimeout(() => {
       if (mutedRef.current || inCallRef.current || recordingRef.current) return;
       const texts: string[] = [];
-      for (let i = 1; i <= 3; i++) {
-        const s = sentences[currentIdx + i]?.content;
-        if (s) texts.push(stripEmoji(s));
-      }
-      const favIds = favorites.filter((id): id is string => !!id && docs.some((d) => d.id === id));
-      const ordered = nextDocTargetId ? [nextDocTargetId, ...favIds.filter((id) => id !== nextDocTargetId)] : favIds;
-      for (const id of ordered) {
-        if (id === activeDocId) continue;
-        const list = qc.getQueryData<Sentence[]>(["sentences", id]);
-        if (!list || list.length === 0) continue;
-        const idx = savedIndexFor(id, docs.find((d) => d.id === id)?.current_sentence_index ?? 0);
-        const s = list[Math.max(0, Math.min(idx, list.length - 1))]?.content;
+      for (const d of [0, 1, 2, -1, -2]) {
+        const s = sentences[currentIdx + d]?.content;
         if (s) texts.push(stripEmoji(s));
       }
       prewarmSpeech(texts);
     }, 150);
     return () => clearTimeout(t);
-  }, [muted, sentences, currentIdx, docs, favorites, activeDocId, nextDocTargetId, warmTick, qc, savedIndexFor]);
+  }, [muted, sentences, currentIdx, ttsVoiceForWarm]);
 
 
 

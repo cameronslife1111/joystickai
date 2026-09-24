@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { TTS_VOICES, setSpeechVoice, speakText } from "@/lib/speech";
+import { TTS_VOICES, setSpeechVoice, speakText, onVoiceChanged } from "@/lib/speech";
 
 interface Props {
   open: boolean;
@@ -29,6 +29,7 @@ export function SoundSettingsDialog({ open, onOpenChange, muted, voice, onMutedC
               key={v.id}
               type="button"
               onClick={() => {
+                if (v.id !== voice) onVoiceChanged();
                 setSpeechVoice(v.id);
                 onVoiceChange(v.id);
                 if (!muted) speakText(`Hi, I'm ${v.label}.`);

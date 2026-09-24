@@ -102,6 +102,18 @@ async function postTts(clean: string, v: string, signal: AbortSignal, live: bool
     body: JSON.stringify({ text: clean, voice: v }),
   });
   let res = await req();
+  if (res.status === 401) {
+    try { await res.body?.cancel(); } catch {}
+    accessToken = null;
+    const { data } = await supabase.auth.refreshSession();
+    accessToken = data.session?.access_token ?? null;
+    if (!accessToken) return res;
+    res = await fetch("/api/tts", {
+      method: "POST", signal,
+      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ text: clean, voice: v }),
+    });
+  }
   if (live && (res.status === 429 || res.status === 503)) {
     const ra = Number(res.headers.get("retry-after"));
     try { await res.body?.cancel(); } catch {}
