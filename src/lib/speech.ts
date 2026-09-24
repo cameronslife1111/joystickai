@@ -90,10 +90,15 @@ type Inflight = {
 const inflight = new Map<string, Inflight>();
 /** Keys the app currently wants (current ±2). Downloads outside it may be cancelled. */
 let wantedKeys = new Set<string>();
+/** Do not keep hitting a provider that has already told us its quota is exhausted. */
+let providerPausedUntil = 0;
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function postTts(clean: string, v: string, signal: AbortSignal, live: boolean): Promise<Response> {
+  if (Date.now() < providerPausedUntil) {
+    return new Response("Speech error", { status: 429 });
+  }
   const token = await getToken();
   if (!token) throw new Error("signed out");
   const req = () => fetch("/api/tts", {
@@ -114,12 +119,13 @@ async function postTts(clean: string, v: string, signal: AbortSignal, live: bool
       body: JSON.stringify({ text: clean, voice: v }),
     });
   }
-  if (live && (res.status === 429 || res.status === 503)) {
-    const ra = Number(res.headers.get("retry-after"));
-    try { await res.body?.cancel(); } catch {}
-    await sleep(Math.min(1500, Number.isFinite(ra) && ra > 0 ? ra * 1000 : 700));
-    if (signal.aborted) throw Object.assign(new Error("aborted"), { name: "AbortError" });
-    res = await req();
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+    providerPausedUntil = Date.now() + (
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 60_000
+    );
   }
   return res;
 }
@@ -154,7 +160,8 @@ function startDownload(key: string, clean: string, v: string, live: boolean): In
         if (f.length) { entry.chunks.push(f); for (const l of entry.listeners) { try { l(f); } catch {} } }
       }
       finish(entry.chunks.length > 0);
-    } catch {
+    } catch (error) {
+      if ((error as Error)?.name !== "AbortError") console.warn("[orby-tts] download failed");
       finish(false);
     }
   })();
@@ -223,17 +230,13 @@ export function isSpeaking() { return streamPlaying; }
 export function resetSpeechCaches() { cancelSpeech(); cancelPrewarm(); cache.clear(); }
 
 // ---- prewarm (fills the cache without playing) ----
-let prewarmQueue: { key: string; clean: string; v: string }[] = [];
-let prewarmBusy = false;
 let prewarmGen = 0;
 let liveGate: Promise<void> | null = null;
 export function cancelPrewarm() {
   prewarmGen += 1;
-  prewarmQueue = [];
   for (const [k, e] of inflight) {
     if (!e.live && !wantedKeys.has(k)) { e.abort.abort(); inflight.delete(k); }
   }
-  prewarmBusy = false;
 }
 /** Voice switched: drop old-voice preloads (the app re-preloads in the new voice). */
 export function onVoiceChanged() {
@@ -253,25 +256,26 @@ export function prewarmSpeech(texts: string[]) {
     keys.add(key);
     if (!cache.has(key) && !inflight.has(key)) next.push({ key, clean: c, v });
   }
+  const gen = ++prewarmGen;
   wantedKeys = keys;
-  cancelPrewarm();
+  for (const [k, e] of inflight) {
+    if (!e.live && !wantedKeys.has(k)) { e.abort.abort(); inflight.delete(k); }
+  }
   if (!speechEnabled || speechSuppressed || typeof fetch !== "function") return;
-  prewarmQueue = next;
-  void runPrewarm(prewarmGen);
+  void runPrewarm(next, gen);
 }
-async function runPrewarm(gen: number) {
-  if (prewarmBusy) return;
-  prewarmBusy = true;
-  try {
-    await sleep(250);
-    while (gen === prewarmGen && prewarmQueue.length) {
-      if (liveGate) { await liveGate; continue; }
-      const item = prewarmQueue.shift()!;
-      if (cache.has(item.key)) continue;
-      const e = startDownload(item.key, item.clean, item.v, false);
-      await new Promise<void>((r) => e.endListeners.add(() => r()));
-    }
-  } finally { if (gen === prewarmGen) prewarmBusy = false; }
+async function runPrewarm(items: { key: string; clean: string; v: string }[], gen: number) {
+  await sleep(250);
+  for (const item of items) {
+    if (gen !== prewarmGen || Date.now() < providerPausedUntil) return;
+    if (liveGate) await liveGate;
+    if (gen !== prewarmGen || cache.has(item.key) || !wantedKeys.has(item.key)) continue;
+    const e = startDownload(item.key, item.clean, item.v, false);
+    await new Promise<void>((resolve) => {
+      if (!inflight.has(item.key)) resolve();
+      else e.endListeners.add(() => resolve());
+    });
+  }
 }
 
 function pcmToFloat(bytes: Uint8Array): Float32Array {

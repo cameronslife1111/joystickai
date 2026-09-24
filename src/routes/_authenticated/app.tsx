@@ -900,7 +900,7 @@ function AppPageInner() {
     const t = setTimeout(() => {
       if (mutedRef.current || inCallRef.current || recordingRef.current) return;
       const texts: string[] = [];
-      for (const d of [0, 1, 2, -1, -2]) {
+      for (const d of [0, 1, -1, 2, -2]) {
         const s = sentences[currentIdx + d]?.content;
         if (s) texts.push(stripEmoji(s));
       }
