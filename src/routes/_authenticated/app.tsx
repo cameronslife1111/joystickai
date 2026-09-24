@@ -10,7 +10,8 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice, setSpeechHighQuality } from "@/lib/speech";
+import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -577,16 +578,16 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean; tts_voice: string | null; tts_high_quality: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat, tts_voice, tts_high_quality")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
       const savedTap = (data as any)?.tap_mode;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat, tts_voice: (data as any)?.tts_voice ?? null, tts_high_quality: !!(data as any)?.tts_high_quality };
 
     },
   });
@@ -878,6 +879,17 @@ function AppPageInner() {
   // silence. Sentences are read by the device's own voice, so there is nothing
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
+  const ttsVoice = prefs?.tts_voice ?? "Kore";
+  const ttsHq = prefs?.tts_high_quality ?? false;
+  useEffect(() => { setSpeechVoice(ttsVoice); }, [ttsVoice]);
+  useEffect(() => { setSpeechHighQuality(ttsHq); }, [ttsHq]);
+  const [soundOpen, setSoundOpen] = useState(false);
+  const saveSoundPref = useCallback(async (patch: { tts_voice?: string; tts_high_quality?: boolean }) => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), ...patch }));
+    await supabase.from("user_preferences").update(patch).eq("user_id", u.user.id);
+  }, [qc]);
 
 
 
@@ -2847,12 +2859,7 @@ function AppPageInner() {
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
-      fn: () => {
-        // One press mutes/unmutes right from the menu; the icon flips in place.
-        const next = !muted;
-        void saveMuted(next);
-        toast.success(next ? "Sound off" : "Sound on");
-      },
+      fn: () => { setMenuOpen(false); setSoundOpen(true); },
     },
     { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
       setMenuOpen(false);
