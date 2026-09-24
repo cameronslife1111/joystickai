@@ -118,6 +118,7 @@ function validateExpansionSteps(rawSteps: any[]): any[] {
     mark_document_for_deletion: ["document_id"],
     mark_media_for_deletion: ["media_id"],
     rename_document: ["document_id", "new_title"],
+    create_favorites_group: ["name", "documents"],
     rename_media: ["media_id", "new_title"],
     read_document: ["document_id"],
     regenerate_image: ["source_media_id"],
