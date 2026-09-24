@@ -2,7 +2,9 @@ import {
   beginIosSpeechSession,
   endIosSpeechSession,
   onIosAudioSessionInterrupted,
+  requestIosMixableSession,
 } from "@/lib/audio-session";
+import { generateLocalClip, isLocalVoiceReady, warmLocalVoice } from "@/lib/tts-local";
 
 
 type SpeakOpts = {
@@ -47,6 +49,7 @@ let speechEnabled = false;
 export function setSpeechEnabled(on: boolean) {
   speechEnabled = on;
   if (!on) cancelSpeech();
+  else warmLocalVoice();
 }
 
 export function isSpeechEnabled(): boolean {
@@ -210,12 +213,79 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
+// ---------------------------------------------------------------------------
+// On-device generated voice. The sentence is turned into real audio inside the
+// app (free Kokoro model in a worker) and played through Web Audio in iOS's
+// shared "ambient" mode, so other apps' music and recordings keep running.
+// ---------------------------------------------------------------------------
+
+let audioCtx: AudioContext | null = null;
+let localSource: AudioBufferSourceNode | null = null;
+
+function playbackContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!audioCtx || audioCtx.state === "closed") {
+    try {
+      audioCtx = new Ctor();
+    } catch {
+      return null;
+    }
+  }
+  if (audioCtx.state !== "running") audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function speakLocal(clean: string, opts: SpeakOpts): boolean {
+  requestIosMixableSession();
+  const ctx = playbackContext();
+  if (!ctx) return false;
+  clearSpeechEngine(false);
+  const sequence = requestSequence;
+  const rate = opts.rate ?? SPEECH_RATE;
+  generateLocalClip(clean, rate)
+    .then((clip) => {
+      if (sequence !== requestSequence) return;
+      requestIosMixableSession();
+      if (ctx.state !== "running") ctx.resume().catch(() => {});
+      const buffer = ctx.createBuffer(1, clip.pcm.length, clip.rate);
+      buffer.copyToChannel(clip.pcm as Float32Array<ArrayBuffer>, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.onended = () => {
+        if (sequence !== requestSequence) return;
+        localSource = null;
+        audibleSpeaking = false;
+        opts.onEnd?.();
+      };
+      localSource = src;
+      audibleSpeaking = true;
+      src.start();
+    })
+    .catch(() => {
+      // Engine hiccup: fall back to the built-in device voice for this sentence.
+      if (sequence !== requestSequence) return;
+      speakNative(clean, opts);
+    });
+  return true;
+}
+
 function clearSpeechEngine(restoreIdleSession: boolean) {
   requestSequence += 1;
   audibleSpeaking = false;
   activeUtterance = null;
   if (startWatchdog) clearTimeout(startWatchdog);
   startWatchdog = null;
+  if (localSource) {
+    const src = localSource;
+    localSource = null;
+    src.onended = null;
+    try {
+      src.stop();
+    } catch {}
+  }
   const engine = synth();
   if (engine) {
     try {
@@ -247,7 +317,13 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   if (!speechEnabled || speechSuppressed) return false;
   const clean = cleanForSpeech(text ?? "");
   if (!clean || !SPEAKABLE_RE.test(clean)) return false;
+  attachForegroundRecovery();
+  if (isLocalVoiceReady() && speakLocal(clean, opts)) return true;
+  warmLocalVoice();
+  return speakNative(clean, opts);
+}
 
+function speakNative(clean: string, opts: SpeakOpts): boolean {
   const engine = synth();
   if (!engine) {
     if (!noSupportReported) {
