@@ -10,7 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice } from "@/lib/speech";
+import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice, prewarmSpeech } from "@/lib/speech";
 import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
@@ -869,6 +869,57 @@ function AppPageInner() {
       }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
     }
   }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
+
+  // Load sentence lists for every favorite in the green-orb cycle so their
+  // landing sentences can be voice-preloaded.
+  useEffect(() => {
+    if (!docs || docs.length === 0) return;
+    for (const id of favorites) {
+      if (!id || id === activeDocId || !docs.some((d) => d.id === id)) continue;
+      if (qc.getQueryData(["sentences", id])) continue;
+      void qc.prefetchQuery({
+        queryKey: ["sentences", id],
+        queryFn: async (): Promise<Sentence[]> => {
+          const { data, error } = await supabase
+            .from("sentences").select("*")
+            .eq("document_id", id)
+            .order("order_index", { ascending: true })
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return data ?? [];
+        },
+        staleTime: 30_000,
+      }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
+    }
+  }, [docs, favorites, activeDocId, qc]);
+
+  // Voice-preload the next 3 sentences, then every green-orb landing sentence.
+  useEffect(() => {
+    if (muted || !sentences || !docs) return;
+    const t = setTimeout(() => {
+      if (mutedRef.current || inCallRef.current || recordingRef.current) return;
+      const texts: string[] = [];
+      for (let i = 1; i <= 3; i++) {
+        const s = sentences[currentIdx + i]?.content;
+        if (s) texts.push(stripEmoji(s));
+      }
+      const favIds = favorites.filter((id): id is string => !!id && docs.some((d) => d.id === id));
+      const ordered = nextDocTargetId ? [nextDocTargetId, ...favIds.filter((id) => id !== nextDocTargetId)] : favIds;
+      for (const id of ordered) {
+        if (id === activeDocId) continue;
+        const list = qc.getQueryData<Sentence[]>(["sentences", id]);
+        if (!list || list.length === 0) continue;
+        const idx = savedIndexFor(id, docs.find((d) => d.id === id)?.current_sentence_index ?? 0);
+        const s = list[Math.max(0, Math.min(idx, list.length - 1))]?.content;
+        if (s) texts.push(stripEmoji(s));
+      }
+      prewarmSpeech(texts);
+    }, 150);
+    return () => clearTimeout(t);
+  }, [muted, sentences, currentIdx, docs, favorites, activeDocId, nextDocTargetId, warmTick, qc, savedIndexFor]);
+
+
+
 
 
 
