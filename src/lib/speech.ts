@@ -17,11 +17,25 @@ export function cleanForSpeech(s: string): string {
 }
 
 let speechEnabled = false;
-export function setSpeechEnabled(on: boolean) { speechEnabled = on; if (!on) cancelSpeech(); }
+export function setSpeechEnabled(on: boolean) {
+  speechEnabled = on;
+  if (!on) {
+    wantedKeys = new Set();
+    cancelSpeech();
+    cancelPrewarm();
+  }
+}
 export function isSpeechEnabled() { return speechEnabled; }
 
 let speechSuppressed = false;
-export function setSpeechSuppressed(on: boolean) { speechSuppressed = on; if (on) cancelSpeech(); }
+export function setSpeechSuppressed(on: boolean) {
+  speechSuppressed = on;
+  if (on) {
+    wantedKeys = new Set();
+    cancelSpeech();
+    cancelPrewarm();
+  }
+}
 export function isSpeechSuppressed() { return speechSuppressed; }
 
 function emitSpeechError(message = "Speech error") {
