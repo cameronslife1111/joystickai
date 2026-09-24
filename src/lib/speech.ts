@@ -45,13 +45,16 @@ export type TtsVoice = (typeof TTS_VOICES)[number]["id"];
 
 let voice: TtsVoice = "Kore";
 export function setSpeechVoice(v: string | null | undefined) {
-  if (v && TTS_VOICES.some((x) => x.id === v)) voice = v as TtsVoice;
+  if (!v || !TTS_VOICES.some((x) => x.id === v) || voice === v) return;
+  voice = v as TtsVoice;
+  onVoiceChanged();
 }
 export function getSpeechVoice(): TtsVoice { return voice; }
 
 // ---- auth token cache (avoids awaiting getSession on every press) ----
 let accessToken: string | null = null;
 let authWired = false;
+let refreshPromise: Promise<string | null> | null = null;
 function wireAuth() {
   if (authWired || typeof window === "undefined") return;
   authWired = true;
@@ -63,6 +66,16 @@ async function getToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   accessToken = data.session?.access_token ?? null;
   return accessToken;
+}
+async function refreshToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = supabase.auth.refreshSession()
+    .then(({ data }) => {
+      accessToken = data.session?.access_token ?? null;
+      return accessToken;
+    })
+    .finally(() => { refreshPromise = null; });
+  return refreshPromise;
 }
 
 // ---- cache ----
@@ -131,12 +144,11 @@ async function postTts(clean: string, v: string, signal: AbortSignal, live: bool
   if (res.status === 401) {
     try { await res.body?.cancel(); } catch {}
     accessToken = null;
-    const { data } = await supabase.auth.refreshSession();
-    accessToken = data.session?.access_token ?? null;
-    if (!accessToken) return res;
+    const refreshedToken = await refreshToken();
+    if (!refreshedToken) return res;
     res = await fetch("/api/tts", {
       method: "POST", signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${refreshedToken}` },
       body: JSON.stringify({ text: clean, voice: v }),
     });
   }
@@ -235,8 +247,9 @@ export function handleAppForeground() { cancelSpeech(); }
 function stopStream() {
   streamSeq += 1;
   liveDetach?.(); liveDetach = null;
-  // Cancel the previous live download only if it is no longer wanted.
-  if (liveKey && !wantedKeys.has(liveKey)) {
+  // A superseded live request must always stop. Keeping it because it also
+  // belongs to the preload window caused concurrent paid streams and 429s.
+  if (liveKey) {
     const e = inflight.get(liveKey);
     if (e) { e.abort.abort(); inflight.delete(liveKey); }
   }
