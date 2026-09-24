@@ -10,8 +10,7 @@ import { useOrbGestures } from "@/hooks/use-orb-gestures";
 import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
-import { speakText, cancelSpeech, setSpeechEnabled, setSpeechVoice, prewarmSpeech } from "@/lib/speech";
-import { SoundSettingsDialog } from "@/components/SoundSettingsDialog";
+import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -578,16 +577,16 @@ function AppPageInner() {
   // Load user preferences (favorites array + sound settings + theme)
   const { data: prefs } = useQuery({
     queryKey: ["user_preferences"],
-    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean; tts_voice: string | null; tts_high_quality: boolean }> => {
+    queryFn: async (): Promise<{ favorites: (string | null)[]; muted: boolean; last_favorite_slot: number | null; theme: "dark" | "light" | null; lock_favorites: boolean; pinned_document_id: string | null; locked_document_id: string | null; tap_mode: "editor" | "sentence" | null; auto_open_linked_chat: boolean }> => {
       const { data } = await supabase
         .from("user_preferences")
-        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat, tts_voice, tts_high_quality")
+        .select("favorites, muted, last_favorite_slot, theme, lock_favorites, pinned_document_id, locked_document_id, tap_mode, auto_open_linked_chat")
         .maybeSingle();
       const raw = (data?.favorites as unknown) ?? [];
       const favorites = Array.isArray(raw) ? (raw as (string | null)[]) : [];
       const t = (data as any)?.theme;
       const savedTap = (data as any)?.tap_mode;
-      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat, tts_voice: (data as any)?.tts_voice ?? null, tts_high_quality: !!(data as any)?.tts_high_quality };
+      return { favorites, muted: !!(data as any)?.muted, last_favorite_slot: (data as any)?.last_favorite_slot ?? null, theme: t === "dark" || t === "light" ? t : null, lock_favorites: !!(data as any)?.lock_favorites, pinned_document_id: (data as any)?.pinned_document_id ?? null, locked_document_id: (data as any)?.locked_document_id ?? null, tap_mode: savedTap === "editor" || savedTap === "sentence" ? savedTap : null, auto_open_linked_chat: !!(data as any)?.auto_open_linked_chat };
 
     },
   });
@@ -870,48 +869,6 @@ function AppPageInner() {
     }
   }, [docs, favorites, activeDocId, pinnedDocId, nextDocTargetId, qc]);
 
-  // Load sentence lists for every favorite in the green-orb cycle so their
-  // landing sentences can be voice-preloaded.
-  useEffect(() => {
-    if (!docs || docs.length === 0) return;
-    for (const id of favorites) {
-      if (!id || id === activeDocId || !docs.some((d) => d.id === id)) continue;
-      if (qc.getQueryData(["sentences", id])) continue;
-      void qc.prefetchQuery({
-        queryKey: ["sentences", id],
-        queryFn: async (): Promise<Sentence[]> => {
-          const { data, error } = await supabase
-            .from("sentences").select("*")
-            .eq("document_id", id)
-            .order("order_index", { ascending: true })
-            .order("created_at", { ascending: true });
-          if (error) throw error;
-          return data ?? [];
-        },
-        staleTime: 30_000,
-      }).then(() => setWarmTick((t) => t + 1)).catch(() => {});
-    }
-  }, [docs, favorites, activeDocId, qc]);
-
-  const ttsVoiceForWarm = prefs?.tts_voice ?? "Kore";
-  // Voice-preload only the current sentence and the 2 before/after it.
-  useEffect(() => {
-    if (muted || !sentences) return;
-    const t = setTimeout(() => {
-      if (mutedRef.current || inCallRef.current || recordingRef.current) return;
-      const texts: string[] = [];
-      for (const d of [0, 1, -1, 2, -2]) {
-        const s = sentences[currentIdx + d]?.content;
-        if (s) texts.push(stripEmoji(s));
-      }
-      prewarmSpeech(texts);
-    }, 150);
-    return () => clearTimeout(t);
-  }, [muted, sentences, currentIdx, ttsVoiceForWarm]);
-
-
-
-
 
 
   // Keep mutedRef in sync with persisted preference.
@@ -921,15 +878,6 @@ function AppPageInner() {
   // silence. Sentences are read by the device's own voice, so there is nothing
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
-  const ttsVoice = prefs?.tts_voice ?? "Kore";
-  useEffect(() => { setSpeechVoice(ttsVoice); }, [ttsVoice]);
-  const [soundOpen, setSoundOpen] = useState(false);
-  const saveSoundPref = useCallback(async (patch: { tts_voice?: string }) => {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    qc.setQueryData(["user_preferences"], (prev: any) => ({ ...(prev ?? {}), ...patch }));
-    await supabase.from("user_preferences").update(patch).eq("user_id", u.user.id);
-  }, [qc]);
 
 
 
@@ -1028,6 +976,34 @@ function AppPageInner() {
       return next;
     });
   }, [activeDocId]);
+
+  // Auto-repeat: re-read the current sentence every 2 minutes of inactivity.
+  // Any change to activeDocId / currentIdx / sentence text tears this effect
+  // down (clearTimeout), guaranteeing a stale sentence can never be spoken.
+  // Does NOT touch Orb mood — the shared speech-state poll animates the mouth.
+  const repeatText = sentences?.[currentIdx]?.content;
+  useEffect(() => {
+    if (!repeatText) return;
+    let id: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      id = setTimeout(() => {
+        if (
+          mutedRef.current ||
+          recordingRef.current ||
+          busyRef.current ||
+          (typeof document !== "undefined" && document.hidden)
+        ) {
+          schedule();
+          return;
+        }
+        const token = claimSpeech();
+        speak(repeatText, token);
+        schedule();
+      }, 2 * 60 * 1000);
+    };
+    schedule();
+    return () => clearTimeout(id);
+  }, [activeDocId, currentIdx, repeatText, speak, claimSpeech]);
 
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
@@ -2871,7 +2847,12 @@ function AppPageInner() {
     {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
-      fn: () => { setMenuOpen(false); setSoundOpen(true); },
+      fn: () => {
+        // One press mutes/unmutes right from the menu; the icon flips in place.
+        const next = !muted;
+        void saveMuted(next);
+        toast.success(next ? "Sound off" : "Sound on");
+      },
     },
     { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
       setMenuOpen(false);
@@ -4806,14 +4787,6 @@ function AppPageInner() {
         </DialogContent>
       </Dialog>
 
-      <SoundSettingsDialog
-        open={soundOpen}
-        onOpenChange={setSoundOpen}
-        muted={muted}
-        voice={ttsVoice}
-        onMutedChange={(m) => { void saveMuted(m); }}
-        onVoiceChange={(v) => { void saveSoundPref({ tts_voice: v }); }}
-      />
     </main>
   );
 }

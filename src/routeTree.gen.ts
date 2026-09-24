@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as AuthenticatedMediaRouteImport } from './routes/_authenticated/media'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as ApiPublicPlanTickRouteImport } from './routes/api/public/plan-tick'
@@ -37,11 +36,6 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiTtsRoute = ApiTtsRouteImport.update({
-  id: '/api/tts',
-  path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedMediaRoute = AuthenticatedMediaRouteImport.update({
@@ -108,7 +102,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
-  '/api/tts': typeof ApiTtsRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
@@ -124,7 +117,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/app': typeof AuthenticatedAppRoute
   '/media': typeof AuthenticatedMediaRoute
-  '/api/tts': typeof ApiTtsRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
@@ -142,7 +134,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/app': typeof AuthenticatedAppRoute
   '/_authenticated/media': typeof AuthenticatedMediaRoute
-  '/api/tts': typeof ApiTtsRoute
   '/api/public/chat-turn-tick': typeof ApiPublicChatTurnTickRoute
   '/api/public/media-poll-tick': typeof ApiPublicMediaPollTickRoute
   '/api/public/plan-scheduler-tick': typeof ApiPublicPlanSchedulerTickRoute
@@ -160,7 +151,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app'
     | '/media'
-    | '/api/tts'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
@@ -176,7 +166,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/app'
     | '/media'
-    | '/api/tts'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
@@ -193,7 +182,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/app'
     | '/_authenticated/media'
-    | '/api/tts'
     | '/api/public/chat-turn-tick'
     | '/api/public/media-poll-tick'
     | '/api/public/plan-scheduler-tick'
@@ -209,7 +197,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiTtsRoute: typeof ApiTtsRoute
   ApiPublicChatTurnTickRoute: typeof ApiPublicChatTurnTickRoute
   ApiPublicMediaPollTickRoute: typeof ApiPublicMediaPollTickRoute
   ApiPublicPlanSchedulerTickRoute: typeof ApiPublicPlanSchedulerTickRoute
@@ -242,13 +229,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/tts': {
-      id: '/api/tts'
-      path: '/api/tts'
-      fullPath: '/api/tts'
-      preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/media': {
@@ -349,7 +329,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiTtsRoute: ApiTtsRoute,
   ApiPublicChatTurnTickRoute: ApiPublicChatTurnTickRoute,
   ApiPublicMediaPollTickRoute: ApiPublicMediaPollTickRoute,
   ApiPublicPlanSchedulerTickRoute: ApiPublicPlanSchedulerTickRoute,
