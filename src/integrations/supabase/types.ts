@@ -863,6 +863,7 @@ export type Database = {
           pinned_document_id: string | null
           tap_mode: string | null
           theme: string
+          tts_high_quality: boolean
           tts_prefetch: number
           tts_voice: string | null
           updated_at: string
@@ -883,6 +884,7 @@ export type Database = {
           pinned_document_id?: string | null
           tap_mode?: string | null
           theme?: string
+          tts_high_quality?: boolean
           tts_prefetch?: number
           tts_voice?: string | null
           updated_at?: string
@@ -903,6 +905,7 @@ export type Database = {
           pinned_document_id?: string | null
           tap_mode?: string | null
           theme?: string
+          tts_high_quality?: boolean
           tts_prefetch?: number
           tts_voice?: string | null
           updated_at?: string
