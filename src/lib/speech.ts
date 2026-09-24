@@ -79,37 +79,98 @@ function cachePut(k: string, v: Float32Array[]) {
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
 }
 
+// ---- shared in-flight downloads (one paid request per sentence, ever) ----
+type Inflight = {
+  chunks: Float32Array[];
+  listeners: Set<(f: Float32Array) => void>;
+  endListeners: Set<(ok: boolean) => void>;
+  abort: AbortController;
+  live: boolean;
+};
+const inflight = new Map<string, Inflight>();
+/** Keys the app currently wants (current ±2). Downloads outside it may be cancelled. */
+let wantedKeys = new Set<string>();
+
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function postTts(clean: string, v: string, signal: AbortSignal, live: boolean): Promise<Response> {
+  const token = await getToken();
+  if (!token) throw new Error("signed out");
+  const req = () => fetch("/api/tts", {
+    method: "POST", signal,
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ text: clean, voice: v }),
+  });
+  let res = await req();
+  if (live && (res.status === 429 || res.status === 503)) {
+    const ra = Number(res.headers.get("retry-after"));
+    try { await res.body?.cancel(); } catch {}
+    await sleep(Math.min(1500, Number.isFinite(ra) && ra > 0 ? ra * 1000 : 700));
+    if (signal.aborted) throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    res = await req();
+  }
+  return res;
+}
+
+function startDownload(key: string, clean: string, v: string, live: boolean): Inflight {
+  const existing = inflight.get(key);
+  if (existing) { if (live) existing.live = true; return existing; }
+  const entry: Inflight = { chunks: [], listeners: new Set(), endListeners: new Set(), abort: new AbortController(), live };
+  inflight.set(key, entry);
+  const finish = (ok: boolean) => {
+    if (inflight.get(key) === entry) inflight.delete(key);
+    if (ok && entry.chunks.length) cachePut(key, entry.chunks);
+    for (const l of entry.endListeners) { try { l(ok); } catch {} }
+    entry.endListeners.clear(); entry.listeners.clear();
+  };
+  void (async () => {
+    try {
+      const res = await postTts(clean, v, entry.abort.signal, entry.live);
+      if (!res.ok || !res.body) { console.warn("[orby-tts]", res.status); throw new Error(`tts ${res.status}`); }
+      const reader = res.body.getReader();
+      let carry: Uint8Array | null = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        let bytes = value;
+        if (carry) {
+          const m = new Uint8Array(carry.length + bytes.length);
+          m.set(carry); m.set(bytes, carry.length); bytes = m; carry = null;
+        }
+        if (bytes.length % 2) { carry = bytes.slice(-1); bytes = bytes.slice(0, -1); }
+        const f = pcmToFloat(bytes);
+        if (f.length) { entry.chunks.push(f); for (const l of entry.listeners) { try { l(f); } catch {} } }
+      }
+      finish(entry.chunks.length > 0);
+    } catch {
+      finish(false);
+    }
+  })();
+  return entry;
+}
+
 // ---- audio ----
 let ctx: AudioContext | null = null;
-let streamAbort: AbortController | null = null;
 let sources: AudioBufferSourceNode[] = [];
 let streamPlaying = false;
 let streamSeq = 0;
+let liveDetach: (() => void) | null = null;
+let liveKey: string | null = null;
 
-let idleTimer: ReturnType<typeof setTimeout> | null = null;
-function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
-function scheduleIdleSuspend() {
-  clearIdle();
-  idleTimer = setTimeout(() => { idleTimer = null; if (!streamPlaying) suspendCtx(); }, 2000);
-}
 function suspendCtx() {
   if (ctx && ctx.state === "running") { try { void ctx.suspend(); } catch {} }
 }
 
-/** Created lazily, only when a sentence is about to play, at the device's own rate. */
+/** Created lazily on the first read; woken (or replaced if stuck) inside every press. */
 function audioCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
   const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext;
   if (!Ctor) return null;
   requestIosMixableSession();
   const st = ctx?.state as string | undefined;
-  if (ctx && st === "closed") ctx = null;
+  if (ctx && (st === "closed" || st === "interrupted")) { try { void ctx.close(); } catch {} ctx = null; }
   if (!ctx) { try { ctx = new Ctor(); } catch { return null; } }
   if (ctx && ctx.state !== "running") { try { void ctx.resume(); } catch {} }
-  try {
-    const s = (navigator as any)?.audioSession;
-    if (s) console.debug("[orby-audio]", s.type, s.state, ctx?.state);
-  } catch {}
   return ctx;
 }
 
@@ -118,9 +179,8 @@ function attachListeners() {
   if (listenersAttached || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   listenersAttached = true;
   wireAuth();
-  // Leaving the app: stop speaking and quietly pause. Never close/rebuild or
-  // touch the audio mode, so other apps' music and recordings are left alone.
-  const onHide = () => { cancelSpeech(); cancelPrewarm(); clearIdle(); suspendCtx(); };
+  // Leaving the app: stop speaking and quietly pause. Never touch the audio mode.
+  const onHide = () => { cancelSpeech(); cancelPrewarm(); suspendCtx(); };
   window.addEventListener("pagehide", onHide);
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") onHide(); });
@@ -134,8 +194,13 @@ export function handleAppForeground() { cancelSpeech(); }
 
 function stopStream() {
   streamSeq += 1;
-  streamAbort?.abort();
-  streamAbort = null;
+  liveDetach?.(); liveDetach = null;
+  // Cancel the previous live download only if it is no longer wanted.
+  if (liveKey && !wantedKeys.has(liveKey)) {
+    const e = inflight.get(liveKey);
+    if (e) { e.abort.abort(); inflight.delete(liveKey); }
+  }
+  liveKey = null;
   for (const s of sources) { try { s.onended = null; s.stop(); } catch {} }
   sources = [];
   streamPlaying = false;
@@ -146,58 +211,55 @@ export function isSpeaking() { return streamPlaying; }
 export function resetSpeechCaches() { cancelSpeech(); cancelPrewarm(); cache.clear(); }
 
 // ---- prewarm (fills the cache without playing) ----
-let prewarmQueue: string[] = [];
-let prewarmAbort: AbortController | null = null;
+let prewarmQueue: { key: string; clean: string; v: string }[] = [];
 let prewarmBusy = false;
 let prewarmGen = 0;
+let liveGate: Promise<void> | null = null;
 export function cancelPrewarm() {
   prewarmGen += 1;
   prewarmQueue = [];
-  prewarmAbort?.abort();
-  prewarmAbort = null;
+  for (const [k, e] of inflight) {
+    if (!e.live && !wantedKeys.has(k)) { e.abort.abort(); inflight.delete(k); }
+  }
   prewarmBusy = false;
 }
-/** Replace the prewarm queue with these sentences (in priority order). */
-export function prewarmSpeech(texts: string[]) {
+/** Voice switched: drop old-voice preloads (the app re-preloads in the new voice). */
+export function onVoiceChanged() {
+  wantedKeys = new Set();
   cancelPrewarm();
-  if (!speechEnabled || speechSuppressed || typeof fetch !== "function") return;
-  const seen = new Set<string>();
+}
+/** Preload exactly these sentences (the app passes current ±2). */
+export function prewarmSpeech(texts: string[]) {
+  const v = voice;
+  const next: { key: string; clean: string; v: string }[] = [];
+  const keys = new Set<string>();
   for (const t of texts) {
     const c = cleanForSpeech(t ?? "");
-    if (!c || !SPEAKABLE_RE.test(c) || seen.has(c) || cache.has(`${voice}|${c}`)) continue;
-    seen.add(c); prewarmQueue.push(c);
+    if (!c || !SPEAKABLE_RE.test(c)) continue;
+    const key = `${v}|${c}`;
+    if (keys.has(key)) continue;
+    keys.add(key);
+    if (!cache.has(key) && !inflight.has(key)) next.push({ key, clean: c, v });
   }
+  wantedKeys = keys;
+  cancelPrewarm();
+  if (!speechEnabled || speechSuppressed || typeof fetch !== "function") return;
+  prewarmQueue = next;
   void runPrewarm(prewarmGen);
 }
 async function runPrewarm(gen: number) {
   if (prewarmBusy) return;
   prewarmBusy = true;
   try {
-    // let the live sentence get the bandwidth first
-    await new Promise((r) => setTimeout(r, 350));
+    await sleep(250);
     while (gen === prewarmGen && prewarmQueue.length) {
-      const clean = prewarmQueue.shift()!;
-      const v = voice;
-      const key = `${v}|${clean}`;
-      if (cache.has(key)) continue;
-      const abort = new AbortController();
-      prewarmAbort = abort;
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetch("/api/tts", {
-          method: "POST", signal: abort.signal,
-          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-          body: JSON.stringify({ text: clean, voice: v }),
-        });
-        if (!res.ok) continue;
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (gen !== prewarmGen) return;
-        const f = pcmToFloat(bytes.length % 2 ? bytes.slice(0, -1) : bytes);
-        if (f.length) cachePut(key, [f]);
-      } catch { if (gen !== prewarmGen) return; }
+      if (liveGate) { await liveGate; continue; }
+      const item = prewarmQueue.shift()!;
+      if (cache.has(item.key)) continue;
+      const e = startDownload(item.key, item.clean, item.v, false);
+      await new Promise<void>((r) => e.endListeners.add(() => r()));
     }
-  } finally { if (gen === prewarmGen) { prewarmBusy = false; prewarmAbort = null; } }
+  } finally { if (gen === prewarmGen) prewarmBusy = false; }
 }
 
 function pcmToFloat(bytes: Uint8Array): Float32Array {
@@ -210,7 +272,6 @@ function pcmToFloat(bytes: Uint8Array): Float32Array {
 
 function speakStreamed(clean: string, opts: SpeakOpts): boolean {
   attachListeners();
-  clearIdle();
   const ac = audioCtx();
   if (!ac || typeof fetch !== "function") { emitSpeechError(); opts.onError?.(); return false; }
   stopStream();
@@ -222,7 +283,6 @@ function speakStreamed(clean: string, opts: SpeakOpts): boolean {
   const done = () => {
     if (seq !== streamSeq || !finished || pending > 0) return;
     streamPlaying = false;
-    scheduleIdleSuspend();
     opts.onEnd?.();
   };
   const play = (samples: Float32Array) => {
@@ -248,49 +308,27 @@ function speakStreamed(clean: string, opts: SpeakOpts): boolean {
   const cached = cacheGet(key);
   if (cached) { cached.forEach(play); finished = true; done(); return true; }
 
-  const abort = new AbortController();
-  streamAbort = abort;
-  const chunks: Float32Array[] = [];
-  let gotAudio = false;
-  void (async () => {
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("signed out");
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        signal: abort.signal,
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ text: clean, voice }),
-      });
-      if (!res.ok || !res.body) throw new Error(`tts ${res.status}`);
-      const reader = res.body.getReader();
-      let carry: Uint8Array | null = null;
-      for (;;) {
-        const { value, done: end } = await reader.read();
-        if (seq !== streamSeq) { try { await reader.cancel(); } catch {} return; }
-        if (end) break;
-        let bytes = value;
-        if (carry) {
-          const merged = new Uint8Array(carry.length + bytes.length);
-          merged.set(carry); merged.set(bytes, carry.length);
-          bytes = merged; carry = null;
-        }
-        if (bytes.length % 2) { carry = bytes.slice(-1); bytes = bytes.slice(0, -1); }
-        const f = pcmToFloat(bytes);
-        if (f.length) { gotAudio = true; chunks.push(f); play(f); }
-      }
-      if (!gotAudio) throw new Error("empty audio");
-      cachePut(key, chunks);
-      finished = true;
-      done();
-    } catch (e) {
-      if (seq !== streamSeq || (e as Error)?.name === "AbortError") return;
-      if (gotAudio) { finished = true; done(); return; }
-      streamPlaying = false;
-      emitSpeechError();
-      opts.onError?.();
-    }
-  })();
+  // Join an existing download (preload or earlier press) or start one.
+  liveKey = key;
+  const entry = startDownload(key, clean, voice, true);
+  let releaseGate: () => void = () => {};
+  liveGate = new Promise<void>((r) => { releaseGate = () => { r(); if (liveGate === gate) liveGate = null; }; });
+  const gate = liveGate;
+  entry.chunks.forEach(play);
+  const onChunk = (f: Float32Array) => { releaseGate(); play(f); };
+  const onEnd = (ok: boolean) => {
+    releaseGate();
+    if (seq !== streamSeq) return;
+    liveDetach = null;
+    if (ok || entry.chunks.length) { finished = true; done(); return; }
+    streamPlaying = false;
+    emitSpeechError();
+    opts.onError?.();
+  };
+  if (entry.chunks.length) releaseGate();
+  entry.listeners.add(onChunk);
+  entry.endListeners.add(onEnd);
+  liveDetach = () => { entry.listeners.delete(onChunk); entry.endListeners.delete(onEnd); releaseGate(); };
   return true;
 }
 
