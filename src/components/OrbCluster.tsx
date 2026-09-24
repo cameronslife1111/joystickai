@@ -34,8 +34,8 @@ interface OrbClusterProps {
   onNextDocLongPress: () => void;
   /** Red orb tap: open Search docs. */
   onSearchDocs: () => void;
-  /** Red orb hold: return to the previously viewed document. */
-  onRecentDocs: () => void;
+  /** Red orb hold: mute/unmute speech (same as the menu sound slot). */
+  onToggleMute: () => void;
   /** Blue orb hold: toggle the list-cycling lock (slot 22). */
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
@@ -204,7 +204,7 @@ export function OrbCluster({
   onNextDoc,
   onNextDocLongPress,
   onSearchDocs,
-  onRecentDocs,
+  onToggleMute,
   onPrevLongPress,
   onMenuLongPress,
   onNextLongPress,
@@ -236,9 +236,9 @@ export function OrbCluster({
       <ClusterOrb
         orbClass="glow-orb-red"
         Icon={Search}
-        label="Search docs (hold for previous document)"
+        label="Search docs (hold to mute/unmute speech)"
         onPress={onSearchDocs}
-        onLongPress={onRecentDocs}
+        onLongPress={onToggleMute}
         placement={{ gridColumn: 1, gridRow: "1 / span 2" }}
       />
       <ClusterOrb

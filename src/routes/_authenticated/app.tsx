@@ -3561,19 +3561,11 @@ function AppPageInner() {
               setSearchQuery("");
               setSearchOpen(true);
             }}
-            onRecentDocs={() => {
-              if (lockFavorites) {
-                toast.error("List is locked");
-                return;
-              }
-              const previousDoc = recentIds
-                .map((id) => docs?.find((doc) => doc.id === id))
-                .filter((doc): doc is Doc => !!doc)[1];
-              if (!previousDoc) {
-                toast("No previous document yet");
-                return;
-              }
-              void goToDocument(previousDoc.id);
+            onToggleMute={() => {
+              // Same toggle as the menu sound slot; the icon flips there too.
+              const next = !muted;
+              void saveMuted(next);
+              toast.success(next ? "Sound off" : "Sound on");
             }}
             onMenuLongPress={() => setMenuOpen(true)}
             onPinnedDoc={() => {
