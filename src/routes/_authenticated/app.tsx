@@ -11,7 +11,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
 import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
-import { prefetchLocalClips } from "@/lib/tts-local";
+import { prefetchLocalClips, onLocalVoiceChange, LOCAL_VOICES, getLocalVoice, setLocalVoice } from "@/lib/tts-local";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -879,18 +879,38 @@ function AppPageInner() {
   // silence. Sentences are read by the device's own voice, so there is nothing
   // to pre-generate or cache.
   useEffect(() => { setSpeechEnabled(!muted); }, [muted]);
-  // Free on-device voice: prepare the current and next sentences ahead of time.
+  // Free on-device voice: keep a prioritized look-ahead plan in both directions,
+  // plus where the pinned doc and next doc would land. The newest swipe always
+  // replaces the plan, so the engine never works on sentences left behind.
+  const [voiceTick, setVoiceTick] = useState(0);
+  useEffect(() => onLocalVoiceChange(() => setVoiceTick((t) => t + 1)), []);
   useEffect(() => {
     if (muted || !sentences) return;
     const t = setTimeout(() => {
-      prefetchLocalClips(
-        [currentIdx, currentIdx + 1, currentIdx + 2, currentIdx + 3, currentIdx - 1]
-          .map((i) => stripEmoji(sentences[i]?.content ?? ""))
-          .filter(Boolean),
-      );
-    }, 150);
+      const at = (list: Sentence[] | undefined, i: number) => (list && i >= 0 && i < list.length ? list[i].content : "");
+      const plan: string[] = [];
+      const push = (s: string) => { if (s) plan.push(stripEmoji(s)); };
+      push(at(sentences, currentIdx));
+      // Interleave forward (weighted) and backward so fast swipes either way hit cache.
+      for (let d = 1; d <= 12; d++) {
+        push(at(sentences, currentIdx + d));
+        if (d <= 6) push(at(sentences, currentIdx - d));
+      }
+      const landing = (docId: string | null | undefined, count: number) => {
+        if (!docId || docId === activeDocId) return;
+        const list = qc.getQueryData<Sentence[]>(["sentences", docId]);
+        if (!list?.length) return;
+        const doc = docs?.find((d) => d.id === docId) as any;
+        const start = Math.min(Math.max(savedIndexFor(docId, doc?.current_sentence_index ?? 0), 0), list.length - 1);
+        for (let d = 0; d < count; d++) push(at(list, start + d));
+      };
+      // Pinned document right after the nearest neighbours.
+      plan.splice(Math.min(plan.length, 5), 0, ...(() => { const tmp: string[] = []; const save = plan.length; landing(pinnedDocId, 3); return plan.splice(save).concat(tmp); })());
+      landing(nextDocTargetId, 2);
+      prefetchLocalClips(plan);
+    }, 60);
     return () => clearTimeout(t);
-  }, [muted, sentences, currentIdx]);
+  }, [muted, sentences, currentIdx, pinnedDocId, nextDocTargetId, activeDocId, docs, warmTick, voiceTick, qc, savedIndexFor]);
 
 
 
@@ -2861,10 +2881,9 @@ function AppPageInner() {
       e: muted ? "🔇" : "🔊",
       t: muted ? "Sound off" : "Sound on",
       fn: () => {
-        // One press mutes/unmutes right from the menu; the icon flips in place.
-        const next = !muted;
-        void saveMuted(next);
-        toast.success(next ? "Sound off" : "Sound on");
+        // Opens the Sound popup: on/off plus the voice picker.
+        setMenuOpen(false);
+        setSoundSheetOpen(true);
       },
     },
     { e: "💬", t: "Chat", badge: chatUnreadCount, fn: () => {
