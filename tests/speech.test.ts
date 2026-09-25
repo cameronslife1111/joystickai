@@ -258,7 +258,7 @@ describe("device sentence speech", () => {
     expect(cleanForSpeech("þetta reddast")).toBe("þetta reddast");
   });
 
-  test("foreground recovery waits for the next user-requested sentence", () => {
+  test("foreground recovery waits for the next user-requested sentence", async () => {
     const synth = installFakeSynth();
     setSpeechEnabled(true);
     speakText("before backgrounding");
@@ -268,7 +268,24 @@ describe("device sentence speech", () => {
     expect(synth.cancels).toBe(cancelsBeforeForeground);
     expect(isSpeaking()).toBe(true);
     expect(speakText("after returning")).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(synth.spoken.at(-1)?.text).toBe("after returning");
+  });
+
+  test("a late callback from a cancelled sentence cannot erase its replacement", async () => {
+    const synth = installFakeSynth();
+    setSpeechEnabled(true);
+    speakText("old sentence");
+    const old = synth.spoken[0]!;
+
+    speakText("new sentence");
+    old.onerror?.();
+    old.onend?.();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(synth.spoken.length).toBe(2);
+    expect(synth.spoken[1]!.text).toBe("new sentence");
+    cancelSpeech();
   });
 
   test("re-arms short-speech mode after an iOS audio interruption", async () => {
