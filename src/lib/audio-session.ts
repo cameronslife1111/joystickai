@@ -55,6 +55,10 @@ export function endIosRecordingSession(token: number | null): boolean {
   if (activeRecordingTokens.size > 0) return false;
   const session = iosAudioSession();
   if (!session) return false;
+  // A recorder interrupted by another app can leave iOS holding the previous
+  // route even after the token is gone. Bounce through auto before returning
+  // to the shared category so the next speech press is not blocked by it.
+  try { session.type = "auto"; } catch {}
   try {
     session.type = "ambient";
     return session.type === "ambient";
@@ -123,6 +127,17 @@ export function resetIosAudioSession(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Reclaim a nonexclusive route during the user's speech/navigation press.
+ * This intentionally performs no delayed work: a later retry could race a
+ * newly-started recording and steal its play-and-record category.
+ */
+export function reclaimIosSpeechSession(): "transient" | "ambient" | null {
+  if (activeRecordingTokens.size > 0) return null;
+  resetIosAudioSession();
+  return beginIosSpeechSession();
 }
 
 export function isIosRecordingSessionActive(): boolean {

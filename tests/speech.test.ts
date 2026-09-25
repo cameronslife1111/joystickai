@@ -196,13 +196,15 @@ describe("device sentence speech", () => {
   });
 
 
-  test("a new sentence cancels the old one, then speaks the newest", () => {
+  test("a new sentence waits for WebKit cancellation to settle, then speaks only the newest", async () => {
     const synth = installFakeSynth();
     setSpeechEnabled(true);
     speakText("first sentence");
     const cancelsAfterFirst = synth.cancels;
     speakText("second sentence");
     expect(synth.cancels).toBeGreaterThan(cancelsAfterFirst);
+    expect(synth.spoken.length).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(synth.spoken.length).toBe(2);
     expect(synth.spoken[1]!.text).toBe("second sentence");
     cancelSpeech();
@@ -231,12 +233,13 @@ describe("device sentence speech", () => {
     setSpeechSuppressed(false);
   });
 
-  test("retries once with an explicit local voice when the default errors", () => {
+  test("retries once with an explicit local voice when the default errors", async () => {
     const localVoice = { name: "Samantha", lang: "en-US", localService: true, default: true };
     const synth = installFakeSynth([localVoice]);
     setSpeechEnabled(true);
     speakText("retry me");
     synth.spoken[0]!.onerror?.();
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(synth.spoken.length).toBe(2);
     expect(synth.spoken[1]!.voice).toBe(localVoice);
     cancelSpeech();
@@ -255,15 +258,20 @@ describe("device sentence speech", () => {
     expect(cleanForSpeech("þetta reddast")).toBe("þetta reddast");
   });
 
-  test("returning to the foreground clears speech state without throwing", () => {
-    installFakeSynth();
+  test("foreground recovery waits for the next user-requested sentence", () => {
+    const synth = installFakeSynth();
     setSpeechEnabled(true);
     speakText("before backgrounding");
+    synth.spoken[0]!.onstart?.();
+    const cancelsBeforeForeground = synth.cancels;
     expect(() => handleAppForeground()).not.toThrow();
-    expect(isSpeaking()).toBe(false);
+    expect(synth.cancels).toBe(cancelsBeforeForeground);
+    expect(isSpeaking()).toBe(true);
+    expect(speakText("after returning")).toBe(true);
+    expect(synth.spoken.at(-1)?.text).toBe("after returning");
   });
 
-  test("re-arms short-speech mode after an iOS audio interruption", () => {
+  test("re-arms short-speech mode after an iOS audio interruption", async () => {
     const synth = installFakeSynth();
     const session = installFakeAudioSession();
     setSpeechEnabled(true);
@@ -274,6 +282,7 @@ describe("device sentence speech", () => {
     session.state = "active";
     session.requestedTypes.length = 0;
     expect(speakText("after interruption")).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(session.requestedTypes).toContain("transient");
     expect(session.requestedTypes).not.toContain("playback");
     expect(session.requestedTypes).not.toContain("transient-solo");

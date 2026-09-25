@@ -435,6 +435,9 @@ function AppPageInner() {
   // that was read before our write landed; while pending, the local value wins
   // so the reader never snaps back to an older sentence.
   const localIdxRef = useRef<Record<string, { index: number; pending: boolean; movedAt: number }>>({});
+  // Updated before React paints so two quick presses always move twice instead
+  // of both calculating from the same rendered sentence number.
+  const currentPositionRef = useRef<{ docId: string | null; index: number }>({ docId: null, index: 0 });
 
   /**
    * Persists a document's current sentence index without blocking the UI.
@@ -637,24 +640,8 @@ function AppPageInner() {
       if (message) toast.error(message);
     };
     window.addEventListener("orby-speech-error", showSpeechError);
-    // Last resort after returning from another app: iOS left speech wedged in a
-    // way only a fresh page fixes. Save the spot, then refresh (at most every 30s).
-    const onHardReset = () => {
-      if (mutedRef.current || recordingRef.current || busyRef.current) return;
-      try {
-        const last = Number(sessionStorage.getItem("orby-speech-reload-at") || 0);
-        if (Date.now() - last < 30_000) return;
-        sessionStorage.setItem("orby-speech-reload-at", String(Date.now()));
-      } catch { return; }
-      const writes = Object.entries(localIdxRef.current).map(([docId, e]) =>
-        supabase.from("documents").update({ current_sentence_index: e.index }).eq("id", docId),
-      );
-      void Promise.allSettled(writes).then(() => window.location.reload());
-    };
-    window.addEventListener("orby-speech-hard-reset", onHardReset);
     return () => {
       window.removeEventListener("orby-speech-error", showSpeechError);
-      window.removeEventListener("orby-speech-hard-reset", onHardReset);
     };
   }, []);
 
@@ -830,6 +817,9 @@ function AppPageInner() {
 
   const currentIdx = activeDoc?.current_sentence_index ?? 0;
   const currentSentence = sentences?.[currentIdx];
+  useEffect(() => {
+    currentPositionRef.current = { docId: activeDocId, index: currentIdx };
+  }, [activeDocId, currentIdx]);
 
   /**
    * The document the green orb (next document) will open next, following the
@@ -1031,6 +1021,7 @@ function AppPageInner() {
   const setIndex = useCallback(async (newIdx: number) => {
     if (!activeDoc) return;
     const clamped = Math.max(0, newIdx);
+    currentPositionRef.current = { docId: activeDoc.id, index: clamped };
     qc.setQueryData<Doc[]>(["documents"], (prev) =>
       prev?.map((d) => d.id === activeDoc.id ? { ...d, current_sentence_index: clamped } : d) ?? prev,
     );
@@ -1107,9 +1098,14 @@ function AppPageInner() {
     if (editingRef.current) return; // never navigate while the editor is open
     if (!activeDoc || !sentences) return;
     const token = claimSpeech();
-    const next = currentIdx + 1;
+    const base = currentPositionRef.current.docId === activeDoc.id
+      ? currentPositionRef.current.index
+      : currentIdx;
+    const next = base + 1;
     if (next >= sentences.length) {
-      if (sentences[currentIdx]) speak(sentences[currentIdx].content, token);
+      const last = sentences.length - 1;
+      currentPositionRef.current = { docId: activeDoc.id, index: last };
+      if (sentences[last]) speak(sentences[last].content, token);
       return;
     }
     // Keep speech in the pointer-up activation turn for strict WebKit builds.
@@ -1138,15 +1134,18 @@ function AppPageInner() {
   const onSwipeUp = useCallback(async () => {
     if (editingRef.current) return; // editor open — block navigation
     const token = claimSpeech();
-    if (currentIdx === 0) {
+    const base = activeDoc && currentPositionRef.current.docId === activeDoc.id
+      ? currentPositionRef.current.index
+      : currentIdx;
+    if (base === 0) {
       if (sentences?.[0]) speak(sentences[0].content, token);
       return;
     }
-    const prev = currentIdx - 1;
+    const prev = base - 1;
     // Keep speech in the pointer-up activation turn for strict WebKit builds.
     void setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content, token);
-  }, [currentIdx, setIndex, sentences, speak, claimSpeech]);
+  }, [activeDoc, currentIdx, setIndex, sentences, speak, claimSpeech]);
 
   const deleteCurrent = useCallback(async () => {
     if (!currentSentence || !sentences) return;
