@@ -434,7 +434,7 @@ function AppPageInner() {
   // after the app is foregrounded, plan watcher invalidation) can return a row
   // that was read before our write landed; while pending, the local value wins
   // so the reader never snaps back to an older sentence.
-  const localIdxRef = useRef<Record<string, { index: number; pending: boolean }>>({});
+  const localIdxRef = useRef<Record<string, { index: number; pending: boolean; movedAt: number }>>({});
 
   /**
    * Persists a document's current sentence index without blocking the UI.
@@ -443,7 +443,7 @@ function AppPageInner() {
    * local override in place until the value is actually stored.
    */
   const persistIndex = useCallback((docId: string, index: number) => {
-    localIdxRef.current[docId] = { index, pending: true };
+    localIdxRef.current[docId] = { index, pending: true, movedAt: Date.now() };
     void (async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const { error } = await supabase
@@ -496,6 +496,7 @@ function AppPageInner() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async (): Promise<Doc[]> => {
+      const fetchStartedAt = Date.now();
       const { data, error } = await supabase
         .from("documents").select("*").order("position", { ascending: true });
       if (error) throw error;
@@ -510,7 +511,9 @@ function AppPageInner() {
           return d;
         }
         // Our write hasn't been confirmed yet: this row is stale, keep ours.
-        if (pending.pending) {
+        // Still in flight, or this fetch began before our last move (so its
+        // row predates it): keep ours — never snap back to an older sentence.
+        if (pending.pending || fetchStartedAt <= pending.movedAt) {
           return { ...d, current_sentence_index: pending.index };
         }
         // Confirmed earlier and the server now differs (another device) — trust it.
@@ -634,7 +637,25 @@ function AppPageInner() {
       if (message) toast.error(message);
     };
     window.addEventListener("orby-speech-error", showSpeechError);
-    return () => window.removeEventListener("orby-speech-error", showSpeechError);
+    // Last resort after returning from another app: iOS left speech wedged in a
+    // way only a fresh page fixes. Save the spot, then refresh (at most every 30s).
+    const onHardReset = () => {
+      if (mutedRef.current || recordingRef.current || busyRef.current) return;
+      try {
+        const last = Number(sessionStorage.getItem("orby-speech-reload-at") || 0);
+        if (Date.now() - last < 30_000) return;
+        sessionStorage.setItem("orby-speech-reload-at", String(Date.now()));
+      } catch { return; }
+      const writes = Object.entries(localIdxRef.current).map(([docId, e]) =>
+        supabase.from("documents").update({ current_sentence_index: e.index }).eq("id", docId),
+      );
+      void Promise.allSettled(writes).then(() => window.location.reload());
+    };
+    window.addEventListener("orby-speech-hard-reset", onHardReset);
+    return () => {
+      window.removeEventListener("orby-speech-error", showSpeechError);
+      window.removeEventListener("orby-speech-hard-reset", onHardReset);
+    };
   }, []);
 
   const saveTheme = useCallback(async (next: "dark" | "light") => {

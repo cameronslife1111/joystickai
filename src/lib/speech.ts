@@ -2,6 +2,7 @@ import {
   beginIosSpeechSession,
   endIosSpeechSession,
   onIosAudioSessionInterrupted,
+  resetIosAudioSession,
 } from "@/lib/audio-session";
 
 
@@ -156,8 +157,25 @@ let recoveryListenersAttached = false;
 let wasHidden = false;
 let removeAudioSessionListener: (() => void) | null = null;
 
+let returnedFromBackground = false;
+
+/** Full un-stick: fresh audio category, cleared queue, un-paused engine. */
+function hardResetEngine() {
+  resetIosAudioSession();
+  const engine = synth();
+  if (!engine) return;
+  try {
+    engine.cancel();
+  } catch {}
+  try {
+    if (engine.paused) engine.resume();
+  } catch {}
+}
+
 export function handleAppForeground() {
   cancelSpeech();
+  returnedFromBackground = true;
+  hardResetEngine();
   primed = false;
   // Refresh WebKit's lazily-populated voice list. Never resume a stale queue:
   // that can revive an interrupted utterance and race the next user press.
@@ -198,6 +216,7 @@ function attachForegroundRecovery() {
   removeAudioSessionListener?.();
   removeAudioSessionListener = onIosAudioSessionInterrupted(() => {
     wasHidden = true;
+    returnedFromBackground = true;
     cancelSpeech();
   });
 }
@@ -265,6 +284,36 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   clearSpeechEngine(false);
   const sequence = requestSequence;
 
+  // Before the fallback-voice retry and the reset retry run out, a failure
+  // after returning from another app asks the app for an automatic refresh.
+  let resetRetried = false;
+  // Cancelling fires the abandoned utterance's onerror; silence it first so a
+  // retry can never be mistaken for a second failure.
+  const detachActive = () => {
+    const old = activeUtterance;
+    if (old) {
+      old.onstart = null;
+      old.onend = null;
+      old.onerror = null;
+    }
+  };
+  const giveUp = () => {
+    if (!resetRetried) {
+      resetRetried = true;
+      detachActive();
+      hardResetEngine();
+      speak(null, true);
+      return true;
+    }
+    if (returnedFromBackground) {
+      returnedFromBackground = false;
+      try {
+        window.dispatchEvent(new CustomEvent("orby-speech-hard-reset", { detail: clean }));
+      } catch {}
+    }
+    return false;
+  };
+
   const speak = (voice: SpeechSynthesisVoice | null, isRetry: boolean) => {
     // This does not open, stop or release a microphone. `transient` asks iOS to
     // duck other audio; unsupported builds fall back to ambient mixing.
@@ -292,6 +341,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (startWatchdog) clearTimeout(startWatchdog);
       startWatchdog = null;
       audibleSpeaking = true;
+      returnedFromBackground = false;
     };
     utterance.onend = () => {
       if (!settle()) return;
@@ -304,6 +354,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         // could not be resolved — try once with an explicit local voice.
         const retryVoice = fallbackVoice(engine);
         if (retryVoice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
@@ -311,6 +362,8 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
           return;
         }
       }
+      if (sequence !== requestSequence) return;
+      if (giveUp()) return;
       if (!settle()) return;
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
@@ -326,6 +379,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (!isRetry) {
         const voice = fallbackVoice(engine);
         if (voice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
@@ -333,6 +387,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
           return;
         }
       }
+      if (giveUp()) return;
       audibleSpeaking = false;
       activeUtterance = null;
       endIosSpeechSession();
@@ -346,6 +401,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (!isRetry) {
         const voice = fallbackVoice(engine);
         if (voice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
@@ -353,6 +409,8 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
           return;
         }
       }
+      if (sequence !== requestSequence) return;
+      if (giveUp()) return;
       if (!settle()) return;
       emitSpeechError("Speech couldn't start — please try again");
       opts.onError?.();
