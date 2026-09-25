@@ -44,7 +44,7 @@ async function callPlannerLLM(systemPrompt: string, userPrompt: string): Promise
   throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
 }
 
-const buildSystemPrompt = (allowedGroups?: string[] | null) => `You are Orby's planner. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
+const buildSystemPrompt = (allowedGroups?: string[] | null) => `You are the planner for Remote, the assistant inside the Focus Remote app. The user describes something they want done; you produce a step-by-step plan that uses ONLY the tools listed below.
 
 You have these tools (no others exist):
 
@@ -208,7 +208,7 @@ GO TO FORMAT — this is exactly how the user reads a plan. No other wording is 
 - Every step "description" is exactly one sentence in the form "Go to the X and Y." where X is WHERE to go (the real destination: the document by its exact title, the Media Gallery, this chat, the timeline in DaVinci Resolve — include the location detail the user gave) and Y is WHAT to do there in FEWER THAN 7 words, ending with a period.
 - If an action needs more than 6 words in Y, split it into several baby steps, each its own "Go to the X and Y." sentence.
 - Use the USER'S OWN WORDING for X and Y. If they said "the funky blue button", write "the funky blue button" — never paraphrase, never fancy it up. Fix only obvious transcription slips.
-- Never write "Orby will…", never name a tool or capability in the description, never number or bullet the steps.
+- Never write "Remote will…", never name a tool or capability in the description, never number or bullet the steps.
 - Special notes the user gave (things to remember, not actions) go in the "notes" array as plain sentences, in the order they belong. Never bend a note into "Go to…" shape.
 - Plain text only in every field: no markdown, no asterisks, no headings, no numbering.
 
@@ -765,7 +765,7 @@ Deno.serve(async (req) => {
         let used = 0;
         for (const m of recentMsgs ?? []) {
           const line =
-            `${(m as any).role === "user" ? "User" : "Orby"}: ${String((m as any).content ?? "").slice(0, 2000)}`;
+            `${(m as any).role === "user" ? "User" : "Remote"}: ${String((m as any).content ?? "").slice(0, 2000)}`;
           if (used + line.length > MAX_CONVO_CHARS) break;
           used += line.length;
           picked.push(line);
@@ -790,7 +790,7 @@ Deno.serve(async (req) => {
     // Hand the conversation to the planner alongside the request itself, so a
     // mid-conversation "ok do it" is planned from the whole discussion.
     const plannerInput = conversationSoFar
-      ? `CONVERSATION SO FAR (the user and Orby have been talking; this is the brief):\n${conversationSoFar}\n\n` +
+      ? `CONVERSATION SO FAR (the user and Remote have been talking; this is the brief):\n${conversationSoFar}\n\n` +
         `CURRENT REQUEST (the latest turn — plan THIS, using the conversation above for the concrete details):\n${plan.user_request}`
       : String(plan.user_request ?? "");
     const raw = await callPlannerLLM(effectiveSystemPrompt, plannerInput);

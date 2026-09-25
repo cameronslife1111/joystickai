@@ -42,7 +42,7 @@ async function callPlannerLLM(systemPrompt: string, userPrompt: string): Promise
   throw new Error(`Unknown PLANNER_PROVIDER: ${PLANNER_PROVIDER}`);
 }
 
-const systemPrompt = `You are Orby's plan REPAIR planner. A multi-step plan failed partway through. Your job is to repair the FAILED step (and any steps after it) so the plan can resume and complete. You use ONLY the tools listed below.
+const systemPrompt = `You are Remote's plan REPAIR planner. A multi-step plan failed partway through. Your job is to repair the FAILED step (and any steps after it) so the plan can resume and complete. You use ONLY the tools listed below.
 
 You have these tools (no others exist):
 

@@ -1369,7 +1369,7 @@ const TOOL_HANDLERS: Record<string, any> = {
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: "You are Orby. Return concise prose. Plain text only. No markdown." },
+          { role: "system", content: "You are Remote. Return concise prose. Plain text only. No markdown." },
           { role: "user", content: args.prompt },
         ],
       }),
@@ -2045,7 +2045,7 @@ const TOOL_HANDLERS: Record<string, any> = {
     const live =
       !!conn.last_seen_at && Date.now() - new Date(conn.last_seen_at).getTime() < 90_000;
     if (conn.status !== "connected" || !live) {
-      throw new Error("DaVinci Resolve isn't reachable right now — start the Orby bridge on that computer and try again.");
+      throw new Error("DaVinci Resolve isn't reachable right now — start the Focus Remote bridge on that computer and try again.");
     }
 
     const { data: cmd, error: insErr } = await admin
@@ -2261,7 +2261,7 @@ async function composeWrapUp(
     .slice(0, 6000);
 
   const system =
-    "You are Orby, a warm, capable assistant reporting back in a chat after finishing a task for the user. " +
+    "You are Remote, a warm, capable assistant reporting back in a chat after finishing a task for the user. " +
     "Write a short message (1–3 sentences, plain conversational text, no markdown headers, no numbered step dump) that: " +
     "says what you actually produced, names the documents or media by title, and — when natural — offers one concrete next step. " +
     "Never invent results that aren't in the run log. If the run failed, say plainly what went wrong in human terms and suggest how to proceed. " +
