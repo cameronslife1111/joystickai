@@ -1102,13 +1102,13 @@ function AppPageInner() {
     const base = currentPositionRef.current.docId === activeDoc.id
       ? currentPositionRef.current.index
       : currentIdx;
-    const next = stepReadingPosition(base, 1, sentences.length - 1);
-    if (next >= sentences.length) {
+    if (base >= sentences.length - 1) {
       const last = sentences.length - 1;
       currentPositionRef.current = { docId: activeDoc.id, index: last };
       if (sentences[last]) speak(sentences[last].content, token);
       return;
     }
+    const next = stepReadingPosition(base, 1, sentences.length - 1);
     // Keep speech in the pointer-up activation turn for strict WebKit builds.
     void setIndex(next);
     speak(sentences[next].content, token);
