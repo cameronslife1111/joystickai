@@ -37,8 +37,8 @@ export type ReviewPlan = {
 };
 
 /**
- * The plan Orby proposes inside a chat, before anything runs. The user reads
- * what Orby detected and which capabilities it wants, then approves, adds a
+ * The plan Remote proposes inside a chat, before anything runs. The user reads
+ * what Remote detected and which capabilities it wants, then approves, adds a
  * note (which triggers a full replan), or cancels.
  */
 export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
@@ -138,7 +138,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
     return (
       <div className="w-full max-w-[95%] rounded-xl border border-destructive/30 bg-card/50 p-3 text-sm">
         <div className="mb-1.5 flex items-center gap-2 font-medium">
-          <AlertCircle className="h-4 w-4 text-destructive" /> Orby couldn&apos;t plan that
+          <AlertCircle className="h-4 w-4 text-destructive" /> Remote couldn&apos;t plan that
         </div>
         {plan.plan_summary && (
           <p className="whitespace-pre-wrap text-xs text-muted-foreground">{plan.plan_summary}</p>
@@ -260,7 +260,7 @@ export function PlanReviewCard({ plan }: { plan: ReviewPlan }) {
   );
 }
 
-/** "Tell Orby what to do" box shown when a plan failed or was stopped. */
+/** "Tell Remote what to do" box shown when a plan failed or was stopped. */
 export function PlanSteerBox({ onSend }: { onSend: (text: string) => void }) {
   const [text, setText] = useState("");
   return (
@@ -268,7 +268,7 @@ export function PlanSteerBox({ onSend }: { onSend: (text: string) => void }) {
       <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Tell Orby what to do…"
+        placeholder="Tell Remote what to do…"
         rows={2}
         className="min-h-[52px] flex-1 text-sm"
       />
@@ -281,7 +281,7 @@ export function PlanSteerBox({ onSend }: { onSend: (text: string) => void }) {
           setText("");
           onSend(t);
         }}
-        aria-label="Send to Orby"
+        aria-label="Send to Remote"
       >
         <Send className="h-4 w-4" />
       </Button>

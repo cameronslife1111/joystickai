@@ -16,7 +16,7 @@ import { MCP_PROVIDERS, groupedTools, type McpProviderId } from "@/lib/mcp-provi
 
 /**
  * Provider-agnostic connection UI for an external creative app driven through
- * the local Orby bridge. Adding Photoshop/Blender/VS Code needs no change here.
+ * the local Remote bridge. Adding Photoshop/Blender/VS Code needs no change here.
  */
 export function useMcpConnection(provider: McpProviderId, enabled: boolean) {
   const fetchStatus = useServerFn(getMcpConnection);
@@ -153,7 +153,7 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
       {status === "connected" ? (
         <>
           <p className="text-[11px] leading-snug text-muted-foreground">
-            Just talk normally — Orby will do the work in {meta.name} for you. Keep the terminal
+            Just talk normally — Remote will do the work in {meta.name} for you. Keep the terminal
             window open.
           </p>
           <McpToolCatalog provider={provider} />
@@ -273,7 +273,7 @@ export function McpConnectionPanel({ provider }: { provider: McpProviderId }) {
 
 /**
  * The numbered "What can I ask for?" list, straight from the provider registry
- * so what the user reads is exactly what Orby can run.
+ * so what the user reads is exactly what Remote can run.
  */
 export function McpToolCatalog({ provider }: { provider: McpProviderId }) {
   const meta = MCP_PROVIDERS[provider];

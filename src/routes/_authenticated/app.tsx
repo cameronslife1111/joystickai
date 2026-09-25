@@ -40,10 +40,10 @@ import { WELCOME_DOC_TITLE, WELCOME_DOC_SENTENCES } from "@/lib/welcome-document
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({
     meta: [
-      { title: "Focus — Orby" },
-      { name: "description", content: "Move through your Orby documents one sentence at a time." },
-      { property: "og:title", content: "Focus — Orby" },
-      { property: "og:description", content: "Move through your Orby documents one sentence at a time." },
+      { title: "Focus — Remote" },
+      { name: "description", content: "Move through your Remote documents one sentence at a time." },
+      { property: "og:title", content: "Focus — Remote" },
+      { property: "og:description", content: "Move through your Remote documents one sentence at a time." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -201,7 +201,7 @@ function AppPageInner() {
   const [sendDocId, setSendDocId] = useState<string | null>(null);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [sendStage, setSendStage] = useState<"doc" | "where" | "pickAnchor">("doc");
-  /** Send-to overlay: Docs tab (paste into a list) vs Chats tab (send to Orby). */
+  /** Send-to overlay: Docs tab (paste into a list) vs Chats tab (send to Remote). */
   const [sendTab, setSendTab] = useState<"docs" | "chats">("docs");
   const [sendingToChat, setSendingToChat] = useState(false);
   const [sendTargetSentences, setSendTargetSentences] = useState<Sentence[]>([]);
@@ -328,7 +328,7 @@ function AppPageInner() {
       const { text } = await askOrby({ data: { prompt } });
       setComposeText((prev) => `${prev.trimEnd()}\n\n${text}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't reach Orby");
+      toast.error(err instanceof Error ? err.message : "Couldn't reach Remote");
     } finally {
       setAskingAi(false);
     }
@@ -338,7 +338,7 @@ function AppPageInner() {
   const sendChat = useServerFn(sendChatMessage);
   const nameChatThread = useServerFn(generateThreadTitle);
 
-  // Call mode removed — Orby's capabilities now live in Chat. Kept as an
+  // Call mode removed — Remote's capabilities now live in Chat. Kept as an
   // always-false ref so remaining guards (e.g. speech muting) stay inert.
   const inCallRef = useRef(false);
 
@@ -376,7 +376,7 @@ function AppPageInner() {
     },
   });
 
-  // Unread chat count: chats where Orby replied after the last time the user
+  // Unread chat count: chats where Remote replied after the last time the user
   // looked at that chat (scheduled messages, background plans, etc.).
   const { data: chatUnreadCount = 0 } = useQuery({
     queryKey: ["chat_unread"],
@@ -2195,7 +2195,7 @@ function AppPageInner() {
       const isNew = target === "new";
       cancelCompose();
       toast.success(`Sent to ${threadTitle}`);
-      // Fire-and-forget: Orby answers (or plans) in the background.
+      // Fire-and-forget: Remote answers (or plans) in the background.
       void (async () => {
         try {
           await sendTextToChatThread({ userId, threadId, text, send: sendChat });
@@ -2744,7 +2744,7 @@ function AppPageInner() {
 
   // Menu actions
   // 🟣 Delegate (slot 15): open a brand-new chat with the current document
-  // attached; Orby proposes 5 tasks as checkboxes there and the user approves.
+  // attached; Remote proposes 5 tasks as checkboxes there and the user approves.
   const handleDelegate = useCallback(() => {
     const list = sentences ?? [];
     if (!activeDoc || list.length === 0) {
@@ -3315,8 +3315,8 @@ function AppPageInner() {
                     void askAiFromComposer();
                   }}
                   disabled={!composeText.trim() || askingAi}
-                  aria-label="Ask Orby about this text"
-                  title="Ask Orby about this text"
+                  aria-label="Ask Remote about this text"
+                  title="Ask Remote about this text"
                   className="flex h-11 w-11 items-center justify-center rounded-full border border-foreground/15 bg-card/70 text-xl backdrop-blur transition active:scale-95 hover:bg-foreground/10 disabled:opacity-40"
                   style={{ boxShadow: "0 0 24px -8px var(--aurora-2)" }}
                 >

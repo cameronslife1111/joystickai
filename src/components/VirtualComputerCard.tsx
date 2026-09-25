@@ -199,7 +199,7 @@ export function VirtualComputerCard({ threadId }: { threadId: string | null }) {
             </label>
           )}
           <p className="text-[10px] leading-snug text-muted-foreground">
-            Typed straight into the page. Orby never sees it and it never appears in this chat.
+            Typed straight into the page. Remote never sees it and it never appears in this chat.
           </p>
         </div>
       )}

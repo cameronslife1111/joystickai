@@ -41,7 +41,7 @@ export const aiContinue = createServerFn({ method: "POST" })
     const model = provider("gpt-6-luna");
 
     const system =
-      "You are Orby, a focused writing companion. The user speaks one short voice prompt at a time. " +
+      "You are Remote, a focused writing companion. The user speaks one short voice prompt at a time. " +
       "Respond with concise, useful prose that fits the document's flow. " +
       "Reply in plain text, no markdown, no lists, no headings. " +
       "Use clear, separable sentences (each ending in . ! or ?). " +
@@ -81,7 +81,7 @@ export const askAi = createServerFn({ method: "POST" })
     const model = provider("gpt-6-luna");
 
     const system =
-      "You are Orby, a focused thinking companion. Answer the user's text directly and usefully. " +
+      "You are Remote, a focused thinking companion. Answer the user's text directly and usefully. " +
       "Plain text only — no markdown, no lists, no headings, no bold. " +
       "Use clear, separable sentences each ending in . ! or ?. " +
       "Keep total length under ~10 sentences unless the user explicitly asks for more. " +
@@ -133,7 +133,7 @@ export const generateText = createServerFn({ method: "POST" })
     const model = provider("gpt-6-luna");
 
     const system =
-      "You are Orby, a focused writing companion. The user gives you a prompt and optional reference documents. " +
+      "You are Remote, a focused writing companion. The user gives you a prompt and optional reference documents. " +
       "Respond with concise, useful prose that fits naturally into the user's writing. " +
       "Plain text only — no markdown, no lists, no headings. " +
       "Use clear, separable sentences each ending in . ! or ?. " +
@@ -226,7 +226,7 @@ export const analyzeImage = createServerFn({ method: "POST" })
     const model = provider("gpt-6-luna");
 
     const system =
-      "You are Orby, a focused writing companion. The user provides an image and optional context. " +
+      "You are Remote, a focused writing companion. The user provides an image and optional context. " +
       "Look at the image carefully and respond in concise, useful prose that fits naturally into the user's writing. " +
       "Plain text only — no markdown, no lists, no headings. " +
       "Use clear, separable sentences each ending in . ! or ?. " +
@@ -329,7 +329,7 @@ export const webSearch = createServerFn({ method: "POST" })
         input: userInput,
         tools: [{ type: "web_search" }],
         instructions:
-          "You are Orby, a focused writing companion. The user is researching a topic and your reply will be inserted directly into their document. " +
+          "You are Remote, a focused writing companion. The user is researching a topic and your reply will be inserted directly into their document. " +
           "Use web_search to find current, accurate information when relevant. " +
           "Respond in concise, useful prose. Plain text only — no markdown, no lists, no headings, no inline citation numbers like [1] or footnote markers. " +
           "Use clear, separable sentences each ending in . ! or ?. " +

@@ -21,7 +21,7 @@ const docsSchema = z.object({
 
 /**
  * Full-duplex voice model. It runs the conversation only; all reasoning and
- * doing is delegated back to Orby's own backend (the chat turn runner and the
+ * doing is delegated back to Remote's own backend (the chat turn runner and the
  * planner) through client delegation.
  */
 export const LIVE_MODEL = "gpt-live-1";
@@ -89,7 +89,7 @@ export const createLiveSession = createServerFn({ method: "POST" })
           model: LIVE_MODEL,
           instructions,
           audio: { output: { voice: LIVE_VOICE } },
-          // Orby is her own backend: reasoning, tools, plans and documents all
+          // Remote is her own backend: reasoning, tools, plans and documents all
           // run through the existing chat turn runner, not a managed model.
           delegation: { type: "client" },
           store: false,

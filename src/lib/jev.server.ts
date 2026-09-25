@@ -1,7 +1,7 @@
 // Server-only: TypeSafe Jev — the instant decision engine.
 //
 // Jev is not a writer. It answers pre-enumerated, typed questions about a
-// state in a single forward pass (tens of milliseconds), so it is what Orby
+// state in a single forward pass (tens of milliseconds), so it is what Remote
 // uses to decide "which thing do I press next?" on every browser tick.
 //
 // Billed to the user's own TypeSafe account via TYPESAFE_API_KEY.

@@ -255,8 +255,8 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
           </DialogTitle>
           <DialogDescription className="min-w-0 break-words">
             {inChat
-              ? "Orby will send this message in this chat at the times you pick — even if the app is closed. Plans it starts never run within 30 minutes of each other."
-              : "Orby will run this plan automatically on the cadence you pick. Plans never run within 30 minutes of each other."}
+              ? "Remote will send this message in this chat at the times you pick — even if the app is closed. Plans it starts never run within 30 minutes of each other."
+              : "Remote will run this plan automatically on the cadence you pick. Plans never run within 30 minutes of each other."}
           </DialogDescription>
         </DialogHeader>
 
@@ -269,7 +269,7 @@ export function ScheduleEditorDialog({ open, onOpenChange, initial, defaults, on
 
           {/* Request */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">What should Orby do?</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">What should Remote do?</label>
             <Textarea
               value={userRequest}
               onChange={(e) => setUserRequest(e.target.value)}

@@ -134,7 +134,7 @@ export const callMcpTool = createServerFn({ method: "POST" })
       if (conn.status !== "connected" || !isLive(conn.last_seen_at)) {
         return {
           ok: false,
-          error: `${MCP_PROVIDERS[data.provider].name} isn't reachable right now — start the Orby bridge on that computer.`,
+          error: `${MCP_PROVIDERS[data.provider].name} isn't reachable right now — start the Remote bridge on that computer.`,
         };
       }
 

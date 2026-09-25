@@ -114,7 +114,7 @@ interface Props {
   onSendToIdeas?: (text: string) => void;
   /**
    * 🟣 Delegate (menu slot 15): open a brand-new thread with `documentId`
-   * attached, ask Orby for 5 suggested tasks and show them as checkboxes.
+   * attached, ask Remote for 5 suggested tasks and show them as checkboxes.
    * `id` is a nonce so each tap fires exactly once.
    */
   delegate?: {
@@ -187,7 +187,7 @@ const DEFAULT_CAPS: ChatCapabilities = {
   chat_control: false,
 };
 
-/** Nothing checked → Orby just replies with text. */
+/** Nothing checked → Remote just replies with text. */
 const NO_CAPS: ChatCapabilities = {
   web_search: false,
   image_analysis: false,
@@ -219,7 +219,7 @@ const CAP_LABELS: { key: keyof ChatCapabilities; label: string; hint: string }[]
   {
     key: "virtual_computer",
     label: "🖥️ Virtual Computer",
-    hint: "Orby uses a temporary cloud browser — never your own computer",
+    hint: "Remote uses a temporary cloud browser — never your own computer",
   },
   {
     key: "chat_control",
@@ -516,7 +516,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
 
   // Chat turns still being written by the server. This is what makes a sent
   // message safe: the reply is produced server-side, so this list (not the
-  // in-flight request) is the source of truth for "Orby is thinking", and it
+  // in-flight request) is the source of truth for "Remote is thinking", and it
   // keeps working after the app was closed, locked or switched away from.
   const { data: pendingTurns = [], refetch: refetchTurns } = useQuery({
     queryKey: ["chat_turns", userId],
@@ -574,7 +574,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   };
   const THREAD_DOT: Record<string, { cls: string; label: string }> = {
     approval: { cls: "bg-purple-500", label: "Plan needs approval" },
-    working: { cls: "bg-yellow-400", label: "Orby is working in this chat" },
+    working: { cls: "bg-yellow-400", label: "Remote is working in this chat" },
     done: { cls: "bg-green-500", label: "Chat has replies" },
     empty: { cls: "bg-muted-foreground/35", label: "Empty chat" },
   };
@@ -680,7 +680,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const isActiveBusy = activeThreadId ? busyThreads.has(activeThreadId) : false;
 
   /**
-   * Stop Orby mid-thought, the same way a running plan can be stopped. The
+   * Stop Remote mid-thought, the same way a running plan can be stopped. The
    * queued turn is marked canceled, so whichever runner is working on it throws
    * its answer away instead of posting it into the chat.
    */
@@ -936,7 +936,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
               messagesRef.current
                 .slice(-10)
                 .filter((m) => (m.content ?? "").trim())
-                .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content)
+                .map((m) => (m.role === "user" ? "User: " : "Remote: ") + m.content)
                 .join("\n"),
               caps,
             )
@@ -1296,7 +1296,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   const handleSend = async (override?: {
     text?: string;
     caps?: ChatCapabilities;
-    /** Delegate only: let Orby pick its own capabilities for this send. */
+    /** Delegate only: let Remote pick its own capabilities for this send. */
     auto?: boolean;
     threadId?: string;
     docIds?: string[];
@@ -1457,7 +1457,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
     async (msg: ChatRow) => {
       if (!userId || msg.id.startsWith("tmp-")) return;
       const threadId = msg.thread_id;
-      // If Orby is still thinking in this chat, stop that run first so it
+      // If Remote is still thinking in this chat, stop that run first so it
       // can't post a stray reply into the rewound conversation.
       if (busyThreads.has(threadId)) await stopThinking(threadId);
       const cutoff = msg.created_at;
@@ -1480,7 +1480,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
   );
 
   // 🟣 Delegate (menu slot 15 / purple orb hold): fresh thread + attached doc,
-  // Orby analyses the step and proposes one plan for review. Once per tap.
+  // Remote analyses the step and proposes one plan for review. Once per tap.
   const runDelegate = useCallback(
     async (threadId: string, documentId: string, index: number) => {
       setDelegateAnalyzing(true);
@@ -1607,7 +1607,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                             Read replies aloud
                           </Label>
                           <p className="text-[11px] leading-tight text-muted-foreground">
-                            Automatically speak Orby's answers
+                            Automatically speak Remote's answers
                           </p>
                         </div>
                         <Switch
@@ -1620,7 +1620,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     </div>
 
                     <div>
-                      <p className="text-sm font-medium">What Orby can do in this chat</p>
+                      <p className="text-sm font-medium">What Remote can do in this chat</p>
                       <p className="mb-2 text-[11px] leading-tight text-muted-foreground">
                         Stays checked until you uncheck it. Nothing checked = plain text reply.
                       </p>
@@ -1655,9 +1655,9 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                       {caps.virtual_computer && (
                         <div className="mt-2 rounded-xl border border-border bg-muted/40 p-2.5">
                           <p className="text-[11px] leading-snug text-muted-foreground">
-                            Orby rents a temporary computer in the cloud, does the job on the website, and shuts
+                            Remote rents a temporary computer in the cloud, does the job on the website, and shuts
                             it down. Your own computer and browser are never touched. If a site asks for a
-                            password or a texted code, Orby asks you here and types it straight into the page.
+                            password or a texted code, Remote asks you here and types it straight into the page.
                           </p>
                           <Button
                             variant="outline"
@@ -1718,7 +1718,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             </DialogTitle>
             {voice.live && (
               <p className="px-1 text-[11px] text-muted-foreground">
-                Hands-free is live — just talk, and talk over Orby to interrupt. Ask for plans,
+                Hands-free is live — just talk, and talk over Remote to interrupt. Ask for plans,
                 edits or images and she'll get them going while you keep talking.
               </p>
 
@@ -1731,7 +1731,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
             {messages.length === 0 && !isActiveBusy && !delegateAnalyzing ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
                 <MessagesSquare className="mb-1 h-6 w-6 opacity-50" />
-                Ask Orby anything — chat, search, edit your docs, or make images & videos.
+                Ask Remote anything — chat, search, edit your docs, or make images & videos.
               </div>
             ) : (
               <div ref={messagesListRef} className="flex flex-col gap-4">
@@ -2106,7 +2106,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                     void handleSend();
                   }
                 }}
-                placeholder="Message Orby…"
+                placeholder="Message Remote…"
                 rows={3}
                 className="max-h-64 min-h-[88px] flex-1 resize-none whitespace-pre-wrap break-words"
               />
@@ -2161,7 +2161,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
                   type="button"
                   onClick={() => {
                     // Starting a recording must silence any read-aloud first so
-                    // Orby's voice doesn't bleed into the user's dictation.
+                    // Remote's voice doesn't bleed into the user's dictation.
                     if (!dictation.recording) {
                       cancelSpeech();
                       setSpeakingId(null);
@@ -2557,7 +2557,7 @@ export function ChatDialog({ open, onOpenChange, currentDocumentId, documents, o
           setInput("");
           setPickedImages([]);
           refetchSchedules();
-          toast.success("Orby will send that later");
+          toast.success("Remote will send that later");
         }}
       />
 
@@ -2835,7 +2835,7 @@ function PlanProgressCard({
   const running = !PLAN_DONE.has(plan.status);
 
 
-  // A plan Orby proposed inside the chat waits here for approval / a note.
+  // A plan Remote proposed inside the chat waits here for approval / a note.
   if (plan.status === "proposed" && (plan as any).review_in_chat) {
     return (
       <PlanReviewCard

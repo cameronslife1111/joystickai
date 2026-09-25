@@ -9,7 +9,7 @@ export { ACTION_GROUPS, normalizeCapabilities, ALL_CAPS_ON } from "./chat-types"
 export type { ChatCapabilities } from "./chat-types";
 
 /**
- * Text-chat path for Orby's threaded chat. Classifies the latest message using
+ * Text-chat path for Remote's threaded chat. Classifies the latest message using
  * the thread's enabled capabilities and either answers directly (conversation,
  * web search, or image analysis) or signals that the request should become an
  * auto-running plan (route "plan"). Attached documents are provided as context.
