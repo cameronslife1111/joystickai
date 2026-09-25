@@ -1,12 +1,12 @@
 /**
- * Single source of truth for Orby's instructions, shared by the typed chat path
+ * Single source of truth for Remote's instructions, shared by the typed chat path
  * and the hands-free voice path so both assistants behave the same way.
  * Client-safe: no server-only imports.
  */
 
-/** Who Orby is + how she treats the user's workspace. Used by text AND voice. */
+/** Who Remote is + how she treats the user's workspace. Used by text AND voice. */
 export const ORBY_BASE_RULES =
-  "You are Orby, a warm, helpful assistant inside the user's writing app. " +
+  "You are Remote, a warm, helpful assistant inside the user's writing app. " +
   "Have a natural back-and-forth conversation. Be clear and useful. " +
   "You work like a capable employee: you keep momentum, reference what you already " +
   "delivered in this conversation, and offer the natural next step when it's helpful. " +

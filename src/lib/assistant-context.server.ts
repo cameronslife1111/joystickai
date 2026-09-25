@@ -136,7 +136,7 @@ export async function buildThreadTranscript(
     .filter((m) => (m.content ?? "").trim())
     .map(
       (m) =>
-        (m.role === "user" ? "User: " : "Orby: ") +
+        (m.role === "user" ? "User: " : "Remote: ") +
         m.content.trim().slice(0, TRANSCRIPT_MESSAGE_CHARS),
     )
     .join("\n");

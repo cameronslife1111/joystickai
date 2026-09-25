@@ -1,5 +1,5 @@
 /**
- * Registry of external creative apps Orby can drive through a local MCP server.
+ * Registry of external creative apps Remote can drive through a local MCP server.
  *
  * Everything provider-specific lives here. The chat toggle, the connection
  * status pill, the setup card and the planner tool are all generic — adding
@@ -79,7 +79,7 @@ const RESOLVE_GROUPS = [
   G_RENDER,
 ];
 
-/** 100 commands Orby can run in DaVinci Resolve, in the order they're numbered. */
+/** 100 commands Remote can run in DaVinci Resolve, in the order they're numbered. */
 const RESOLVE_TOOLS: McpTool[] = [
   // ---------------------------------------------------------- 1–12 project
   { group: G_PROJECT, name: "get_project_info", description: "Read the current project, timeline, frame rate and resolution", example: "What am I working on right now?" },
@@ -129,7 +129,7 @@ const RESOLVE_TOOLS: McpTool[] = [
   { group: G_TRACKS, name: "unlock_all_tracks", description: "Unlock every track", example: "Unlock everything" },
   { group: G_TRACKS, name: "mute_audio_track", description: "Mute one audio track", example: "Mute audio track 2" },
   { group: G_TRACKS, name: "unmute_audio_track", description: "Unmute one audio track", example: "Unmute audio track 2" },
-  { group: G_TRACKS, name: "solo_audio_track", description: "Solo an audio track — not scriptable, so Orby offers to mute the others instead", example: "Solo audio track 1" },
+  { group: G_TRACKS, name: "solo_audio_track", description: "Solo an audio track — not scriptable, so Remote offers to mute the others instead", example: "Solo audio track 1" },
 
   // ------------------------------------------------------------ 45–62 clips
   { group: G_CLIPS, name: "list_timeline_clips", description: "List the clips on a track with start, end and duration", example: "What's on video track 2?" },
@@ -176,7 +176,7 @@ const RESOLVE_TOOLS: McpTool[] = [
   { group: G_COLOR, name: "add_color_version", description: "Add a new colour version to a clip", example: "Add a grade version called Cool" },
   { group: G_COLOR, name: "load_color_version", description: "Switch a clip to one of its colour versions", example: "Switch that clip back to the original grade" },
   { group: G_COLOR, name: "delete_color_version", description: "Delete a colour version", example: "Delete the Cool grade version" },
-  { group: G_COLOR, name: "copy_grade", description: "Copy a grade between clips — Orby explains the still/CDL route Resolve allows", example: "Copy that grade to the next clip" },
+  { group: G_COLOR, name: "copy_grade", description: "Copy a grade between clips — Remote explains the still/CDL route Resolve allows", example: "Copy that grade to the next clip" },
   { group: G_COLOR, name: "grab_still", description: "Grab a still of the current frame into the gallery", example: "Grab a still of this frame" },
   { group: G_COLOR, name: "apply_drx_grade", description: "Apply a saved .drx grade file to a clip", example: "Apply my saved grade file to that clip" },
 
@@ -227,7 +227,7 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
       },
       {
         title: "Run this one line in a terminal",
-        body: "Copy the command, paste it into Terminal, and press Return. Leave that window open while you use Orby — it's the link between Orby and Resolve.",
+        body: "Copy the command, paste it into Terminal, and press Return. Leave that window open while you use Remote — it's the link between Remote and Resolve.",
       },
       {
         title: "Come back here",
@@ -241,7 +241,7 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
       },
       {
         problem: "404 Not Found from npm",
-        fix: "That was an older command. Use the one shown above — it downloads the helper straight from Orby, with nothing coming from npm.",
+        fix: "That was an older command. Use the one shown above — it downloads the helper straight from Remote, with nothing coming from npm.",
       },
       {
         problem: "Couldn't reach DaVinci Resolve",
@@ -252,7 +252,7 @@ export const MCP_PROVIDERS: Record<McpProviderId, McpProvider> = {
         fix: "Resolve 21.1 removed outside control from the free version entirely, so Studio is now required. If you have Studio, open it, open a project, and run the check command below to see what your copy offers.",
       },
       {
-        problem: "Orby says it can't do something you see listed",
+        problem: "Remote says it can't do something you see listed",
         fix: "Your helper is probably an older version. Press Disconnect, then run the one-line command again to pick up the newest one.",
       },
     ],

@@ -130,7 +130,7 @@ describe("text and voice see the same context", () => {
     expect(await getThreadDocumentIds(sb, THREAD)).toEqual([DOC_B]);
 
     const transcript = await buildThreadTranscript(sb, THREAD);
-    expect(transcript).toBe("User: What's in the garden plan?\nOrby: Roses in April.");
+    expect(transcript).toBe("User: What's in the garden plan?\nRemote: Roses in April.");
 
     const shared = await buildSharedContext(sb, { threadId: THREAD });
     expect(shared.transcript).toBe(transcript);

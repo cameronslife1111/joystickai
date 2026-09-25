@@ -7,7 +7,7 @@ const bodySchema = z.object({
 });
 
 /**
- * The local Orby bridge exchanges a one-time pairing code for a long-lived
+ * The local Remote bridge exchanges a one-time pairing code for a long-lived
  * bridge token. Verified by the code itself — this prefix is unauthenticated.
  */
 export const Route = createFileRoute("/api/public/mcp-bridge/pair")({
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/api/public/mcp-bridge/pair")({
           return Response.json(
             {
               error:
-                'That code has run out. In Orby chat, with DaVinci Resolve Mode on, tap "Get a fresh command".',
+                'That code has run out. In Remote chat, with DaVinci Resolve Mode on, tap "Get a fresh command".',
             },
             { status: 410 },
           );

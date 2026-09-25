@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import bridgeSource from "../../../../../bridge/orby-bridge.mjs?raw";
 
 /**
- * Serves the local Orby bridge helper so a user can download and run it with
+ * Serves the local Remote bridge helper so a user can download and run it with
  * plain Node — no npm package publishing involved.
  */
 export const Route = createFileRoute("/api/public/mcp-bridge/install")({

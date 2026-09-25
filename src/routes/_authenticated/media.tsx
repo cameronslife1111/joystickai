@@ -44,10 +44,10 @@ import { useFeatureLock } from "@/lib/use-feature-lock";
 export const Route = createFileRoute("/_authenticated/media")({
   head: () => ({
     meta: [
-      { title: "Media Gallery — Orby" },
-      { name: "description", content: "Browse, organize, edit, and download your Orby media." },
-      { property: "og:title", content: "Media Gallery — Orby" },
-      { property: "og:description", content: "Browse, organize, edit, and download your Orby media." },
+      { title: "Media Gallery — Remote" },
+      { name: "description", content: "Browse, organize, edit, and download your Remote media." },
+      { property: "og:title", content: "Media Gallery — Remote" },
+      { property: "og:description", content: "Browse, organize, edit, and download your Remote media." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -961,7 +961,7 @@ function MediaPage() {
         <button
           type="button"
           onClick={() => (inFolderView ? navigate({ to: "/app" }) : backToFolders())}
-          aria-label={inFolderView ? "Back to Orby" : "Back to folders"}
+          aria-label={inFolderView ? "Back to Remote" : "Back to folders"}
           className="flex h-12 w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95 hover:bg-foreground/10"
         >
           <ArrowLeft className="h-6 w-6" />

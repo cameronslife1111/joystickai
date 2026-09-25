@@ -128,12 +128,12 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         .single();
       if (error || !row) return null;
       const messageId = (row as any).id as string;
-      // Orby's own spoken words must never come back through the result
+      // Remote's own spoken words must never come back through the result
       // watcher as if the backend had produced them.
       if (role === "assistant") spokenIdsRef.current.add(messageId);
       qc.setQueryData<any[]>(["chat_messages", tid], (cur) => [...(cur ?? []), row]);
       // Keep the call's rolling context in step with what was actually said.
-      contextRef.current = `${contextRef.current}\n${role === "user" ? "User: " : "Orby: "}${text}`
+      contextRef.current = `${contextRef.current}\n${role === "user" ? "User: " : "Remote: "}${text}`
         .split("\n")
         .slice(-20)
         .join("\n");
@@ -145,7 +145,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
 
   /**
    * GPT-Live asked for real work. It only runs the conversation, so the request
-   * goes into Orby's own queued chat turn — same runner, same planner, same
+   * goes into Remote's own queued chat turn — same runner, same planner, same
    * ownership checks as a typed message.
    */
   const runDelegated = useCallback(
@@ -311,7 +311,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Anything Orby's backend posts into this thread while the call is live —
+  // Anything Remote's backend posts into this thread while the call is live —
   // a plan kickoff line, a finished plan's wrap-up, a normal reply — is handed
   // to the live voice so she can say it in her own words. The result carries the
   // still-open delegation id, so a delivered result can never read as pending.
@@ -372,7 +372,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
 
   // The open delegated job is watched to its terminal state, and the voice side
   // is told — tagged with the same delegation id — the moment it finishes. This
-  // is the only thing that clears the pending state, so Orby can never be left
+  // is the only thing that clears the pending state, so Remote can never be left
   // claiming she is still working on something that is already done. Outcomes
   // that post nothing into the chat (an answer handed to a paused plan) are
   // signalled here too.
@@ -440,7 +440,7 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
 
 
   // While a call is live nothing else in the app is allowed to speak, so
-  // sentence reading, cues and chat read-aloud never talk over Orby.
+  // sentence reading, cues and chat read-aloud never talk over Remote.
   useEffect(() => {
     setSpeechSuppressed(voice.live || voice.connecting);
     return () => setSpeechSuppressed(false);
@@ -473,10 +473,10 @@ export function HandsFreeProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (!voiceRef.current.appendInstructions(block)) return;
         if (included === 0) {
-          toast.success("Orby is no longer seeing any documents");
+          toast.success("Remote is no longer seeing any documents");
         } else {
           toast.success(
-            `Orby can now see ${included} document${included === 1 ? "" : "s"}` +
+            `Remote can now see ${included} document${included === 1 ? "" : "s"}` +
               (trimmed ? " (trimmed to fit)" : ""),
           );
         }
@@ -540,7 +540,7 @@ export function HandsFreeIndicator({ hidden }: { hidden?: boolean }) {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-current" />
         </span>
-        {call.connecting ? "Connecting…" : call.speaking ? "Orby is speaking" : "Hands-free live"}
+        {call.connecting ? "Connecting…" : call.speaking ? "Remote is speaking" : "Hands-free live"}
         <PhoneOff className="h-4 w-4" />
       </button>
       <button

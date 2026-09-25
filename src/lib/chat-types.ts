@@ -15,7 +15,7 @@ export const capabilitiesSchema = z.object({
   scheduling: z.boolean().default(true),
   /** 🎬 DaVinci Resolve Mode — drive Resolve through the local MCP bridge. */
   davinci_resolve: z.boolean().default(false),
-  /** Virtual Computer — a temporary cloud browser Orby drives; never the user's own machine. */
+  /** Virtual Computer — a temporary cloud browser Remote drives; never the user's own machine. */
   virtual_computer: z.boolean().default(false),
   /** 💬 Chat control — the planner can create/rename chats, change their attachments, and message other chats. */
   chat_control: z.boolean().default(false),
@@ -43,7 +43,7 @@ export const chatTurnSchema = z.object({
   threadId: z.string().uuid().optional(),
   capabilities: capabilitiesSchema.default({ ...ALL_CAPS_ON }),
   /**
-   * When true (🟣 Delegate), Orby picks its own capabilities and may route to a
+   * When true (🟣 Delegate), Remote picks its own capabilities and may route to a
    * plan on its own. When false (regular chat), only the capabilities the user
    * checked are used and a plan requires one of them.
    */

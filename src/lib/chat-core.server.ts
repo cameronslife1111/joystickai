@@ -76,7 +76,7 @@ async function runWebSearch(
           {
             role: "system",
             content:
-              "You are Orby, a helpful assistant. Answer the user's question using up-to-date web information. " +
+              "You are Remote, a helpful assistant. Answer the user's question using up-to-date web information. " +
               "Write a clear, conversational answer in PLAIN TEXT ONLY: never use asterisks, underscores, backticks, '#' headings, or bullet characters. " +
               "Use numbered lists (1. 2. 3.) only when a list truly helps, separate paragraphs with a blank line, and always use normal punctuation. Emojis are fine. " +
               "No inline citation markers like [1] and do not paste raw reference lists." +
@@ -166,8 +166,8 @@ function tryParseJson<T = any>(raw: string): T | null {
 
 /**
  * Decide how to handle the latest user message AND which capabilities the work
- * would need. Orby decides for itself: capabilities the user ticked are always
- * kept, and Orby may switch on more when a step needs them. It never removes a
+ * would need. Remote decides for itself: capabilities the user ticked are always
+ * kept, and Remote may switch on more when a step needs them. It never removes a
  * capability the user asked for.
  */
 async function classifyTurn(
@@ -184,14 +184,14 @@ async function classifyTurn(
   const webAllowed = auto || caps.web_search;
 
   const system =
-    "You are the intent router for Orby, an assistant that works inside the user's documents and media gallery. " +
+    "You are the intent router for Remote, an assistant that works inside the user's documents and media gallery. " +
     "Decide how to handle the user's latest message, and decide which of your capabilities the work would need.\n\n" +
     "Return STRICT JSON only:\n" +
     '{"route":"chat"|"web"|"plan","capabilities":["planning","document_editing","image_generation","video_generation","scheduling","web_search","chat_control"],"rationale":"one plain-text sentence"}\n\n' +
     "Routes:\n" +
     "- chat: conversation, questions, explanations, opinions, brainstorming, and anything that only needs a text answer — including reading, summarizing, or analyzing attached documents.\n" +
     "- web: the user wants current, real-world or factual information that requires looking it up online right now (news, prices, live facts, 'look up', \"what's the latest\").\n" +
-    "- plan: Orby should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
+    "- plan: Remote should DO something in the user's workspace — create/rename/edit documents, add/move/delete sentences, generate or edit images, make videos, or schedule work for later.\n\n" +
     (caps.chat_control
       ? "CHAT CONTROL IS SWITCHED ON. Managing the user's CHATS is real work you can do through a plan: create new chats, " +
         "rename existing chats (named loosely, e.g. \"the DaVinci one\"), attach or remove documents on a chat, and send a " +
@@ -256,7 +256,7 @@ async function classifyTurn(
     );
 
     // Auto mode (Delegate): union — never drop a capability the user ticked,
-    // and let Orby switch more on. Manual mode: exactly what the user ticked.
+    // and let Remote switch more on. Manual mode: exactly what the user ticked.
     const merged: ChatCapabilities = auto
       ? {
           ...caps,
@@ -304,7 +304,7 @@ async function classifyTurn(
 }
 
 /**
- * Cheap check for "this message asks Orby to DO something", used only as a
+ * Cheap check for "this message asks Remote to DO something", used only as a
  * backstop when multi-step planning is switched on.
  */
 const ACTION_WORDS = [
@@ -329,7 +329,7 @@ function looksActionable(text: string): boolean {
 }
 
 /**
- * Run one chat turn. Orby classifies the latest message itself and either
+ * Run one chat turn. Remote classifies the latest message itself and either
  * answers directly (conversation, web search, image analysis) or reports that
  * the request should become a plan — along with the capabilities that plan
  * needs, so the user never has to toggle them.
@@ -510,7 +510,7 @@ export async function runChatTurn(
   // conversation "ok do it" can be understood from what came before.
   const recent = data.messages
     .slice(-12)
-    .map((m) => (m.role === "user" ? "User: " : "Orby: ") + m.content.slice(0, 2000))
+    .map((m) => (m.role === "user" ? "User: " : "Remote: ") + m.content.slice(0, 2000))
     .join("\n");
   const decision = await classifyTurn(
     model,

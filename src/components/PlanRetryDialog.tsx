@@ -72,7 +72,7 @@ export function PlanRetryDialog({
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Orby will study what went wrong and resume this plan in the background,
+          Remote will study what went wrong and resume this plan in the background,
           starting a couple of steps before
           {failedStepNumber ? (
             <> the one that failed (<span className="font-medium text-foreground">step {failedStepNumber}{totalSteps ? ` of ${totalSteps}` : ""}</span>)</>
@@ -91,7 +91,7 @@ export function PlanRetryDialog({
 
         <div className="space-y-1.5">
           <label htmlFor="retry-note" className="text-xs uppercase tracking-wider text-muted-foreground">
-            Add a note for Orby (optional)
+            Add a note for Remote (optional)
           </label>
           <Textarea
             id="retry-note"
@@ -103,7 +103,7 @@ export function PlanRetryDialog({
             disabled={submitting}
           />
           <p className="text-[11px] text-muted-foreground/70">
-            Tell Orby what to avoid or how to fix the mistake.
+            Tell Remote what to avoid or how to fix the mistake.
           </p>
         </div>
 

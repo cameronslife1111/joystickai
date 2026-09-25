@@ -86,7 +86,7 @@ export const Orb = forwardRef<HTMLButtonElement, OrbProps>(function Orb(
         if (node) (node as OrbHandle).boostMood = boost;
       }}
       type="button"
-      aria-label="Orby"
+      aria-label="Remote"
       className={cn(
         "orb relative rounded-full select-none touch-none outline-none",
         "transition-transform active:scale-95",

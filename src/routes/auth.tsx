@@ -2,15 +2,15 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/lib/toast";
-import { Orb } from "@/components/Orb";
+import { LandingOrb } from "@/components/LandingOrb";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Orby" },
-      { name: "description", content: "Sign in to Orby to focus, organize documents, and continue your work." },
-      { property: "og:title", content: "Sign in — Orby" },
-      { property: "og:description", content: "Sign in to Orby to focus, organize documents, and continue your work." },
+      { title: "Sign in — Focus Remote" },
+      { name: "description", content: "Sign in to Focus Remote to focus, organize documents, and continue your work." },
+      { property: "og:title", content: "Sign in — Focus Remote" },
+      { property: "og:description", content: "Sign in to Focus Remote to focus, organize documents, and continue your work." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -63,18 +63,19 @@ function AuthPage() {
 
       <div className="w-full max-w-sm">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-          <span>← Orby</span>
+          <span>← Focus Remote</span>
         </Link>
 
-        <div className="mb-8 flex justify-center">
-          <Orb size={120} />
+        <div aria-hidden className="mb-8 flex justify-center gap-2">
+          <LandingOrb color="blue" size={44} />
+          <LandingOrb color="purple" size={44} />
         </div>
 
         <h1 className="text-center font-display text-3xl">
-          {mode === "signin" ? "Welcome back" : "Create your orb"}
+          {mode === "signin" ? "Welcome back" : "Create your Focus Remote"}
         </h1>
         <p className="mt-1 text-center text-sm text-muted-foreground">
-          {mode === "signin" ? "Pick up where you left off" : "Start with a single sentence"}
+          {mode === "signin" ? "Pick up where you left off" : "Control the flow of your focus"}
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-3">

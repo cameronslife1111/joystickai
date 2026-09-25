@@ -40,7 +40,7 @@ interface OrbClusterProps {
   onPrevLongPress: () => void;
   /** Yellow orb hold: open the New idea composer. */
   onMenuLongPress: () => void;
-  /** Purple orb hold: delegate the current step to Orby (menu slot 15). */
+  /** Purple orb hold: delegate the current step to Remote (menu slot 15). */
   onNextLongPress: () => void;
   /** Orange orb tap: open the pinned document. */
   onPinnedDoc: () => void;

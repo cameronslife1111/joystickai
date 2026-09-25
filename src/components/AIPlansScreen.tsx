@@ -313,7 +313,7 @@ export function AIPlansScreen({ onClose, onOpenChat }: Props) {
         <button
           type="button"
           onClick={onClose}
-          aria-label="Back to Orby"
+          aria-label="Back to Remote"
           className="flex h-12 w-full items-center justify-center rounded-2xl border border-foreground/10 bg-foreground/5 transition active:scale-95 hover:bg-foreground/10"
         >
           <ArrowLeft className="h-6 w-6" />

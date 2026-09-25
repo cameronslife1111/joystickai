@@ -1,6 +1,6 @@
 // Server-only: a tiny Chrome DevTools Protocol client.
 //
-// Orby uses this to drive the throwaway cloud browser with her own hands —
+// Remote uses this to drive the throwaway cloud browser with her own hands —
 // one short burst of commands per invocation, then the socket closes. There
 // is no long-lived connection anywhere.
 type Pending = (msg: any) => void;

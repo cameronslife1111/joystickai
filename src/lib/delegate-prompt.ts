@@ -2,7 +2,7 @@
  * Prompts used by 🟣 Delegate (menu slot 15, and the purple orb long press).
  *
  * The user is standing on one sentence of a document. Delegate analyses that
- * line server-side, then sends one request into a fresh chat thread. Orby plans
+ * line server-side, then sends one request into a fresh chat thread. Remote plans
  * it, picks its own capabilities, and shows the plan for review.
  */
 
@@ -25,7 +25,7 @@ export function buildDocWindow(args: { sentences: string[]; index: number }): st
 
 /** System prompt for the analysis pass (substep vs standalone task). */
 export const DELEGATE_ANALYZE_SYSTEM = [
-  "You are Orby, an assistant that works directly inside the user's documents.",
+  "You are Remote, an assistant that works directly inside the user's documents.",
   "The user is standing on one line of their document. Work out whether that line is a substep",
   "of a larger task or a standalone task, and name the task you would carry out.",
   "",

@@ -74,8 +74,8 @@ function normalizeSpeech(s: string): string {
 }
 
 /**
- * True when a "user" transcript is really the speaker feeding Orby's own voice
- * back into the mic — the cause of Orby replying to herself.
+ * True when a "user" transcript is really the speaker feeding Remote's own voice
+ * back into the mic — the cause of Remote replying to herself.
  */
 function isSelfEcho(userText: string, assistantText: string): boolean {
   const u = normalizeSpeech(userText);
@@ -96,9 +96,9 @@ type Options = {
   buildThreadId: () => string | null;
   /** A finished user turn (speech transcript). */
   onUserText: (text: string) => void;
-  /** A finished Orby turn (spoken reply, as text). */
+  /** A finished Remote turn (spoken reply, as text). */
   onAssistantText: (text: string) => void;
-  /** GPT-Live wants backend work done — Orby's own stack takes it from here. */
+  /** GPT-Live wants backend work done — Remote's own stack takes it from here. */
   onDelegation?: (delegationId: string) => void;
   onError?: (message: string) => void;
 };
@@ -133,7 +133,7 @@ export function useLiveVoice({
   /** Commands issued before `session.started` arrive are flushed after it. */
   const queuedRef = useRef<unknown[]>([]);
   const busyRef = useRef(false);
-  /** Last thing Orby said, for the speaker-echo guard. */
+  /** Last thing Remote said, for the speaker-echo guard. */
   const lastAssistantRef = useRef("");
   /** iOS audio-session ownership token held for the whole call. */
   const sessionTokenRef = useRef<number | null>(null);
@@ -251,7 +251,7 @@ export function useLiveVoice({
       const audio = document.createElement("audio");
       audio.autoplay = true;
       // Inline playback keeps iOS from handing the stream to the fullscreen
-      // player (which bypasses echo cancellation and makes Orby hear herself).
+      // player (which bypasses echo cancellation and makes Remote hear herself).
       audio.setAttribute("playsinline", "");
       (audio as HTMLAudioElement & { playsInline?: boolean }).playsInline = true;
       audio.volume = 1;
@@ -277,7 +277,7 @@ export function useLiveVoice({
           setSpeaking(false);
           return;
         }
-        // Speaker bleed: this is Orby's own sentence coming back through the
+        // Speaker bleed: this is Remote's own sentence coming back through the
         // mic. Mirroring it would make her answer herself.
         if (isSelfEcho(text, lastAssistantRef.current)) return;
         cbRef.current.onUserText(text);
@@ -402,7 +402,7 @@ export function useLiveVoice({
 
   /**
    * Silence the outgoing mic without touching the connection — the call stays
-   * live, Orby just hears nothing until the user unmutes.
+   * live, Remote just hears nothing until the user unmutes.
    */
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;
@@ -423,7 +423,7 @@ export function useLiveVoice({
     [send],
   );
 
-  /** Content Orby should say out loud, in her own words. */
+  /** Content Remote should say out loud, in her own words. */
   const appendCommentary = useCallback(
     (content: string, delegationId: string | null = null) =>
       send({

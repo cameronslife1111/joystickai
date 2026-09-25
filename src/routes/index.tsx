@@ -4,21 +4,16 @@ import { LandingOrb, ORB_HEX, type OrbColor } from "@/components/LandingOrb";
 import { useReveal } from "@/hooks/use-reveal";
 import { cn } from "@/lib/utils";
 
+const DESC =
+  "Focus Remote is a simple remote control for reading, thinking, learning routines, navigating documents and directing AI-assisted work — one step at a time.";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Orby — Focus more in a busy world, one sentence at a time" },
-      {
-        name: "description",
-        content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
-      },
-      { property: "og:title", content: "Orby — Focus more in a busy world, one sentence at a time" },
-      {
-        property: "og:description",
-        content:
-          "Orby is a focus instrument: it shows you one sentence at a time, listens when you speak, and runs multi-step AI plans — all from eight little glowing orbs.",
-      },
+      { title: "Focus Remote — Control the flow of your focus" },
+      { name: "description", content: DESC },
+      { property: "og:title", content: "Focus Remote — Control the flow of your focus" },
+      { property: "og:description", content: DESC },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -29,15 +24,7 @@ export const Route = createFileRoute("/")({
 const HEADING = { fontFamily: "'Syne', ui-sans-serif, system-ui, sans-serif" };
 const BODY = { fontFamily: "'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif" };
 
-function Reveal({
-  children,
-  className,
-  delay,
-}: {
-  children: ReactNode;
-  className?: string;
-  delay?: string;
-}) {
+function Reveal({ children, className, delay }: { children: ReactNode; className?: string; delay?: string }) {
   const ref = useReveal<HTMLDivElement>();
   return (
     <div ref={ref} className={cn("reveal", className)} style={delay ? { transitionDelay: delay } : undefined}>
@@ -46,371 +33,218 @@ function Reveal({
   );
 }
 
-/* ---------------------------------- Hero ---------------------------------- */
+/* ----------------------------- The remote itself ---------------------------- */
 
-const HERO_ORBS: Array<{
-  color: OrbColor;
-  size: number;
-  className: string;
-  drift: number;
-  floatDelay: string;
-}> = [
-  { color: "blue", size: 64, className: "left-[7%] top-[14%]", drift: 0.06, floatDelay: "0s" },
-  { color: "red", size: 48, className: "left-[14%] bottom-[16%]", drift: -0.05, floatDelay: "0.9s" },
-  { color: "yellow", size: 52, className: "right-[13%] top-[22%]", drift: 0.09, floatDelay: "1.5s" },
-  { color: "green", size: 72, className: "right-[7%] bottom-[22%]", drift: -0.07, floatDelay: "0.4s" },
-  { color: "purple", size: 44, className: "left-[36%] top-[8%] hidden md:block", drift: 0.04, floatDelay: "2.1s" },
-  { color: "orange", size: 56, className: "right-[30%] bottom-[8%] hidden md:block", drift: -0.03, floatDelay: "1.1s" },
-];
-
-function Hero() {
-  return (
-    <section className="relative flex min-h-[92svh] flex-col items-center justify-center overflow-hidden px-6 text-center">
-      {HERO_ORBS.map((o, i) => (
-        <LandingOrb
-          key={i}
-          color={o.color}
-          size={o.size}
-          drift={o.drift}
-          floatDelay={o.floatDelay}
-          className={cn("absolute", o.className)}
-        />
-      ))}
-
-      <Reveal>
-        <span className="rounded-full border border-[#818cf8]/30 bg-[#818cf8]/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-[#a5f3fc]">
-          One sentence. Total focus.
-        </span>
-      </Reveal>
-      <Reveal delay="120ms">
-        <h1
-          className="mt-7 max-w-4xl text-5xl leading-[1.05] tracking-tight md:text-7xl"
-          style={HEADING}
-        >
-          Focus more in a busy world,{" "}
-          <span className="bg-gradient-to-r from-[#67e8f9] via-[#818cf8] to-[#c4b5fd] bg-clip-text text-transparent">
-            one sentence at a time.
-          </span>
-        </h1>
-      </Reveal>
-      <Reveal delay="240ms">
-        <p className="mx-auto mt-6 max-w-xl text-base text-slate-400 md:text-lg">
-          Orby reads your documents to you one sentence at a time, listens when you speak, and runs
-          multi-step plans — all through eight little glowing orbs.
-        </p>
-      </Reveal>
-      <Reveal delay="360ms">
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            to="/auth"
-            className="inline-flex items-center justify-center rounded-full px-8 py-3.5 text-sm font-semibold text-[#020617] transition active:scale-95"
-            style={{
-              background: "linear-gradient(135deg, #a5f3fc, #67e8f9, #818cf8)",
-              boxShadow: "0 10px 40px rgba(129,140,248,0.45)",
-            }}
-          >
-            Start free
-          </Link>
-          <span className="text-xs text-slate-500">Free to start · Built for mobile</span>
-        </div>
-      </Reveal>
-
-      <div className="absolute bottom-8 flex flex-col items-center gap-2 text-slate-500">
-        <span className="text-[10px] uppercase tracking-[0.3em]">Scroll</span>
-        <span className="block h-8 w-px bg-gradient-to-b from-slate-500 to-transparent" />
-      </div>
-    </section>
-  );
-}
-
-/* -------------------- One sentence at a time (cycler) --------------------- */
-
-const SENTENCES = [
-  "Your document, one sentence at a time.",
-  "Press an orb. Hear the next one.",
-  "Speak an idea — Orby writes it down.",
-  "Plans run themselves, step by step.",
-  "Focus more in a busy world.",
-];
-
-function SentenceCycler() {
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const t = window.setInterval(() => setIdx((i) => (i + 1) % SENTENCES.length), 2600);
-    return () => window.clearInterval(t);
-  }, []);
-
-  return (
-    <section className="relative flex min-h-[80svh] flex-col items-center justify-center overflow-hidden px-6 text-center">
-      <LandingOrb color="purple" size={40} drift={-0.12} floatDelay="0.6s" className="absolute left-[10%] top-[22%]" />
-      <LandingOrb color="green" size={52} drift={0.14} floatDelay="1.8s" className="absolute right-[9%] top-[30%]" />
-      <LandingOrb color="orange" size={36} drift={-0.09} floatDelay="0.2s" className="absolute bottom-[20%] left-[20%] hidden md:block" />
-      <LandingOrb color="blue" size={44} drift={0.1} floatDelay="1.2s" className="absolute bottom-[26%] right-[18%] hidden md:block" />
-
-      <Reveal>
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
-          How it reads
-        </p>
-      </Reveal>
-      <div className="mt-8 flex min-h-[7rem] items-center justify-center md:min-h-[9rem]">
-        <p
-          key={idx}
-          className="sentence-swap max-w-3xl text-3xl leading-snug tracking-tight text-white md:text-5xl"
-          style={HEADING}
-        >
-          {SENTENCES[idx]}
-        </p>
-      </div>
-      <Reveal delay="150ms">
-        <div className="mt-8 flex items-center gap-2">
-          {SENTENCES.map((_, i) => (
-            <span
-              key={i}
-              className={cn(
-                "h-1.5 rounded-full transition-all duration-500",
-                i === idx ? "w-6 bg-[#67e8f9]" : "w-1.5 bg-slate-700",
-              )}
-            />
-          ))}
-        </div>
-      </Reveal>
-    </section>
-  );
-}
-
-/* ----------------------------- Meet the orbs ------------------------------ */
-
-const CLUSTER: Array<{
-  color: OrbColor;
-  label: string;
-  col: number;
-  row: number;
-  rowSpan: number;
-}> = [
+const CLUSTER: Array<{ color: OrbColor; label: string; col: number; row: number; rowSpan: number }> = [
   { color: "red", label: "Search docs / mute speech", col: 1, row: 1, rowSpan: 2 },
   { color: "yellow", label: "New idea (hold for menu)", col: 1, row: 3, rowSpan: 2 },
   { color: "pink", label: "Jump to / move sentence", col: 1, row: 5, rowSpan: 2 },
   { color: "blue", label: "Previous sentence", col: 2, row: 1, rowSpan: 3 },
-  { color: "purple", label: "Next sentence (hold to delegate)", col: 2, row: 4, rowSpan: 3 },
+  { color: "purple", label: "Next sentence (hold to hand it to Remote)", col: 2, row: 4, rowSpan: 3 },
   { color: "orange", label: "Pinned document / pin a doc", col: 3, row: 1, rowSpan: 2 },
   { color: "green", label: "Next document (hold to link this sentence)", col: 3, row: 3, rowSpan: 2 },
   { color: "gray", label: "Chat (hold for media gallery)", col: 3, row: 5, rowSpan: 2 },
 ];
 
+const SENTENCES = [
+  "Your document, one sentence at a time.",
+  "Press down. Hear the next step.",
+  "Capture an idea before it slips away.",
+  "Hand a sentence to Remote and let it work.",
+  "Move through ideas one step at a time.",
+];
 
-function MeetTheOrbs() {
-  const [active, setActive] = useState(0);
-
+function useCycle(length: number, ms: number) {
+  const [i, setI] = useState(0);
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const t = window.setInterval(() => setActive((i) => (i + 1) % CLUSTER.length), 1600);
+    const t = window.setInterval(() => setI((n) => (n + 1) % length), ms);
     return () => window.clearInterval(t);
-  }, []);
+  }, [length, ms]);
+  return i;
+}
 
+function RemotePreview({ active }: { active?: number }) {
+  const idx = useCycle(SENTENCES.length, 2800);
   return (
-    <section className="relative mx-auto flex min-h-[90svh] w-full max-w-5xl flex-col items-center justify-center px-6 py-24 text-center">
-      <Reveal>
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
-          The controls
+    <div className="mx-auto w-full max-w-[360px] rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 shadow-2xl backdrop-blur">
+      <div className="flex min-h-[7.5rem] items-center justify-center rounded-2xl border border-white/10 bg-[#020617]/70 px-5 text-center">
+        <p key={idx} className="sentence-swap text-lg leading-snug text-white" style={HEADING}>
+          {SENTENCES[idx]}
         </p>
-        <h2 className="mt-4 text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          Meet the orbs.
-        </h2>
-        <p className="mx-auto mt-4 max-w-md text-base text-slate-400">
-          Everything Orby does is one press away. No menus to dig through, no gestures to memorize.
-        </p>
-      </Reveal>
+      </div>
+      <div className="mt-2 flex justify-center gap-1.5">
+        {SENTENCES.map((_, i) => (
+          <span key={i} className={cn("h-1 rounded-full transition-all duration-500", i === idx ? "w-5 bg-[#67e8f9]" : "w-1 bg-slate-700")} />
+        ))}
+      </div>
+      <div
+        className="landing-cluster landing-cluster-tiles mx-auto mt-5 grid"
+        style={{
+          width: "100%",
+          height: "clamp(200px, 52vw, 250px)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr)",
+          gridTemplateRows: "repeat(6, minmax(0, 1fr))",
+          gap: 0,
+        }}
+      >
+        {CLUSTER.map((b, i) => (
+          <LandingOrb
+            key={b.color}
+            color={b.color}
+            size="fill"
+            active={i === active}
+            style={{ gridColumn: b.col, gridRow: `${b.row} / span ${b.rowSpan}` }}
+            className="h-full w-full"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <Reveal delay="150ms" className="mt-14">
-        <div
-          className="landing-cluster landing-cluster-tiles grid"
-          style={{
-            alignItems: "stretch",
-            justifyItems: "stretch",
-            width: "min(100%, 360px)",
-            height: "clamp(210px, 52vw, 280px)",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr)",
-            gridTemplateRows: "repeat(6, minmax(0, 1fr))",
-            gap: 0,
-          }}
-        >
-          {CLUSTER.map((orb, i) => (
-            <LandingOrb
-              key={orb.color}
-              color={orb.color}
-              size="fill"
-              active={i === active}
-              floatDelay={`${i * 0.35}s`}
-              style={{ gridColumn: orb.col, gridRow: `${orb.row} / span ${orb.rowSpan}` }}
-              className="h-full w-full"
-            />
-          ))}
-        </div>
-        <div className="mt-8 flex h-6 items-center justify-center">
-          <p key={active} className="sentence-swap text-sm font-semibold" style={{ color: ORB_HEX[CLUSTER[active].color] }}>
-            {CLUSTER[active].label}
+/* ---------------------------------- Sections -------------------------------- */
+
+function Hero() {
+  return (
+    <section className="mx-auto grid min-h-[88svh] w-full max-w-6xl items-center gap-14 px-6 py-12 md:grid-cols-2">
+      <div className="text-center md:text-left">
+        <Reveal>
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#67e8f9]">Focus Remote</p>
+        </Reveal>
+        <Reveal delay="100ms">
+          <h1 className="mt-5 text-5xl leading-[1.05] tracking-tight md:text-6xl" style={HEADING}>
+            Control the flow of your focus.
+          </h1>
+        </Reveal>
+        <Reveal delay="200ms">
+          <p className="mx-auto mt-6 max-w-lg text-base text-slate-400 md:mx-0 md:text-lg">
+            Read, think, create, and move through your work one step at a time. Focus Remote gives you a
+            simpler way to navigate documents, build ideas, learn routines, and direct AI-assisted work
+            without getting lost in clutter.
           </p>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Press the sentence itself to edit it — hold it to speak a new idea.
-        </p>
-
-      </Reveal>
-
-      <Reveal delay="250ms" className="mt-12 w-full max-w-md">
-        <ul className="grid grid-cols-2 gap-x-8 gap-y-4 text-left sm:grid-cols-3">
-          {CLUSTER.map((orb) => (
-            <li key={orb.color} className="flex items-center gap-2.5">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: ORB_HEX[orb.color], boxShadow: `0 0 10px ${ORB_HEX[orb.color]}` }}
-              />
-              <span className="text-xs text-slate-400">{orb.label}</span>
-            </li>
-          ))}
-        </ul>
+        </Reveal>
+        <Reveal delay="300ms">
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-4 md:justify-start">
+            <Link
+              to="/auth"
+              className="inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-[#020617] transition active:scale-95"
+              style={{ background: "linear-gradient(135deg, #a5f3fc, #67e8f9, #818cf8)" }}
+            >
+              Start using Focus Remote
+            </Link>
+            <a href="#how" className="rounded-full border border-white/15 px-6 py-3.5 text-sm text-slate-200 transition hover:bg-white/5">
+              See how it works
+            </a>
+          </div>
+        </Reveal>
+      </div>
+      <Reveal delay="200ms">
+        <RemotePreview />
       </Reveal>
     </section>
   );
 }
 
-/* ------------------------------ Multi-step plans -------------------------- */
+function HowItWorks() {
+  const active = useCycle(CLUSTER.length, 1700);
+  return (
+    <section id="how" className="mx-auto w-full max-w-5xl scroll-mt-10 px-6 py-24 text-center">
+      <Reveal>
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">How it works</p>
+        <h2 className="mt-4 text-4xl leading-tight tracking-tight md:text-5xl" style={HEADING}>
+          One sentence on screen. A remote underneath.
+        </h2>
+        <p className="mx-auto mt-4 max-w-xl text-base text-slate-400">
+          Press down to move forward, up to go back. The colored buttons around them search, capture,
+          jump, link and chat — every action is one press away, and a long press does the second job.
+        </p>
+      </Reveal>
+      <div className="mt-14 grid items-center gap-12 md:grid-cols-2">
+        <Reveal>
+          <RemotePreview active={active} />
+        </Reveal>
+        <Reveal delay="150ms">
+          <ul className="space-y-3 text-left">
+            {CLUSTER.map((b, i) => (
+              <li key={b.color} className={cn("flex items-center gap-3 transition-opacity", i === active ? "opacity-100" : "opacity-50")}>
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ORB_HEX[b.color] }} />
+                <span className="text-sm text-slate-300">{b.label}</span>
+              </li>
+            ))}
+            <li className="pt-3 text-xs text-slate-500">Tap the sentence to edit it. Hold it to delete it.</li>
+          </ul>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
 
-const PLAN_STEPS: Array<{ color: OrbColor; text: string }> = [
-  { color: "blue", text: "Tell Orby the goal — out loud or typed." },
-  { color: "purple", text: "It breaks the goal into clear steps." },
-  { color: "yellow", text: "Each step runs: research, write, create." },
-  { color: "green", text: "Results land straight in your document." },
-  { color: "orange", text: "You approve, retry, or stop — anytime." },
+const BENEFITS = [
+  { color: "purple" as OrbColor, title: "Read one step at a time.", text: "Move through documents sentence by sentence so your attention stays with the work in front of you." },
+  { color: "yellow" as OrbColor, title: "Turn thoughts into something useful.", text: "Capture ideas, edit sentences, create documents, and shape fragmented thoughts into clear work." },
+  { color: "gray" as OrbColor, title: "Direct your AI.", text: "Connect conversations to specific parts of your documents and guide multi-step work while keeping yourself in control." },
+  { color: "green" as OrbColor, title: "Learn your routines.", text: "Use Focus Remote as a guide while you build a routine. Once it becomes familiar, you can rely on it less." },
 ];
 
-function Plans() {
+function Benefits() {
   return (
-    <section className="relative mx-auto flex min-h-[90svh] w-full max-w-3xl flex-col justify-center px-6 py-24">
-      <LandingOrb color="red" size={44} drift={0.12} floatDelay="0.7s" className="absolute -right-2 top-[10%] hidden lg:block" />
-
+    <section className="mx-auto w-full max-w-5xl px-6 py-24">
       <Reveal>
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
-          Multi-step plans
-        </p>
-        <h2 className="mt-4 text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          Give it a goal.
-          <br />
-          <span className="bg-gradient-to-r from-[#c4b5fd] to-[#67e8f9] bg-clip-text text-transparent">
-            Watch it work.
-          </span>
+        <h2 className="text-center text-4xl leading-tight tracking-tight md:text-5xl" style={HEADING}>
+          Built for staying with one thing.
         </h2>
       </Reveal>
-
-      <div className="mt-12 space-y-6">
-        {PLAN_STEPS.map((step, i) => (
-          <Reveal key={step.text} delay={`${i * 90}ms`}>
-            <div className="flex items-center gap-4">
-              <span
-                className="step-dot h-3.5 w-3.5 shrink-0 rounded-full"
-                style={{
-                  background: ORB_HEX[step.color],
-                  boxShadow: `0 0 14px ${ORB_HEX[step.color]}`,
-                }}
-              />
-              <p className="text-lg text-slate-300 md:text-xl">{step.text}</p>
+      <div className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2">
+        {BENEFITS.map((b, i) => (
+          <Reveal key={b.title} delay={`${i * 80}ms`}>
+            <div className="border-l-2 pl-5" style={{ borderColor: ORB_HEX[b.color] }}>
+              <h3 className="text-xl text-white" style={HEADING}>{b.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{b.text}</p>
             </div>
           </Reveal>
         ))}
       </div>
-
-      <Reveal delay="500ms">
-        <p className="mt-12 text-sm text-slate-500">
-          Plans keep running in the background — even when the app is closed — and check in with you
-          when they need a decision.
-        </p>
-      </Reveal>
     </section>
   );
 }
 
-/* ------------------------------- Voice + media ---------------------------- */
-
-function VoiceMedia() {
+function WhoFor() {
+  const uses = ["Learning routines", "Reviewing documents", "Writing", "Thinking things through", "Staying focused"];
   return (
-    <section className="relative flex min-h-[70svh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
-      <LandingOrb color="yellow" size={48} drift={-0.11} floatDelay="0.3s" className="absolute left-[8%] top-[24%]" />
-      <LandingOrb color="orange" size={60} drift={0.1} floatDelay="1.3s" className="absolute right-[8%] bottom-[24%]" />
-      <LandingOrb color="green" size={36} drift={-0.06} floatDelay="2s" className="absolute right-[20%] top-[16%] hidden md:block" />
-
+    <section className="mx-auto w-full max-w-4xl px-6 py-20 text-center">
       <Reveal>
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
-          Voice-first · Media-built-in
-        </p>
-        <h2 className="mt-4 max-w-3xl text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          Speak it. See it.
-        </h2>
-      </Reveal>
-      <Reveal delay="150ms">
-        <p className="mx-auto mt-6 max-w-xl text-base text-slate-400 md:text-lg">
-          Hold the center pad and talk — Orby transcribes, plans, and writes. Describe an image or a
-          video and it appears right in your document. No modes. Just momentum.
-        </p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Made for</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {uses.map((u) => (
+            <span key={u} className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300">{u}</span>
+          ))}
+        </div>
       </Reveal>
     </section>
   );
 }
-
-/* -------------------------------- Final CTA ------------------------------- */
-
-const CTA_ORBS: Array<{ color: OrbColor; size: number; className: string; floatDelay: string }> = [
-  { color: "blue", size: 44, className: "left-[12%] top-[10%]", floatDelay: "0s" },
-  { color: "purple", size: 56, className: "left-[6%] bottom-[16%]", floatDelay: "0.8s" },
-  { color: "yellow", size: 40, className: "left-[30%] bottom-[6%]", floatDelay: "1.6s" },
-  { color: "green", size: 52, className: "right-[28%] top-[6%]", floatDelay: "0.4s" },
-  { color: "red", size: 42, className: "right-[8%] top-[28%]", floatDelay: "1.2s" },
-  { color: "orange", size: 60, className: "right-[12%] bottom-[12%]", floatDelay: "2s" },
-];
 
 function FinalCta() {
   return (
-    <section className="relative mx-auto flex min-h-[70svh] w-full max-w-4xl flex-col items-center justify-center overflow-hidden px-6 py-24 text-center">
-      {CTA_ORBS.map((o, i) => (
-        <LandingOrb
-          key={i}
-          color={o.color}
-          size={o.size}
-          floatDelay={o.floatDelay}
-          className={cn("absolute hidden sm:block", o.className)}
-        />
-      ))}
+    <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 py-28 text-center">
       <Reveal>
         <h2 className="text-4xl leading-tight tracking-tight md:text-6xl" style={HEADING}>
-          One sentence.
-          <br />
-          Total focus.
+          Move through ideas one step at a time.
         </h2>
       </Reveal>
       <Reveal delay="150ms">
-        <p className="mx-auto mt-5 max-w-xl text-base text-slate-400">
-          Join writers, builders, and thinkers who move through their day one clear thought at a
-          time.
-        </p>
-      </Reveal>
-      <Reveal delay="300ms">
         <Link
           to="/auth"
-          className="mt-9 inline-flex items-center justify-center rounded-full px-8 py-4 text-base font-semibold text-[#020617] transition active:scale-95"
-          style={{
-            background: "linear-gradient(135deg, #a5f3fc, #67e8f9, #818cf8)",
-            boxShadow: "0 10px 40px rgba(129,140,248,0.5)",
-          }}
+          className="mt-10 inline-flex items-center justify-center rounded-full px-8 py-4 text-base font-semibold text-[#020617] transition active:scale-95"
+          style={{ background: "linear-gradient(135deg, #a5f3fc, #67e8f9, #818cf8)" }}
         >
-          Start with Orby — free
+          Start using Focus Remote
         </Link>
       </Reveal>
     </section>
   );
 }
-
-/* --------------------------------- Page ----------------------------------- */
 
 function Landing() {
   return (
@@ -418,36 +252,15 @@ function Landing() {
       className="relative min-h-[100svh] w-full overflow-x-hidden bg-[#020617] text-white selection:bg-[#67e8f9] selection:text-[#020617]"
       style={BODY}
     >
-      {/* Background aurora */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div
-          className="absolute -top-40 left-1/2 h-[60vh] w-[80vw] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
+          className="absolute -top-40 left-1/2 h-[50vh] w-[70vw] -translate-x-1/2 rounded-full opacity-25 blur-3xl"
           style={{ background: "radial-gradient(closest-side, #818cf8, transparent 70%)" }}
-        />
-        <div
-          className="absolute bottom-0 right-0 h-[40vh] w-[50vw] rounded-full opacity-25 blur-3xl"
-          style={{ background: "radial-gradient(closest-side, #67e8f9, transparent 70%)" }}
-        />
-        <div
-          className="absolute bottom-10 -left-20 h-[40vh] w-[50vw] rounded-full opacity-25 blur-3xl"
-          style={{ background: "radial-gradient(closest-side, #c4b5fd, transparent 70%)" }}
         />
       </div>
 
-      {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-5 md:px-10">
-        <div className="flex items-center gap-2">
-          <div
-            className="h-7 w-7 rounded-full"
-            style={{
-              background: "linear-gradient(135deg, #67e8f9, #818cf8, #c4b5fd)",
-              boxShadow: "0 0 24px rgba(129,140,248,0.5)",
-            }}
-          />
-          <span className="text-xl tracking-tight" style={HEADING}>
-            Orby
-          </span>
-        </div>
+        <span className="text-xl tracking-tight" style={HEADING}>Focus Remote</span>
         <Link
           to="/auth"
           className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm backdrop-blur transition hover:bg-white/10"
@@ -457,14 +270,13 @@ function Landing() {
       </nav>
 
       <Hero />
-      <SentenceCycler />
-      <MeetTheOrbs />
-      <Plans />
-      <VoiceMedia />
+      <HowItWorks />
+      <Benefits />
+      <WhoFor />
       <FinalCta />
 
       <footer className="border-t border-white/10 px-6 py-6 text-center text-xs text-slate-500">
-        Orby · A focus instrument
+        Focus Remote · focusremote.com
       </footer>
     </main>
   );

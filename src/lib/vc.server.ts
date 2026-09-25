@@ -1,6 +1,6 @@
 // Server-only: the Virtual Computer.
 //
-// Orby rents a throwaway cloud browser (Browser Use Cloud, API v4), does the
+// Remote rents a throwaway cloud browser (Browser Use Cloud, API v4), does the
 // task, reports the result back into the chat, and shuts the machine down. It
 // never touches the user's own Mac or their personal browser.
 //
@@ -315,7 +315,7 @@ export type VcResult = { ok: boolean; error?: string; status?: string; actions?:
 export async function startVcRun(runId: string): Promise<VcResult> {
   const row = await loadRun(runId);
   if (!row) return { ok: false, error: "run not found" };
-  // Reflex mode: Orby drives the browser herself, at human reflex speed. Only
+  // Reflex mode: Remote drives the browser herself, at human reflex speed. Only
   // errands that have already been handed back run the slower hosted robot.
   if (((row as any).mode ?? "reflex") === "reflex" && process.env["TYPESAFE_API_KEY"]) {
     const { startReflexRun } = await import("./vc-reflex.server");

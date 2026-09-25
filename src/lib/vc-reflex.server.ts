@@ -1,7 +1,7 @@
 // Server-only: reflex mode for the Virtual Computer.
 //
 // Instead of handing the whole errand to a hosted browser robot that thinks
-// with a big model before every click, Orby drives a throwaway cloud browser
+// with a big model before every click, Remote drives a throwaway cloud browser
 // herself:
 //
 //   page  ->  plain-text list of clickable things  ->  Jev picks one (~50ms)
@@ -216,7 +216,7 @@ export async function startReflexRun(runId: string): Promise<VcResult> {
     });
     return { ok: true as const };
   } catch (e) {
-    // If Orby can't get her own hands on a browser, fall back to the robot.
+    // If Remote can't get her own hands on a browser, fall back to the robot.
     console.warn("[vc reflex] start failed", String((e as any)?.message ?? e));
     return await escalate(row, "the fast browser couldn't start");
   }
@@ -572,7 +572,7 @@ export async function reflexTick(runId: string): Promise<VcResult> {
             used = secret;
             text = secret.value;
           }
-          // Once a box has been filled, going back to it means the value Orby
+          // Once a box has been filled, going back to it means the value Remote
           // had wasn't the right one — so ask the user rather than repeat.
           const boxKey = `${chosen.i}|${chosen.label}`;
           if (typedBoxes.has(boxKey)) text = null;

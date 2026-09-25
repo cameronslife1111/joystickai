@@ -98,7 +98,7 @@ export type PlanMemory = {
 
 /**
  * Build the thread's plan memory. `inlineDocs` pulls the current text of the
- * most recently touched documents so Orby can answer about them without the
+ * most recently touched documents so Remote can answer about them without the
  * user re-attaching anything.
  */
 export async function buildPlanMemory(
@@ -218,7 +218,7 @@ export async function buildPlanMemory(
     .slice(0, 3)
     .join(", ");
   const digest =
-    `Earlier in this conversation Orby ran ${perPlan.length} plan(s). Most recent: ` +
+    `Earlier in this conversation Remote ran ${perPlan.length} plan(s). Most recent: ` +
     `"${clip(String(latest.plan.user_request ?? ""), 160)}" → ${latest.plan.status}` +
     (latestDocs ? `, touching ${latestDocs}` : "") +
     (latest.artifacts.mediaIds.length ? `, and created ${latest.artifacts.mediaIds.length} media item(s)` : "") +
