@@ -105,6 +105,26 @@ export function endIosSpeechSession(): boolean {
   return requestIosMixableSession();
 }
 
+/**
+ * Force iOS to re-grant the page's audio category after an interruption (other
+ * app, Voice Memo, another tab). Re-setting the same type is a no-op, so we
+ * bounce through `auto` first. Never touches a live recording.
+ */
+export function resetIosAudioSession(): boolean {
+  if (activeRecordingTokens.size > 0) return false;
+  const session = iosAudioSession();
+  if (!session) return false;
+  try {
+    session.type = "auto";
+  } catch {}
+  try {
+    session.type = "ambient";
+    return session.type === "ambient";
+  } catch {
+    return false;
+  }
+}
+
 export function isIosRecordingSessionActive(): boolean {
   return activeRecordingTokens.size > 0;
 }
