@@ -112,7 +112,10 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      // Routine background token refreshes (e.g. returning from another app)
+      // change nothing on screen — reloading everything caused lag + jump-back.
+      if (event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION") return;
       router.invalidate();
       queryClient.invalidateQueries();
     });

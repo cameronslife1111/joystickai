@@ -287,9 +287,20 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
   // Before the fallback-voice retry and the reset retry run out, a failure
   // after returning from another app asks the app for an automatic refresh.
   let resetRetried = false;
+  // Cancelling fires the abandoned utterance's onerror; silence it first so a
+  // retry can never be mistaken for a second failure.
+  const detachActive = () => {
+    const old = activeUtterance;
+    if (old) {
+      old.onstart = null;
+      old.onend = null;
+      old.onerror = null;
+    }
+  };
   const giveUp = () => {
     if (!resetRetried) {
       resetRetried = true;
+      detachActive();
       hardResetEngine();
       speak(null, true);
       return true;
@@ -343,6 +354,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
         // could not be resolved — try once with an explicit local voice.
         const retryVoice = fallbackVoice(engine);
         if (retryVoice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
@@ -367,6 +379,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (!isRetry) {
         const voice = fallbackVoice(engine);
         if (voice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
@@ -388,6 +401,7 @@ export function speakText(text: string, opts: SpeakOpts = {}): boolean {
       if (!isRetry) {
         const voice = fallbackVoice(engine);
         if (voice) {
+          detachActive();
           try {
             engine.cancel();
           } catch {}
