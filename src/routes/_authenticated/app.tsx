@@ -12,6 +12,7 @@ import { splitIntoSentences } from "@/lib/sentences";
 import { cn } from "@/lib/utils";
 
 import { speakText, cancelSpeech, setSpeechEnabled } from "@/lib/speech";
+import { stepReadingPosition } from "@/lib/reading-position";
 
 import { aiContinue, askAi } from "@/lib/ai.functions";
 import { sendChatMessage, generateThreadTitle, type ChatCapabilities } from "@/lib/chat.functions";
@@ -1101,7 +1102,7 @@ function AppPageInner() {
     const base = currentPositionRef.current.docId === activeDoc.id
       ? currentPositionRef.current.index
       : currentIdx;
-    const next = base + 1;
+    const next = stepReadingPosition(base, 1, sentences.length - 1);
     if (next >= sentences.length) {
       const last = sentences.length - 1;
       currentPositionRef.current = { docId: activeDoc.id, index: last };
@@ -1141,7 +1142,7 @@ function AppPageInner() {
       if (sentences?.[0]) speak(sentences[0].content, token);
       return;
     }
-    const prev = base - 1;
+    const prev = stepReadingPosition(base, -1, sentences?.length ? sentences.length - 1 : 0);
     // Keep speech in the pointer-up activation turn for strict WebKit builds.
     void setIndex(prev);
     if (sentences?.[prev]) speak(sentences[prev].content, token);
