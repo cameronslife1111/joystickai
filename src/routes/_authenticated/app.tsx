@@ -2721,13 +2721,16 @@ function AppPageInner() {
     }
   }, [activeDocId, activeDoc, fetchActiveDocText, slugTitle, exportStamp]);
 
-  const handleExportAll = useCallback(async () => {
+  const handleExportAll = useCallback(async (onlyIds?: string[]) => {
     try {
-      const { data: allDocs, error: dErr } = await supabase
+      const { data: fetchedDocs, error: dErr } = await supabase
         .from("documents")
         .select("id, title")
         .order("position", { ascending: true });
       if (dErr) throw dErr;
+      const allDocs = onlyIds
+        ? (fetchedDocs ?? []).filter((d) => onlyIds.includes(d.id))
+        : fetchedDocs;
       if (!allDocs || allDocs.length === 0) {
         toast.error("No documents to export");
         return;
@@ -4803,6 +4806,13 @@ function AppPageInner() {
             <Button
               variant="outline"
               className="justify-start"
+              onClick={() => { setExportChooserOpen(false); setExportPickOpen(true); }}
+            >
+              ☑️ Choose documents (.txt)
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start"
               onClick={() => { setExportChooserOpen(false); void handleExportCurrentTxt(); }}
             >
               📄 Current document (.txt)
@@ -4817,6 +4827,18 @@ function AppPageInner() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DocumentPickerSheet
+        open={exportPickOpen}
+        onOpenChange={setExportPickOpen}
+        initialSelectedIds={EMPTY_EXPORT_IDS}
+        heading="Choose documents to export"
+        onConfirm={(ids) => {
+          if (ids.length === 0) { toast.error("No documents selected"); return; }
+          void handleExportAll(ids);
+        }}
+      />
+
 
     </main>
   );
