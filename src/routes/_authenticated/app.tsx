@@ -38,6 +38,8 @@ import { useRunningPlansAdvancer } from "@/hooks/use-running-plans-advancer";
 import { useComposingPlansWatcher } from "@/hooks/use-composing-plans-watcher";
 import { WELCOME_DOC_TITLE, WELCOME_DOC_SENTENCES } from "@/lib/welcome-document";
 
+const EMPTY_EXPORT_IDS: string[] = [];
+
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({
     meta: [
