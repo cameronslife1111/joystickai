@@ -216,6 +216,7 @@ function AppPageInner() {
   const [planApprovalId, setPlanApprovalId] = useState<string | null>(null);
   const [plansScreenOpen, setPlansScreenOpen] = useState(false);
   const [exportChooserOpen, setExportChooserOpen] = useState(false);
+  const [exportPickOpen, setExportPickOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
   const [theme, setTheme] = useState<"dark" | "light">(() => {
